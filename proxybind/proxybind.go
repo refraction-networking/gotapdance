@@ -1,11 +1,12 @@
 package proxybind
 
 import (
-	"gitlab.decoyrouting.com/decoy/tapdance/gotapdance/tapdance"
 	"errors"
 	"bytes"
 	"io"
 	"github.com/Sirupsen/logrus"
+
+	"github.com/SergeyFrolov/gotapdance/tapdance"
 )
 
 var td_proxy *tapdance.TapdanceProxy

@@ -23,7 +23,7 @@ import (
 	"golang.org/x/mobile/exp/sprite"
 	"golang.org/x/mobile/exp/sprite/clock"
 
-	"gitlab.decoyrouting.com/decoy/tapdance/gotapdance/tapdance"
+	"github.com/SergeyFrolov/gotapdance/tapdance"
 )
 
 var (

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"gitlab.decoyrouting.com/decoy/tapdance/gotapdance/tapdance"
+	"github.com/SergeyFrolov/gotapdance/tapdance"
 	"golang.org/x/mobile/asset"
 )
 

@@ -9,7 +9,7 @@ import (
 	"golang.org/x/mobile/exp/sprite/clock"
 	"golang.org/x/mobile/exp/f32"
 
-	"gitlab.decoyrouting.com/decoy/tapdance/gotapdance/tapdance"
+	"github.com/SergeyFrolov/gotapdance/tapdance"
 )
 
 const (
