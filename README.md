@@ -16,8 +16,8 @@
 ```
 2) There are 3 versions to build:
 
-   [Command Line Interface](cli/README.md)
+   [Command Line Interface](cli)
    
-   [Golang Mobile Bindings](proxybind/README.md) – to use as a library in native apps, written in Java/ObjC for Android or iOS.
+   [Golang Mobile Bindings](proxybind) – to use as a library in native apps, written in Java/ObjC for Android or iOS.
   
-   [Pure Golang cross-platform GUI](gui/README.md) – ugly, but the same code compiles virtually everywhere (tested on Ubuntu and Android, but supposed to work on iOS and Windows PC as well)
+   [Pure Golang cross-platform GUI](gui) – ugly, but the same code compiles virtually everywhere (tested on Ubuntu and Android, but supposed to work on iOS and Windows PC as well)
