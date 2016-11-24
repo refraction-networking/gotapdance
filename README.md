@@ -5,7 +5,10 @@ GOPATH="${HOME}/go/"
 ```
 1) Get source code for Go Tapdance and all dependencies:
 ```
-   go get github.com/SergeyFrolov/gotapdance github.com/Sirupsen/logrus github.com/agl/ed25519/extra25519 github.com/zmap/zgrab/ztools/x509 github.com/zmap/zgrab/ztools/ztls golang.org/x/crypto/curve25519 golang.org/x/mobile/cmd/gomobile  
+   go get github.com/SergeyFrolov/gotapdance github.com/Sirupsen/logrus \
+   github.com/agl/ed25519/extra25519 github.com/zmap/zgrab/ztools/x509 \
+   github.com/zmap/zgrab/ztools/ztls golang.org/x/crypto/curve25519 \
+   golang.org/x/mobile/cmd/gomobile  
 ```
 1a) If gomobile is needed(e.g. non-CLI version):
 ```
