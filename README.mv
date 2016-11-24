@@ -1,0 +1,14 @@
+# Build
+1) Install go, set GOPATH
+1) Install [][https://golang.org/dl/] (tested against 1.7 versions), set GOPATH:
+GOPATH="${HOME}/go"
+2) go get github.com/SergeyFrolov//zgrab/ztools/x509
+   go get github.com/SergeyFrolov//zgrab/ztools/ztls
+   ./swap.sh
+3) go get ${any_other_module}
+4a) cd cli
+    go build .
+4b) cd gui
+    go build .
+4c) # to build and install on USB-connected developer-enabled android phone
+    ./build_install.sh
