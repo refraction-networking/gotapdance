@@ -13,12 +13,12 @@ var td_proxy *tapdance.TapdanceProxy
 var buffer bytes.Buffer
 var b = make([]byte, 1048576)
 
-func NewDecoyProxy(listenPort int, staionPubkey []byte, staionRootpem []byte) (err error){
+func NewDecoyProxy(listenPort int) (err error){
 
 	tapdance.Logger.Out = &buffer
 	tapdance.Logger.Level = logrus.InfoLevel
 	tapdance.Logger.Formatter = new(logrus.JSONFormatter)
-	td_proxy = tapdance.NewTapdanceProxyByKeys(listenPort, staionPubkey, staionRootpem)
+	td_proxy = tapdance.NewTapdanceProxy(listenPort)
 	if td_proxy == nil {
 		err = errors.New("Unable to initialize Proxy")
 	}

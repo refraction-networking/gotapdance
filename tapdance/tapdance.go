@@ -1,22 +1,18 @@
 package tapdance
 
 import (
-	"github.com/zmap/zgrab/ztools/x509"
 	"net"
-
 	"strconv"
-
-	"io/ioutil"
 	"sync"
-
-	"os"
 	"github.com/Sirupsen/logrus"
 )
 
 var Logger = logrus.New()
 
-const initial_tag = "SPTELEX"
+var td_station_pubkey = [32]byte{211, 127, 10, 139, 150, 180, 97, 15, 56, 188, 7, 155, 7, 102, 41, 34,
+			70, 194, 210, 170, 50, 53, 234, 49, 42, 240, 41, 27, 91, 38, 247, 67}
 
+const initial_tag = "SPTELEX"
 const (
 	TD_INITIALIZED = "Initialized"
 	TD_LISTENING = "Listening"
@@ -27,13 +23,8 @@ const (
 // global object
 type TapdanceProxy struct {
 	State string
-			       /* crypto param files */
-	ca_list       string
-	dh_file       string
 
-	keyfile       string   // public key filename
 	stationPubkey [32]byte // contents of keyfile
-	roots         *x509.CertPool
 
 	listener      net.Listener
 
@@ -48,41 +39,16 @@ type TapdanceProxy struct {
 	stop          bool
 }
 
-func NewTapdanceProxyByKeypath(listenPort int, keyPath string) *TapdanceProxy {
-	keyfile := keyPath + "pubkey.dev"
-	ca_list := keyPath + "root.pem"
 
-	sliceStaionPubkey, err := ioutil.ReadFile(keyfile)
-	if err != nil {
-		Logger.Fatalf("Could not read keyfile: ", err.Error())
-		os.Exit(1)
-	}
-	sliceStaionRootPem, err := ioutil.ReadFile(ca_list)
-	if err != nil {
-		Logger.Fatalf("Could not read root ca file: ", err.Error())
-		os.Exit(2)
-	}
-
-	proxy := NewTapdanceProxyByKeys(listenPort, sliceStaionPubkey, sliceStaionRootPem)
-
-	return proxy
-}
-
-func NewTapdanceProxyByKeys(listenPort int, staionPubkey []byte, staionRootpem []byte) *TapdanceProxy {
+func NewTapdanceProxy(listenPort int) *TapdanceProxy {
 	//Logger.Level = logrus.DebugLevel
+	Logger.Level = logrus.InfoLevel
 	Logger.Formatter = new(MyFormatter)
 	proxy := new(TapdanceProxy)
 	proxy.listenPort = listenPort
 
-	copy(proxy.stationPubkey[:], staionPubkey[0:32])
-
-	proxy.roots = x509.NewCertPool()
-	ok := proxy.roots.AppendCertsFromPEM(staionRootpem)
-	if !ok {
-		proxy.State = TD_ERROR
-		Logger.Fatalf("Failed to parse root certificate")
-		os.Exit(3) // TODO: print mobile-friendly error
-	}
+	// TODO: do I need it?
+	copy(proxy.stationPubkey[:], td_station_pubkey[0:32])
 
 	proxy.connections.m = make(map[uint]*TDConnState)
 	proxy.State = TD_INITIALIZED
@@ -135,16 +101,15 @@ func (proxy *TapdanceProxy) Stop() error {
 func (proxy *TapdanceProxy) handleUserConn(userConn net.Conn) {
 	tdState, err := proxy.NewConnectionToTDStation(&userConn)
 	defer func() {
-		userConn.Close()
 		proxy.connections.Lock()
 		delete(proxy.connections.m, tdState.id)
 		proxy.connections.Unlock()
 	}()
 	if err != nil {
+		userConn.Close()
 		//Logger.Errorf("Establishing initial connection to decoy server failed with " + err.Error())
 		return
 	}
-	defer tdState.servConn.Close()
 
 	// Initial request is not lost, because we still haven't read anything from client socket
 	// So we just start Redirecting (client socket) <-> (server socket)
@@ -166,23 +131,15 @@ func (proxy *TapdanceProxy) GetStats() (stats string) {
 }
 
 func (proxy *TapdanceProxy) NewConnectionToTDStation(userConn *net.Conn) (pTapdanceState *TDConnState, err error) {
-	decoyHost, decoyPort := proxy.GenerateDecoyAddress()
 	// Init connection state
 	id := proxy.countTunnels.inc() // TODO: wtf?
 
-	pTapdanceState = NewTapdanceState(proxy, decoyHost, decoyPort, id)
+	pTapdanceState = NewTapdanceState(proxy, id)
 	pTapdanceState.userConn = *userConn
 
 	proxy.connections.Lock()
 	proxy.connections.m[id] = pTapdanceState
 	proxy.connections.Unlock()
 
-	err = pTapdanceState.Connect()
-	return
-}
-
-func (proxy *TapdanceProxy) GenerateDecoyAddress() (hostname string, port int) {
-	port = 443
-	hostname = "54.85.9.24" // ecen5032.org
 	return
 }
