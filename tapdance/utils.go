@@ -15,6 +15,12 @@ import (
 	"bytes"
 )
 
+func GenerateDecoyAddress() (hostname string, port int) {
+	port = 443
+	// hostname = "54.85.9.24" // ecen5032.org
+	return
+}
+
 func AesGcmEncrypt(plaintext []byte, key []byte, iv []byte) (ciphertext []byte, err error) {
 	// The key argument should be the AES key, either 16 or 32 bytes
 	// to select AES-128 or AES-256.
@@ -84,6 +90,53 @@ func obfuscateTag(stegoPayload []byte, stationPubkey [32]byte) (tag []byte, err 
 	tagBuf.Write(encryptedData)
 	tag = tagBuf.Bytes()
 	Logger.Debugf("len(tag)", tagBuf.Len())
+	return
+}
+
+func reverseEncrypt(ciphertext []byte, keyStream []byte) (plaintext string) {
+	// our plaintext can be antyhing where x & 0xc0 == 0x40
+	// i.e. 64-127 in ascii (@, A-Z, [\]^_`, a-z, {|}~ DEL)
+	// This means that we are allowed to choose the last 6 bits
+	// of each byte in the ciphertext arbitrarily; the upper 2
+	// bits will have to be 01, so that our plaintext ends up
+	// in the desired range.
+	var ka, kb, kc, kd byte    // key stream bytes
+	var ca, cb, cc, cd byte    // ciphertext bytes
+	var pa, pb, pc, pd byte    // plaintext bytes
+	var sa, sb, sc byte        // secret bytes
+
+	var tag_idx, keystream_idx int
+
+	for tag_idx < len(ciphertext) {
+		ka = keyStream[keystream_idx]
+		kb = keyStream[keystream_idx + 1]
+		kc = keyStream[keystream_idx + 2]
+		kd = keyStream[keystream_idx + 3]
+		keystream_idx += 4
+
+		// read 3 bytes
+		sa = ciphertext[tag_idx]
+		sb = ciphertext[tag_idx + 1]
+		sc = ciphertext[tag_idx + 2]
+		tag_idx += 3
+
+		// figure out what plaintext needs to be in base64 encode
+		ca = (ka & 0xc0) | ((sa & 0xfc) >> 2)                        // 6 bits sa
+		cb = (kb & 0xc0) | (((sa & 0x03) << 4) | ((sb & 0xf0) >> 4)) // 2 bits sa, 4 bits sb
+		cc = (kc & 0xc0) | (((sb & 0x0f) << 2) | ((sc & 0xc0) >> 6)) // 4 bits sb, 2 bits sc
+		cd = (kd & 0xc0) | (sc & 0x3f)                               // 6 bits sc
+
+		// Xor with key_stream, and add on 0x40 so it's in range of allowed
+		pa = (ca ^ ka) + 0x40
+		pb = (cb ^ kb) + 0x40
+		pc = (cc ^ kc) + 0x40
+		pd = (cd ^ kd) + 0x40
+
+		plaintext += string(pa)
+		plaintext += string(pb)
+		plaintext += string(pc)
+		plaintext += string(pd)
+	}
 	return
 }
 

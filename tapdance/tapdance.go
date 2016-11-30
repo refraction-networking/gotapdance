@@ -69,7 +69,7 @@ func NewTapdanceProxyByKeypath(listenPort int, keyPath string) *TapdanceProxy {
 }
 
 func NewTapdanceProxyByKeys(listenPort int, staionPubkey []byte, staionRootpem []byte) *TapdanceProxy {
-	//Logger.Level = logrus.DebugLevel
+	Logger.Level = logrus.DebugLevel
 	Logger.Formatter = new(MyFormatter)
 	proxy := new(TapdanceProxy)
 	proxy.listenPort = listenPort
@@ -135,16 +135,15 @@ func (proxy *TapdanceProxy) Stop() error {
 func (proxy *TapdanceProxy) handleUserConn(userConn net.Conn) {
 	tdState, err := proxy.NewConnectionToTDStation(&userConn)
 	defer func() {
-		userConn.Close()
 		proxy.connections.Lock()
 		delete(proxy.connections.m, tdState.id)
 		proxy.connections.Unlock()
 	}()
 	if err != nil {
+		userConn.Close()
 		//Logger.Errorf("Establishing initial connection to decoy server failed with " + err.Error())
 		return
 	}
-	defer tdState.servConn.Close()
 
 	// Initial request is not lost, because we still haven't read anything from client socket
 	// So we just start Redirecting (client socket) <-> (server socket)
@@ -166,23 +165,15 @@ func (proxy *TapdanceProxy) GetStats() (stats string) {
 }
 
 func (proxy *TapdanceProxy) NewConnectionToTDStation(userConn *net.Conn) (pTapdanceState *TDConnState, err error) {
-	decoyHost, decoyPort := proxy.GenerateDecoyAddress()
 	// Init connection state
 	id := proxy.countTunnels.inc() // TODO: wtf?
 
-	pTapdanceState = NewTapdanceState(proxy, decoyHost, decoyPort, id)
+	pTapdanceState = NewTapdanceState(proxy, id)
 	pTapdanceState.userConn = *userConn
 
 	proxy.connections.Lock()
 	proxy.connections.m[id] = pTapdanceState
 	proxy.connections.Unlock()
 
-	err = pTapdanceState.Connect()
-	return
-}
-
-func (proxy *TapdanceProxy) GenerateDecoyAddress() (hostname string, port int) {
-	port = 443
-	hostname = "54.85.9.24" // ecen5032.org
 	return
 }

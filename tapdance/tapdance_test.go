@@ -11,7 +11,7 @@ import (
 	"strings"
 	"encoding/hex"
 )
-const key_path = "/home/sfrolov/tapdance/client/"
+const key_path = "/home/sfrolov/go/src/github.com/SergeyFrolov/gotapdance/assets/"
 
 func asTestHandshakeLaunchProxy(t *testing.T) {
 	// hangs, as it fails to read anything from nc
@@ -54,7 +54,7 @@ func TestObfuscate(t *testing.T) {
 		rand.Read(randStr)
 		obfuscated, err := obfuscateTag(randStr, stationPubkey)
 		if err != nil {
-			Logger.Criticalf("Error: ", err.Error())
+			Logger.Errorf("Error: ", err.Error())
 			os.Exit(1)
 		} else {
 			printHex(obfuscated, "obfuscated")
