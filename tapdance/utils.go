@@ -17,7 +17,7 @@ import (
 
 func GenerateDecoyAddress() (hostname string, port int) {
 	port = 443
-	// hostname = "54.85.9.24" // ecen5032.org
+	hostname = "54.85.9.24" // ecen5032.org
 	return
 }
 

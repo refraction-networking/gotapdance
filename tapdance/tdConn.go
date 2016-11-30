@@ -7,7 +7,6 @@ import (
 	"errors"
 	"encoding/binary"
 	"github.com/zmap/zgrab/ztools/ztls"
-	"github.com/zmap/zgrab/ztools/x509"
 	"crypto/cipher"
 	"bytes"
 	"crypto/rand"
@@ -15,6 +14,7 @@ import (
 
 type tapdanceConn struct {
 	ztlsConn         *ztls.Conn
+	customDialer     *net.Dialer
 
 	id               uint
 	/* random per-connection (secret) id;
@@ -35,33 +35,28 @@ type tapdanceConn struct {
 
 	_read_buffer     []byte
 
-	stationPubkey *[32]byte
-	roots         *x509.CertPool
+	stationPubkey    *[32]byte
 }
 
 /* Create new TapDance connection
 Args:
 	id            -- only for logging and TapDance proxy, could be ignored
-	stationPubkey -- public key of TapDance station
-	roots         -- x509 certificates, could be nil as well
+	customDialer  -- dial with customDialer, could be nil
  */
-func DialTapDance(id uint, stationPubkey *[32]byte, roots *x509.CertPool) (tdConn *tapdanceConn, err error) {
+func DialTapDance(id uint, customDialer *net.Dialer) (tdConn *tapdanceConn, err error) {
 	tdConn = new(tapdanceConn)
 
+	tdConn.customDialer = customDialer
 	tdConn.id = id
 	tdConn.ztlsConn = nil
-	tdConn.stationPubkey = stationPubkey
-	if stationPubkey == nil {
-		err = errors.New("TapDance station public key could not be empty.")
-		return
-	}
-	tdConn.roots = roots
+
+	tdConn.stationPubkey = &td_station_pubkey
 
 	tdConn.maxSend = 16*1024 - 1
 	rand.Read(tdConn.remoteConnId[:])
 	tdConn.decoyHost, tdConn.decoyPort = GenerateDecoyAddress()
 	tdConn.initialized = false
-	tdConn.reconnecting = false // TODO: wut?
+	tdConn.reconnecting = false // TODO: huh?
 	tdConn._read_buffer = make([]byte, 16 * 1024 + 20 + 20 + 12)
 	// TODO: find better place for size, than From linux-2.6-stable/drivers/net/loopback.c
 	err = tdConn.reconnect()
@@ -78,10 +73,6 @@ func (tdConn *tapdanceConn) reconnect() (err error){
 		Logger.Infof("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10) +
 			"] Connected to decoy " + tdConn.decoyHost)
 	}
-
-	// Default timeout of 20 secs:
-	tdConn.SetWriteDeadline(time.Now().Add(time.Second * 20))
-	tdConn.SetReadDeadline(time.Now().Add(time.Second * 20))
 
 	var tdRequest string
 	tdRequest, err = tdConn.prepareTDRequest()
@@ -101,6 +92,8 @@ func (tdConn *tapdanceConn) reconnect() (err error){
 	_, err = tdConn.Read(tdConn._read_buffer)
 	if err != nil {
 		Logger.Errorf("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10) +
+			"] TapDance station didn't pick up the request. :(")
+		Logger.Debugf("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10) +
 			"] Could not read from server after sending initial TD request, error: " +
 			err.Error())
 	}
@@ -122,6 +115,9 @@ func (tdConn *tapdanceConn) Read(b []byte) (n int, err error) {
 	//    EOF
 	var readBytesTotal uint16
 	var readBytes int
+
+	// Default timeout of 20 secs:
+	tdConn.SetReadDeadline(time.Now().Add(time.Second * 20))
 
 	for readBytesTotal < 3 {
 		readBytes, err = tdConn.ztlsConn.Read(tdConn._read_buffer[readBytesTotal:])
@@ -196,12 +192,12 @@ func (tdConn *tapdanceConn) Read(b []byte) (n int, err error) {
 			return
 		}
 		tdConn.winSize = winSize
+		tdConn.initialized = true
 		Logger.Infof("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10)  +
 			"] Successfully connected to Tapdance Station!")
 		n = 0
 	} else if msgType == MSG_DATA {
 		n = int(readBytesTotal - headerSize)
-		b = make([]byte, n)
 		copy(b, tdConn._read_buffer[headerSize:readBytesTotal])
 		Logger.Debugf("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10)  +
 			"] Successfully read DATA msg from server: " + string(b))
@@ -221,10 +217,13 @@ func (tdConn *tapdanceConn) Write(b []byte) (n int, err error) {
 	totalToSend := uint64(len(b))
 	sentTotal := uint64(0)
 	defer func(){n = int(sentTotal)}()
-	Logger.Debugf("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10)  +
-		"] Already sent: " + strconv.FormatUint(tdConn.sentTotal, 10) +
-		". Requested to send: " + strconv.FormatUint(totalToSend, 10))
+	// Default timeout of 20 secs:
+	tdConn.SetWriteDeadline(time.Now().Add(time.Second * 20))
+
 	for sentTotal != totalToSend {
+		Logger.Debugf("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10)  +
+			"] Already sent: " + strconv.FormatUint(tdConn.sentTotal, 10) +
+			". Requested to send: " + strconv.FormatUint(totalToSend, 10))
 		couldSend := tdConn.maxSend - tdConn.sentTotal
 		if couldSend > totalToSend - sentTotal {
 			_, err = tdConn.ztlsConn.Write(b[sentTotal:totalToSend])
@@ -259,14 +258,12 @@ func (tdConn *tapdanceConn) Write(b []byte) (n int, err error) {
 func (tdConn *tapdanceConn) establishTLStoDecoy() (err error) {
 	//TODO: force stream cipher
 	addr := tdConn.decoyHost + ":" + strconv.Itoa(tdConn.decoyPort)
-	var config *ztls.Config
-	if tdConn.roots != nil {
-		config = &ztls.Config{RootCAs: tdConn.roots, // MinVersion:ztls.VersionTLS10
-			InsecureSkipVerify: true} // TODO: remove InsecureSkipVerify
+	config := &ztls.Config{InsecureSkipVerify: true}// TODO: remove InsecureSkipVerify
+	if tdConn.customDialer != nil {
+		ztls.DialWithDialer(tdConn.customDialer, "tcp", addr, config)
 	} else {
-		config = &ztls.Config{InsecureSkipVerify: true}// TODO: remove InsecureSkipVerify
+		tdConn.ztlsConn, err = ztls.Dial("tcp", addr, config)
 	}
-	tdConn.ztlsConn, err = ztls.Dial("tcp", addr, config)
 	if err != nil {
 		return
 	}
@@ -295,8 +292,8 @@ func (tdConn *tapdanceConn) prepareTDRequest() (tdRequest string, err error) {
 		return
 	}
 	buf.Write(master_key[:])
-	buf.Write(tdConn.ClientRandom())
 	buf.Write(tdConn.ServerRandom())
+	buf.Write(tdConn.ClientRandom())
 	buf.Write(tdConn.remoteConnId[:]) // connection id for persistence
 
 	tag, err := obfuscateTag(buf.Bytes(), *tdConn.stationPubkey) // What we encode into the ciphertext

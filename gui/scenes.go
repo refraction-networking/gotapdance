@@ -3,8 +3,6 @@ package main
 import (
 	_ "image/png"
 
-	"golang.org/x/mobile/asset"
-
 	"golang.org/x/mobile/exp/sprite"
 	"golang.org/x/mobile/exp/sprite/clock"
 	"golang.org/x/mobile/exp/f32"
@@ -121,34 +119,7 @@ func (s *MainScene) OnTouch(event_x float32, event_y float32) {
 			tapdanceProxy = nil
 		} else {
 			proxyLaunched = true
-			// Read keyfile
-			pubkey_file, err := asset.Open("pubkey.dev")
-			if err != nil {
-				panic(err)
-			}
-			defer pubkey_file.Close()
-			staion_pubkey := make([]byte, 32)
-
-			_, err = pubkey_file.Read(staion_pubkey)
-			if err != nil {
-				panic(err)
-			}
-			// TODO: check if 32 bytes
-
-			// Read root.pem
-			rootpem_file, err := asset.Open("root.pem")
-			if err != nil {
-				panic(err)
-			}
-			defer rootpem_file.Close()
-			station_rootpem := make([]byte, 524288)
-			rootpem_len, err := rootpem_file.Read(station_rootpem)
-			//rootpem_len, err := rootpem_file.Read(station_rootpem)
-			if err != nil {
-				panic(err)
-			}
-
-			tapdanceProxy = tapdance.NewTapdanceProxyByKeys(10500, staion_pubkey, station_rootpem[0:rootpem_len])
+			tapdanceProxy = tapdance.NewTapdanceProxy(10500)
 			go tapdanceProxy.Listen()
 		}
 	} else if event_x > s.infoButtonX && event_x < s.infoButtonX + iconWidth &&

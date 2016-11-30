@@ -81,9 +81,9 @@ func (TDstate *TDConnState) WriteToClient(request []byte) (err error) {
 }
 
 func (TDstate *TDConnState) Redirect() (err error) {
-	TDstate.servConn, err = DialTapDance(TDstate.id,
-		&TDstate.proxy.stationPubkey, TDstate.proxy.roots)
+	TDstate.servConn, err = DialTapDance(TDstate.id, nil)
 	if err != nil {
+		TDstate.userConn.Close()
 		return
 	}
 	errChan := make(chan error)
@@ -91,7 +91,7 @@ func (TDstate *TDConnState) Redirect() (err error) {
 	defer TDstate.servConn.Close()
 
 	forwardFromServerToClient := func ()() {
-		var b []byte
+		b := make([]byte, 16 * 1024 + 20 + 20 + 12)
 		for !TDstate.proxy.stop {
 			n, err := TDstate.servConn.Read(b)
 			if err != nil {

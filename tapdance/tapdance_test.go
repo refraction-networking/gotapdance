@@ -28,7 +28,7 @@ func asTestHandshakeLaunchProxy(t *testing.T) {
 		grepCmd.Wait()
 		fmt.Println(grepBytes)
 	}()
-	tap_dance_proxy := NewTapdanceProxyByKeypath(10500, key_path)
+	tap_dance_proxy := NewTapdanceProxy(10500)
 	go func() {
 		err := tap_dance_proxy.Listen()
 		errChan <- err
