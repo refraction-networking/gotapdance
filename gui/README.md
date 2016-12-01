@@ -14,5 +14,8 @@ gomobile install -target android -o gui.apk github.com/SergeyFrolov/gotapdance/g
   go build -a
   ./gui
 ```
-## Build iOS
-Not tested yet.
+
+# Ugly Screenshot
+Pure Golang version is not being worked on at all, remains here just as a Proof of Concept.
+
+<img src="https://cloud.githubusercontent.com/assets/5443147/20784804/e2f3e388-b759-11e6-851b-e12caa759715.jpg" width="320">
