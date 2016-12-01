@@ -1,0 +1,13 @@
+//configurations.maybeCreate("default")
+//artifacts.add("default", file('proxybind.aar'))
+
+
+plugins {
+    id "org.golang.mobile.bind" version "0.2.7"
+}
+
+gobind {
+    pkg = "github.com/SergeyFrolov/gotapdance/proxybind"
+    GOPATH = "/home/sfrolov/go/"
+    GOMOBILE = "/home/sfrolov/go/bin/gomobile"
+}
