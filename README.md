@@ -14,10 +14,9 @@ go get github.com/SergeyFrolov/gotapdance github.com/Sirupsen/logrus \
            golang.org/x/mobile/cmd/gomobile  
 ```
 
-3. If gomobile is needed(e.g. non-CLI version):
-
+3. Only if you need [gomobile](https://godoc.org/golang.org/x/mobile/cmd/gomobile) (e.g. non-CLI version):
  ```bash
-${GOPATH}/bin/gomobile init
+gomobile init
 ```
 
 4. There are 3 versions of TapDance client:
