@@ -43,7 +43,10 @@ network.proxy.http_port = 10500
 network.proxy.http = 127.0.0.1
 network.proxy.ssl_port = 10500
 network.proxy.ssl = 127.0.0.1
+network.proxy.type = 1
 ```
+To disable proxying you may simply set ```network.proxy.type``` to ```5``` or ```0```
+
 The same settings are available somewhere in GUI.
 
 2. Some utilities use following enivoronment variables: 
