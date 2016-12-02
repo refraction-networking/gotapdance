@@ -15,72 +15,33 @@ const (
 	MSG_CLOSE
 )
 
-
 // Connection-oriented state
-type TDConnState struct {
-	realHost     string // todo Do I need it?
-	realPort     int
-
-			    // tunnel index and start time
+type TapDanceFlow struct {
+	// tunnel index and start time
 	id           uint
-	startMs      uint64
-	name         string
+	startMs      uint64 // TODO: unused
 
-			    // reference to global proxy
+	// reference to global proxy
 	proxy        *TapdanceProxy
 
 	servConn     *tapdanceConn
 	userConn     net.Conn
-
-			    /* Set to 1 as soon as we learn (from proxy channel) that
-			     we need to. This keeps a ISREMOTE EV_ERROR or EOF from cleaning
-			     up the state */
-	retryConn    int
-
-			    /* Maximum amount of data we can send to the station
-			     before we should tear-down the connection for a new one
-			     with the same remote_conn_id */
-
 };
 
 // constructor
-func NewTapdanceState(proxy *TapdanceProxy, id uint) *TDConnState {
-	state := new(TDConnState)
+func NewTapDanceFlow(proxy *TapdanceProxy, id uint) *TapDanceFlow {
+	state := new(TapDanceFlow)
 
 	state.proxy = proxy
 	state.id = id
 
 	state.startMs = uint64(timeMs())
 
-	state.name = "tunnel" + strconv.FormatUint(uint64(state.id), 10)
-
 	Logger.Debugf("Created new TDState ", state)
 	return state
 }
 
-func (TDstate *TDConnState) WriteToClient(request []byte) (err error) {
-	// TODO: remove this function
-	// Used to shove data back to Client in Redirect phase
-	//servConn
-
-	// TODO: https://blog.filippo.io/the-complete-guide-to-go-net-http-timeouts/
-	TDstate.userConn.SetWriteDeadline(time.Now().Add(time.Second * 2)) // Timeout in 2 secs
-	Logger.Debugf("Trying to write to Client: ", string(request))
-	n, err := TDstate.userConn.Write(request)
-	if err != nil {
-		return
-	}
-	if n != len(request) {
-		Logger.Warningf("Expected to write " + strconv.Itoa(len(request)) + " bytes to client." +
-		"But wrote " + strconv.Itoa(n) + " bytes. Moving on.")
-		return
-	} else {
-		Logger.Debugf("Successfully wrote to Client")
-	}
-	return
-}
-
-func (TDstate *TDConnState) Redirect() (err error) {
+func (TDstate *TapDanceFlow) Redirect() (err error) {
 	TDstate.servConn, err = DialTapDance(TDstate.id, nil)
 	if err != nil {
 		TDstate.userConn.Close()
@@ -99,10 +60,20 @@ func (TDstate *TDConnState) Redirect() (err error) {
 				return
 			}
 			if n > 0 {
-				err = TDstate.WriteToClient(b[:n])
+				TDstate.userConn.SetWriteDeadline(time.Now().Add(time.Second * 2))
+				sent_n, err := TDstate.userConn.Write(b[:n])
 				if err != nil {
 					errChan <- err
 					return
+				}
+				if n != sent_n {
+					err = errors.New("Expected to write " + strconv.Itoa(sent_n) +
+					+ " bytes to client. But wrote " + strconv.Itoa(n) +
+						" bytes. Moving on.")
+					errChan <- err
+					return
+				} else {
+					Logger.Debugf("Successfully wrote to Client")
 				}
 			}
 		}
