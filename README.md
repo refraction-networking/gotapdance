@@ -14,10 +14,9 @@ go get github.com/SergeyFrolov/gotapdance github.com/Sirupsen/logrus \
            golang.org/x/mobile/cmd/gomobile  
 ```
 
-3. If gomobile is needed(e.g. non-CLI version):
-
+3. Only if you need [gomobile](https://godoc.org/golang.org/x/mobile/cmd/gomobile) (e.g. non-CLI version):
  ```bash
-${GOPATH}/bin/gomobile init
+gomobile init
 ```
 
 4. There are 3 versions of TapDance client:
@@ -39,15 +38,21 @@ After one of the above clients is built and launched, it will start listening fo
 Thus, you will need to ask your particular application(e.g. browser) to proxy connection via 127.0.0.1:10500.
 
 1. In firefox (both mobile and desktop) I prefer to type ```about:config``` into address line and set the following:
- ```bash
+
+ ```
 network.proxy.http_port = 10500
 network.proxy.http = 127.0.0.1
 network.proxy.ssl_port = 10500
 network.proxy.ssl = 127.0.0.1
+network.proxy.type = 1
 ```
-The same settings are available somewhere in GUI.
+
+ To disable proxying you may simply set ```network.proxy.type``` back to ```5``` or ```0```.
+
+ The same settings are available somewhere in GUI.
 
 2. Some utilities use following enivoronment variables: 
+
  ```bash
 export https_proxy=127.0.0.1:10500
 export http_proxy=127.0.0.1:10500
