@@ -38,18 +38,21 @@ After one of the above clients is built and launched, it will start listening fo
 Thus, you will need to ask your particular application(e.g. browser) to proxy connection via 127.0.0.1:10500.
 
 1. In firefox (both mobile and desktop) I prefer to type ```about:config``` into address line and set the following:
- ```bash
+
+ ```
 network.proxy.http_port = 10500
 network.proxy.http = 127.0.0.1
 network.proxy.ssl_port = 10500
 network.proxy.ssl = 127.0.0.1
 network.proxy.type = 1
 ```
-To disable proxying you may simply set ```network.proxy.type``` to ```5``` or ```0```
 
-The same settings are available somewhere in GUI.
+ To disable proxying you may simply set ```network.proxy.type``` back to ```5``` or ```0```.
+
+ The same settings are available somewhere in GUI.
 
 2. Some utilities use following enivoronment variables: 
+
  ```bash
 export https_proxy=127.0.0.1:10500
 export http_proxy=127.0.0.1:10500
