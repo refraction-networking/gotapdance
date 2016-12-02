@@ -9,14 +9,23 @@ type counter_uint struct {
 
 func (c *counter_uint) inc() (uint) {
 	c.Lock()
-	c.value++
+	if c.value == ^uint(0) {
+		// if max
+		c.value = 0
+	} else {
+		c.value++
+	}
 	c.Unlock()
 	return c.value
 }
 
 func (c *counter_uint) dec() (uint) {
 	c.Lock()
-	c.value--
+	if c.value == 0 {
+		c.value = ^uint(0)
+	} else {
+		c.value--
+	}
 	c.Unlock()
 	return c.value
 }
