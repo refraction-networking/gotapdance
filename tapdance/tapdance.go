@@ -34,7 +34,8 @@ type TapdanceProxy struct {
 
 	connections   struct {
 		sync.RWMutex
-		m map[uint]*TDConnState}
+		m map[uint]*TapDanceFlow
+	      }
 
 	stop          bool
 }
@@ -50,7 +51,7 @@ func NewTapdanceProxy(listenPort int) *TapdanceProxy {
 	// TODO: do I need it?
 	copy(proxy.stationPubkey[:], td_station_pubkey[0:32])
 
-	proxy.connections.m = make(map[uint]*TDConnState)
+	proxy.connections.m = make(map[uint]*TapDanceFlow)
 	proxy.State = TD_INITIALIZED
 
 	Logger.Infof("Succesfully initialized new Tapdance Proxy." +
@@ -94,7 +95,12 @@ func (proxy *TapdanceProxy) Listen() error {
 func (proxy *TapdanceProxy) Stop() error {
 	proxy.stop = true
 	proxy.listener.Close()
-	// TODO: clean up goroutines
+	proxy.connections.Lock()
+	for _, tdState := range proxy.connections.m {
+		tdState.servConn.toClose = true
+		tdState.servConn.Close()
+	}
+	proxy.connections.Unlock()
 	return nil
 }
 
@@ -114,7 +120,6 @@ func (proxy *TapdanceProxy) handleUserConn(userConn net.Conn) {
 	// Initial request is not lost, because we still haven't read anything from client socket
 	// So we just start Redirecting (client socket) <-> (server socket)
 	if err = tdState.Redirect(); err != nil {
-		// TODO: errors are printed inside Redirect()
 		Logger.Errorf("[Flow " + strconv.FormatUint(uint64(tdState.id), 10) +
 			"] Shut down with error: " + err.Error())
 	} else {
@@ -130,11 +135,11 @@ func (proxy *TapdanceProxy) GetStats() (stats string) {
 	return
 }
 
-func (proxy *TapdanceProxy) NewConnectionToTDStation(userConn *net.Conn) (pTapdanceState *TDConnState, err error) {
+func (proxy *TapdanceProxy) NewConnectionToTDStation(userConn *net.Conn) (pTapdanceState *TapDanceFlow, err error) {
 	// Init connection state
-	id := proxy.countTunnels.inc() // TODO: wtf?
+	id := proxy.countTunnels.inc()
 
-	pTapdanceState = NewTapdanceState(proxy, id)
+	pTapdanceState = NewTapDanceFlow(proxy, id)
 	pTapdanceState.userConn = *userConn
 
 	proxy.connections.Lock()
