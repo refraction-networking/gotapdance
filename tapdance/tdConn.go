@@ -54,12 +54,8 @@ func DialTapDance(id uint, customDialer *net.Dialer) (tdConn *tapdanceConn, err 
 
 	tdConn.stationPubkey = &td_station_pubkey
 
-	tdConn.maxSend = 16*1024 - 1
-	// TODO: randomize to avoid heuristics
-	// TODO: it's actually window size
 
 	rand.Read(tdConn.remoteConnId[:])
-	tdConn.decoyHost, tdConn.decoyPort = GenerateDecoyAddress()
 	tdConn.initialized = false
 	tdConn.reconnecting = false
 	tdConn._read_buffer = make([]byte, 16 * 1024 + 20 + 20 + 12)
@@ -81,8 +77,16 @@ func (tdConn *tapdanceConn) reconnect() (err error){
 		tdConn.reconnecting = false
 		tdConn.sentTotal = 0
 	}()
+
 	tdConn.sentTotal = 0
 
+	// Randomize tdConn.maxSend to avoid heuristics. Maybe it should be math.rand, though?
+	rand_hextet := make([]byte, 2)
+	rand.Read(rand_hextet)
+	tdConn.maxSend = 16*1024 - uint64(binary.BigEndian.Uint16(rand_hextet[0:2]) % 1984) - 1
+	// TODO: it's actually window size
+
+	tdConn.decoyHost, tdConn.decoyPort = GenerateDecoyAddress()
 	err = tdConn.establishTLStoDecoy()
 	if err != nil {
 		tdConn.toClose = true
@@ -150,7 +154,9 @@ func (tdConn *tapdanceConn) Read(b []byte) (n int, err error) {
 			time.Sleep(100 * time.Millisecond)
 		} else {
 			if err != nil {
-				tdConn.toClose = true
+				if err.Error() != "EOF" {
+					tdConn.toClose = true
+				}
 				return
 			}
 			readBytesTotal += uint16(readBytes)
@@ -183,7 +189,9 @@ func (tdConn *tapdanceConn) Read(b []byte) (n int, err error) {
 			time.Sleep(100 * time.Millisecond)
 		} else {
 			if err != nil {
-				tdConn.toClose = true
+				if err.Error() != "EOF" {
+					tdConn.toClose = true
+				}
 				return
 			}
 			readBytesTotal += uint16(readBytes)
@@ -222,6 +230,8 @@ func (tdConn *tapdanceConn) Read(b []byte) (n int, err error) {
 		tdConn.initialized = true
 		Logger.Infof("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10)  +
 			"] Successfully connected to Tapdance Station!")
+		Logger.Debugf("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10)  +
+			"] Winsize = " + strconv.FormatUint(uint64(tdConn.winSize), 10))
 		n = 0
 	} else if msgType == MSG_DATA {
 		n = int(readBytesTotal - headerSize)
