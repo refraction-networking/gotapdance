@@ -27,8 +27,10 @@ type tapdanceConn struct {
 
 	maxSend          uint64
 	sentTotal        uint64
+
 	initialized      bool
 	reconnecting     bool
+	toClose          bool // only Close, if MSG_CLOSE is received or timed out
 
 	decoyHost        string
 	decoyPort        int
@@ -53,10 +55,13 @@ func DialTapDance(id uint, customDialer *net.Dialer) (tdConn *tapdanceConn, err 
 	tdConn.stationPubkey = &td_station_pubkey
 
 	tdConn.maxSend = 16*1024 - 1
+	// TODO: randomize to avoid heuristics
+	// TODO: it's actually window size
+
 	rand.Read(tdConn.remoteConnId[:])
 	tdConn.decoyHost, tdConn.decoyPort = GenerateDecoyAddress()
 	tdConn.initialized = false
-	tdConn.reconnecting = false // TODO: huh?
+	tdConn.reconnecting = false
 	tdConn._read_buffer = make([]byte, 16 * 1024 + 20 + 20 + 12)
 	// TODO: find better place for size, than From linux-2.6-stable/drivers/net/loopback.c
 	err = tdConn.reconnect()
@@ -64,8 +69,23 @@ func DialTapDance(id uint, customDialer *net.Dialer) (tdConn *tapdanceConn, err 
 }
 
 func (tdConn *tapdanceConn) reconnect() (err error){
+
+	if tdConn.initialized {
+		tdConn.toClose = true
+		tdConn.ztlsConn.Close()
+		tdConn.toClose = false
+		tdConn.initialized = false
+	}
+	tdConn.reconnecting = true
+	defer func(){
+		tdConn.reconnecting = false
+		tdConn.sentTotal = 0
+	}()
+	tdConn.sentTotal = 0
+
 	err = tdConn.establishTLStoDecoy()
 	if err != nil {
+		tdConn.toClose = true
 		Logger.Errorf("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10) +
 			"] establishTLStoDecoy() failed with " + err.Error())
 		return
@@ -79,24 +99,29 @@ func (tdConn *tapdanceConn) reconnect() (err error){
 	Logger.Debugf("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10) +
 		"] Prepared initial TD request:" + tdRequest)
 	if err != nil {
+		tdConn.toClose = true
 		Logger.Errorf("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10) +
 			"] Preparation of initial TD request failed with " + err.Error())
 		return
 	}
 	_, err = tdConn.Write([]byte(tdRequest))
 	if err != nil {
+		tdConn.toClose = true
+
 		Logger.Errorf("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10) +
 			"] Could not send initial TD request, error: " + err.Error())
 		return
 	}
 	_, err = tdConn.Read(tdConn._read_buffer)
 	if err != nil {
+		tdConn.toClose = true
 		Logger.Errorf("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10) +
 			"] TapDance station didn't pick up the request. :(")
 		Logger.Debugf("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10) +
 			"] Could not read from server after sending initial TD request, error: " +
 			err.Error())
 	}
+	tdConn.sentTotal = 0
 	return
 }
 
@@ -121,10 +146,11 @@ func (tdConn *tapdanceConn) Read(b []byte) (n int, err error) {
 
 	for readBytesTotal < 3 {
 		readBytes, err = tdConn.ztlsConn.Read(tdConn._read_buffer[readBytesTotal:])
-		if tdConn.reconnecting {
+		if tdConn.reconnecting && tdConn.initialized {
 			time.Sleep(100 * time.Millisecond)
 		} else {
 			if err != nil {
+				tdConn.toClose = true
 				return
 			}
 			readBytesTotal += uint16(readBytes)
@@ -153,10 +179,11 @@ func (tdConn *tapdanceConn) Read(b []byte) (n int, err error) {
 	// get the rest of the msg
 	for msgLen + headerSize < readBytesTotal {
 		readBytes, err = tdConn.ztlsConn.Read(tdConn._read_buffer[readBytesTotal:])
-		if tdConn.reconnecting {
+		if tdConn.reconnecting && tdConn.initialized {
 			time.Sleep(100 * time.Millisecond)
 		} else {
 			if err != nil {
+				tdConn.toClose = true
 				return
 			}
 			readBytesTotal += uint16(readBytes)
@@ -202,10 +229,10 @@ func (tdConn *tapdanceConn) Read(b []byte) (n int, err error) {
 		Logger.Debugf("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10)  +
 			"] Successfully read DATA msg from server: " + string(b))
 	} else if msgType == MSG_CLOSE {
+		tdConn.toClose = true
 		err = errors.New("MSG_CLOSE")
 	} else if msgType == MSG_RECONNECT {
-		// TODO
-		err = errors.New("MSG_RECONNECT is not supported")
+		tdConn.reconnect()
 	}
 	return
 }
@@ -228,7 +255,12 @@ func (tdConn *tapdanceConn) Write(b []byte) (n int, err error) {
 		if couldSend > totalToSend - sentTotal {
 			_, err = tdConn.ztlsConn.Write(b[sentTotal:totalToSend])
 			if err != nil {
-				return
+				if tdConn.initialized && tdConn.reconnecting {
+					time.Sleep(time.Second * 1)
+				} else {
+					tdConn.toClose = true
+					return
+				}
 			}
 			tdConn.sentTotal += (totalToSend - sentTotal)
 			sentTotal = totalToSend
@@ -236,19 +268,22 @@ func (tdConn *tapdanceConn) Write(b []byte) (n int, err error) {
 			_, err = tdConn.ztlsConn.Write(b[sentTotal:sentTotal + couldSend])
 			sentTotal += couldSend
 			if err != nil {
-				return
+				if tdConn.initialized && tdConn.reconnecting {
+					time.Sleep(time.Second * 1)
+					continue
+				} else {
+					tdConn.toClose = true
+					return
+				}
 			}
 			Logger.Infof("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10)  +
 				"] Sent maximum " + strconv.FormatUint(tdConn.maxSend + couldSend, 10) +
 				" bytes. Reconnecting to Tapdance.")
-			tdConn.reconnecting = true
-			tdConn.ztlsConn.Close()
 			err = tdConn.reconnect()
-			tdConn.sentTotal = 0
-			tdConn.reconnecting = false
-		}
-		if err != nil {
-			return
+			if err != nil {
+				tdConn.toClose = true
+				return
+			}
 		}
 	}
 	return
@@ -258,7 +293,7 @@ func (tdConn *tapdanceConn) Write(b []byte) (n int, err error) {
 func (tdConn *tapdanceConn) establishTLStoDecoy() (err error) {
 	//TODO: force stream cipher
 	addr := tdConn.decoyHost + ":" + strconv.Itoa(tdConn.decoyPort)
-	config := &ztls.Config{InsecureSkipVerify: true}// TODO: remove InsecureSkipVerify
+	config := &ztls.Config{}
 	if tdConn.customDialer != nil {
 		ztls.DialWithDialer(tdConn.customDialer, "tcp", addr, config)
 	} else {
@@ -329,8 +364,12 @@ func (tdConn *tapdanceConn) ServerRandom() []byte{
 // Close closes the connection.
 // Any blocked Read or Write operations will be unblocked and return errors.
 func (tdConn *tapdanceConn) Close() (err error) {
-	if tdConn.ztlsConn != nil && tdConn.initialized {
-		err = tdConn.ztlsConn.Close()
+	if tdConn.ztlsConn != nil{
+		if tdConn.toClose {
+			err = tdConn.ztlsConn.Close()
+		} else {
+			tdConn.reconnect()
+		}
 	}
 	return
 }
