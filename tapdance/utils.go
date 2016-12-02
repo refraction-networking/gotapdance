@@ -18,7 +18,7 @@ import (
 func GenerateDecoyAddress() (hostname string, port int) {
 	port = 443
 	//hostname = "54.85.9.24" // ecen5032.org
-	hostname = "192.122.190.104"
+	hostname = "tapdance1.freeaeskey.xyz"
 	return
 }
 
