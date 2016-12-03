@@ -32,6 +32,12 @@ type TapdanceProxy struct {
 
 	countTunnels  counter_uint
 
+	// statistics
+	notPickedUp       counter_uint
+	timedOut          counter_uint
+	closedGracefully  counter_uint
+	unexpectedError   counter_uint
+
 	connections   struct {
 		sync.RWMutex
 		m map[uint]*TapDanceFlow
@@ -74,7 +80,12 @@ func (proxy *TapdanceProxy) Listen() error {
 	}
 	Logger.Infof("Accepting connections at port " + strconv.Itoa(proxy.listenPort))
 
+	last_print_time := timeMs()
 	for !proxy.stop {
+		if timeMs() > last_print_time + 10000 {
+			Logger.Infof(proxy.GetStatistics())
+			last_print_time = timeMs()
+		}
 		if conn, err := proxy.listener.Accept(); err == nil {
 			go proxy.handleUserConn(conn)
 		} else {
@@ -96,7 +107,7 @@ func (proxy *TapdanceProxy) Stop() error {
 	proxy.listener.Close()
 	proxy.connections.Lock()
 	for _, tdState := range proxy.connections.m {
-		tdState.servConn.toClose = true
+		tdState.servConn.reconnecting = false
 		tdState.servConn.Close()
 	}
 	proxy.connections.Unlock()
@@ -127,6 +138,21 @@ func (proxy *TapdanceProxy) handleUserConn(userConn net.Conn) {
 	}
 	return
 }
+
+func (proxy *TapdanceProxy) GetStatistics() (statistics string) {
+	statistics =  "Flows total: " +
+		strconv.FormatUint(uint64(proxy.countTunnels.get()), 10)
+	statistics += ". Not picked up: " +
+		strconv.FormatUint(uint64(proxy.notPickedUp.get()), 10)
+	statistics += ". Timed out: " +
+		strconv.FormatUint(uint64(proxy.timedOut.get()), 10)
+	statistics += ". Unexpected error: " +
+		strconv.FormatUint(uint64(proxy.unexpectedError.get()), 10)
+	statistics += ". Graceful close: " +
+		strconv.FormatUint(uint64(proxy.closedGracefully.get()), 10)
+	return
+}
+
 
 func (proxy *TapdanceProxy) GetStats() (stats string) {
 	stats = proxy.State + "\nPort: " + strconv.Itoa(proxy.listenPort) +

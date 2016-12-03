@@ -6,6 +6,7 @@ import (
 	"time"
 	"io"
 	"errors"
+	"strings"
 )
 
 const (
@@ -82,22 +83,40 @@ func (TDstate *TapDanceFlow) Redirect() (err error) {
 	}
 
 	forwardFromClientToServer := func ()() {
-		n, err := io.Copy(TDstate.servConn, TDstate.userConn)
-		Logger.Debugf("[Flow " + strconv.FormatUint(uint64(TDstate.id), 10)  +
-			"] forwardFromClientToServer returns, bytes sent: " +
-			strconv.FormatUint(uint64(n), 10))
+		for !TDstate.proxy.stop {
+			n, err := io.Copy(TDstate.servConn, TDstate.userConn)
+			Logger.Debugf("[Flow " + strconv.FormatUint(uint64(TDstate.id), 10) +
+				"] forwardFromClientToServer returns, bytes sent: " +
+				strconv.FormatUint(uint64(n), 10))
+			if err != nil {
+				// TODO: maybe ignore other err?
+				errChan <- err
+				return
+			}
+		}
 		errChan <- err
-		return
 	}
 
 	go forwardFromServerToClient()
 	go forwardFromClientToServer()
 
-	if err := <-errChan; err != nil && err.Error() != "EOF" && err.Error() != "Stopped" {
+	if err := <-errChan; err != nil && err.Error() != "MSG_CLOSE" {
+		str_err := err.Error()
+
+		// statistics
+		if strings.Contains(str_err, "TapDance station didn't pick up the request") {
+			TDstate.proxy.notPickedUp.inc()
+		} else if strings.Contains(str_err, ": i/o timeout") {
+			TDstate.proxy.timedOut.inc()
+		}  else {
+			TDstate.proxy.unexpectedError.inc()
+		}
+
 		Logger.Errorf("[Flow " + strconv.FormatUint(uint64(TDstate.id), 10)  +
 			"] Redirect function returns, error: " + err.Error())
 		return err
+	} else {
+		TDstate.proxy.closedGracefully.inc()
 	}
-	//TODO: don't print on graceful close
 	return nil
 }
