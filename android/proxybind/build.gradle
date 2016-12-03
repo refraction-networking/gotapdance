@@ -9,8 +9,8 @@ buildDir = 'build'
 
 def goPath = System.env.GOPATH
 if (!goPath) {
-    logger.error "Error: Install GOPATH env variable!"
-    throw new GradleException("Build aborted. GOPATH not defined!")
+    // If GOPATH is unset, try default one
+    goPath = System.env.HOME + "/go/"
 }
 
 gobind {
