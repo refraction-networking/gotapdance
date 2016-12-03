@@ -47,7 +47,6 @@ func NewTapdanceProxy(listenPort int) *TapdanceProxy {
 	Logger.Formatter = new(MyFormatter)
 	proxy := new(TapdanceProxy)
 	proxy.listenPort = listenPort
-
 	// TODO: do I need it?
 	copy(proxy.stationPubkey[:], td_station_pubkey[0:32])
 

@@ -68,7 +68,7 @@ func (TDstate *TapDanceFlow) Redirect() (err error) {
 				}
 				if n != sent_n {
 					err = errors.New("Expected to write " + strconv.Itoa(sent_n) +
-					+ " bytes to client. But wrote " + strconv.Itoa(n) +
+					" bytes to client. But wrote " + strconv.Itoa(n) +
 						" bytes. Moving on.")
 					errChan <- err
 					return
