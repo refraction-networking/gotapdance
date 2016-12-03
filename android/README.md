@@ -1,9 +1,21 @@
 # Build
 The project is built with Gradle.
 
-You may try to build it [using Gradle command line interface](https://docs.gradle.org/current/userguide/gradle_command_line.html),
-but I suggest you simply import it into [Android Studio](https://developer.android.com/studio/index.html) and let the studio
-do all the magic.
+### Command line
+Assemble app.
+````
+bash$ cd gotapdance/android/app
+bash$ ../gradlew assemble
+````
+Install app on device or emulator.
+````
+bash$ cd gotapdance/android/app
+bash$ ../gradlew install
+````
+Developer mode have to be enabled on device.
+
+### IDE
+Tapdance also can be built from Android Studio or Intellij Idea via standard interface.
 
 # Screenshot
 One of the latest versions looks like this:

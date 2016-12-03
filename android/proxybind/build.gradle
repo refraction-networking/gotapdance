@@ -1,13 +1,20 @@
 //configurations.maybeCreate("default")
 //artifacts.add("default", file('proxybind.aar'))
 
-
 plugins {
     id "org.golang.mobile.bind" version "0.2.7"
 }
 
+buildDir = 'build'
+
+def goPath = System.env.GOPATH
+if (!goPath) {
+    logger.error "Error: Install GOPATH env variable!"
+    throw new GradleException("Build aborted. GOPATH not defined!")
+}
+
 gobind {
     pkg = "github.com/SergeyFrolov/gotapdance/proxybind"
-    GOPATH = "/home/sfrolov/go/"
-    GOMOBILE = "/home/sfrolov/go/bin/gomobile"
+    GOPATH = goPath
+    GOMOBILE = "$goPath/bin/gomobile"
 }
