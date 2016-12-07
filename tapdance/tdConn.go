@@ -15,7 +15,7 @@ import (
 
 type tapdanceConn struct {
 	ztlsConn     *ztls.Conn
-	customDialer *net.Dialer
+	customDialer func(string, string) (net.Conn, error)
 
 	id uint
 	/* random per-connection (secret) id;
@@ -50,7 +50,10 @@ Args:
 	id            -- only for logging and TapDance proxy, could be ignored
 	customDialer  -- dial with customDialer, could be nil
 */
-func DialTapDance(id uint, customDialer *net.Dialer) (tdConn *tapdanceConn, err error) {
+func DialTapDance(
+	id uint,
+	customDialer func(string, string) (net.Conn, error)) (tdConn *tapdanceConn, err error) {
+
 	tdConn = new(tapdanceConn)
 
 	tdConn.customDialer = customDialer
@@ -324,7 +327,22 @@ func (tdConn *tapdanceConn) establishTLStoDecoy() (err error) {
 	addr := tdConn.decoyHost + ":" + strconv.Itoa(tdConn.decoyPort)
 	config := &ztls.Config{}
 	if tdConn.customDialer != nil {
-		ztls.DialWithDialer(tdConn.customDialer, "tcp", addr, config)
+		var dialConn net.Conn
+		dialConn, err = tdConn.customDialer("tcp", addr)
+		if err != nil {
+			return
+		}
+		config.ServerName, _, err = net.SplitHostPort(addr)
+		if err != nil {
+			dialConn.Close()
+			return
+		}
+		tdConn.ztlsConn = ztls.Client(dialConn, config)
+		err = tdConn.ztlsConn.Handshake()
+		if err != nil {
+			dialConn.Close()
+			return
+		}
 	} else {
 		tdConn.ztlsConn, err = ztls.Dial("tcp", addr, config)
 	}
