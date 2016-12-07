@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"github.com/zmap/zgrab/ztools/ztls"
+	"io"
 	"net"
 	"strconv"
 	"strings"
@@ -37,6 +38,14 @@ type tapdanceConn struct {
 
 	_read_buffer []byte
 
+	// read_data holds data between Read() calls when the
+	// caller's buffer is to small to receive all the data
+	// read in a message from the station.
+	read_data_buffer []byte
+	read_data_index  int
+	read_data_count  int
+	read_data_eof    bool
+
 	stationPubkey *[32]byte
 }
 
@@ -66,6 +75,7 @@ func DialTapDance(
 	tdConn.initialized = false
 	tdConn.reconnecting = false
 	tdConn._read_buffer = make([]byte, 16*1024+20+20+12)
+	tdConn.read_data_buffer = make([]byte, 16*1024+20+20+12)
 	// TODO: find better place for size, than From linux-2.6-stable/drivers/net/loopback.c
 	err = tdConn.reconnect()
 	return
@@ -134,7 +144,26 @@ func (tdConn *tapdanceConn) reconnect() (err error) {
 // Read can be made to time out and return a Error with Timeout() == true
 // after a fixed time limit; see SetDeadline and SetReadDeadline.
 func (tdConn *tapdanceConn) Read(b []byte) (n int, err error) {
-	n, err = tdConn.read_as(b, TD_USER_CALL)
+	if tdConn.read_data_count == 0 {
+		if tdConn.read_data_eof {
+			return 0, io.EOF
+		}
+		tdConn.read_data_count, err = tdConn.read_as(tdConn.read_data_buffer, TD_USER_CALL)
+		tdConn.read_data_index = 0
+		if err == io.EOF {
+			tdConn.read_data_eof = true
+			err = nil
+		} else if err != nil {
+			return 0, err
+		}
+	}
+	n = tdConn.read_data_count
+	if n > len(b) {
+		n = len(b)
+	}
+	copy(b, tdConn.read_data_buffer[tdConn.read_data_index:tdConn.read_data_index+n])
+	tdConn.read_data_index += n
+	tdConn.read_data_count -= n
 	return
 }
 
