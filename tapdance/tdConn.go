@@ -11,6 +11,8 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -30,8 +32,9 @@ type tapdanceConn struct {
 	maxSend   uint64
 	sentTotal uint64
 
-	initialized  bool
-	reconnecting bool
+	initialized      int32
+	reconnecting     int32
+	reconnectingCond *sync.Cond
 
 	decoyHost string
 	decoyPort int
@@ -72,8 +75,11 @@ func DialTapDance(
 	tdConn.stationPubkey = &td_station_pubkey
 
 	rand.Read(tdConn.remoteConnId[:])
-	tdConn.initialized = false
-	tdConn.reconnecting = false
+
+	tdConn.initialized = 0
+	tdConn.reconnecting = 0
+	tdConn.reconnectingCond = sync.NewCond(new(sync.Mutex))
+
 	tdConn._read_buffer = make([]byte, 16*1024+20+20+12)
 	tdConn.read_data_buffer = make([]byte, 16*1024+20+20+12)
 	// TODO: find better place for size, than From linux-2.6-stable/drivers/net/loopback.c
@@ -81,17 +87,34 @@ func DialTapDance(
 	return
 }
 
-func (tdConn *tapdanceConn) reconnect() (err error) {
-	tdConn.reconnecting = true
+func (tdConn *tapdanceConn) awaitReconnection() {
+	Logger.Debug("await reconnection")
+	tdConn.reconnectingCond.L.Lock()
+	for atomic.LoadInt32(&tdConn.reconnecting) != 0 {
+		tdConn.reconnectingCond.Wait()
+	}
+	tdConn.reconnectingCond.L.Unlock()
+	Logger.Debug("done await reconnection")
+}
 
-	if tdConn.initialized {
+func (tdConn *tapdanceConn) reconnect() (err error) {
+
+	if !atomic.CompareAndSwapInt32(&tdConn.reconnecting, 0, 1) {
+		// Reconnection is already in progress
+		tdConn.awaitReconnection()
+		return
+	}
+
+	if atomic.LoadInt32(&tdConn.initialized) != 0 {
 		tdConn.ztlsConn.Close()
-		tdConn.initialized = false
+		atomic.StoreInt32(&tdConn.initialized, 0)
 	}
 	defer func() {
-		tdConn.reconnecting = false
 		tdConn.sentTotal = 0
-		tdConn.initialized = true
+		atomic.StoreInt32(&tdConn.initialized, 1)
+		atomic.StoreInt32(&tdConn.reconnecting, 0)
+		tdConn.reconnectingCond.Broadcast()
+		Logger.Debug("broadcasted reconnection")
 	}()
 
 	tdConn.sentTotal = 0
@@ -143,6 +166,9 @@ func (tdConn *tapdanceConn) reconnect() (err error) {
 // Read reads data from the connection.
 // Read can be made to time out and return a Error with Timeout() == true
 // after a fixed time limit; see SetDeadline and SetReadDeadline.
+//
+// TODO: doesn't yet support multiple concurrent Read() calls as
+// required by https://golang.org/pkg/net/#Conn.
 func (tdConn *tapdanceConn) Read(b []byte) (n int, err error) {
 	if tdConn.read_data_count == 0 {
 		if tdConn.read_data_eof {
@@ -186,15 +212,13 @@ func (tdConn *tapdanceConn) read_as(b []byte, caller int) (n int, err error) {
 
 	for readBytesTotal < 3 {
 		readBytes, err = tdConn.ztlsConn.Read(tdConn._read_buffer[readBytesTotal:])
-		if tdConn.reconnecting && caller == TD_USER_CALL {
-			for tdConn.reconnecting {
-				time.Sleep(time.Millisecond * 10)
-			}
+		if caller == TD_USER_CALL && atomic.LoadInt32(&tdConn.reconnecting) != 0 {
+			tdConn.awaitReconnection()
 		} else {
 			if err != nil {
 				if (err.Error() == "EOF" ||
 					strings.Contains(err.Error(), "connection reset by peer")) &&
-					tdConn.initialized {
+					atomic.LoadInt32(&tdConn.initialized) != 0 {
 					tdConn.reconnect()
 					// TODO: think this moment through.
 					// Won't we lose any data, sent by TD station?
@@ -228,15 +252,13 @@ func (tdConn *tapdanceConn) read_as(b []byte, caller int) (n int, err error) {
 	// get the rest of the msg
 	for msgLen+headerSize < readBytesTotal {
 		readBytes, err = tdConn.ztlsConn.Read(tdConn._read_buffer[readBytesTotal:])
-		if tdConn.reconnecting && caller == TD_USER_CALL {
-			for tdConn.reconnecting {
-				time.Sleep(time.Millisecond * 10)
-			}
+		if caller == TD_USER_CALL && atomic.LoadInt32(&tdConn.reconnecting) != 0 {
+			tdConn.awaitReconnection()
 		} else {
 			if err != nil {
 				if (err.Error() == "EOF" ||
 					strings.Contains(err.Error(), "connection reset by peer")) &&
-					tdConn.initialized {
+					atomic.LoadInt32(&tdConn.initialized) != 0 {
 					tdConn.reconnect()
 				} else {
 					return
@@ -246,7 +268,7 @@ func (tdConn *tapdanceConn) read_as(b []byte, caller int) (n int, err error) {
 		}
 	}
 
-	if msgType != MSG_INIT && tdConn.initialized == false {
+	if msgType != MSG_INIT && atomic.LoadInt32(&tdConn.initialized) == 0 {
 		var actualType string
 		if msgType == MSG_DATA {
 			actualType = "Data message"
@@ -260,7 +282,7 @@ func (tdConn *tapdanceConn) read_as(b []byte, caller int) (n int, err error) {
 		}
 		err = errors.New("Expected INIT message, instead received: " + actualType)
 	}
-	if msgType == MSG_INIT && tdConn.initialized == true {
+	if msgType == MSG_INIT && atomic.LoadInt32(&tdConn.initialized) != 0 {
 		err = errors.New("Received INIT message in initialized connection")
 	} else if msgType == MSG_INIT {
 		magicVal = binary.BigEndian.Uint16(tdConn._read_buffer[3:5])
@@ -273,7 +295,7 @@ func (tdConn *tapdanceConn) read_as(b []byte, caller int) (n int, err error) {
 			return
 		}
 		tdConn.winSize = winSize
-		tdConn.initialized = true
+		atomic.StoreInt32(&tdConn.initialized, 1)
 		Logger.Infof("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10) +
 			"] Successfully connected to Tapdance Station!")
 		Logger.Debugf("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10) +
@@ -316,10 +338,9 @@ func (tdConn *tapdanceConn) write_as(b []byte, caller int) (n int, err error) {
 		if couldSend > totalToSend-sentTotal {
 			_, err = tdConn.ztlsConn.Write(b[sentTotal:totalToSend])
 			if err != nil {
-				if caller == TD_USER_CALL && tdConn.reconnecting {
-					for tdConn.reconnecting {
-						time.Sleep(time.Millisecond * 10)
-					}
+				if caller == TD_USER_CALL && atomic.LoadInt32(&tdConn.reconnecting) != 0 {
+					tdConn.awaitReconnection()
+					continue
 				} else {
 					return
 				}
@@ -330,10 +351,8 @@ func (tdConn *tapdanceConn) write_as(b []byte, caller int) (n int, err error) {
 			_, err = tdConn.ztlsConn.Write(b[sentTotal : sentTotal+couldSend])
 			sentTotal += couldSend
 			if err != nil {
-				if caller == TD_USER_CALL && tdConn.reconnecting {
-					for tdConn.reconnecting {
-						time.Sleep(time.Millisecond * 10)
-					}
+				if caller == TD_USER_CALL && atomic.LoadInt32(&tdConn.reconnecting) != 0 {
+					tdConn.awaitReconnection()
 					continue
 				} else {
 					return
