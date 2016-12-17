@@ -107,7 +107,6 @@ func (proxy *TapdanceProxy) Stop() error {
 	proxy.listener.Close()
 	proxy.connections.Lock()
 	for _, tdState := range proxy.connections.m {
-		tdState.servConn.reconnecting = false
 		tdState.servConn.Close()
 	}
 	proxy.connections.Unlock()
