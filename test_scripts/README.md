@@ -1,9 +1,9 @@
 # Test Scripts
 
-Collection of small scripts designed to work with TapDance.
+Collection of quickly written small scripts designed to work with TapDance.
 
-This is basically a dump and I don't guarantee your computer won't catch
-on fire, if you try to use that.
+We move fast and break things, so I don't guarantee your computer
+won't catch on fire, if you try to use that.
 
  * twitter_wget.sh - simply wget's twitter
 
@@ -17,6 +17,6 @@ on fire, if you try to use that.
  * seq.py - sends and receives enumerated bytes of data and checks if they are
    received successfully and in order. Blatantly stolen from
    [ewust's repo](https://github.com/ewust/sendseq).
-   To use, point TapDance server into seq.py reciver
+   To use, point TapDance server into seq.py receiver
    and proxy seq.py sender through TapDance client.
 
