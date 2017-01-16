@@ -3,7 +3,6 @@ package tapdance
 import (
 	"github.com/agl/ed25519/extra25519"
 	"golang.org/x/crypto/curve25519"
-	"encoding/binary"
 	"crypto/cipher"
 	"crypto/sha256"
 	"crypto/rand"
@@ -79,11 +78,7 @@ func obfuscateTag(stegoPayload []byte, stationPubkey [32]byte) (tag []byte, err 
 	aesKey := stationPubkeyHash[:16]
 	aesIv := stationPubkeyHash[16:28]
 
-	data := make([]byte, 2 + len(stegoPayload))
-	binary.BigEndian.PutUint16(data, uint16(len(stegoPayload)))
-	copy(data[2:], stegoPayload)
-
-	encryptedData, err := AesGcmEncrypt(data, aesKey, aesIv)
+	encryptedData, err := AesGcmEncrypt(stegoPayload, aesKey, aesIv)
 	if err != nil {
 		return
 	}

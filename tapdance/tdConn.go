@@ -413,10 +413,9 @@ func (tdConn *tapdanceConn) prepareTDRequest() (tdRequest string, err error) {
 	buf := new(bytes.Buffer) // What we have to encrypt with the shared secret using AES
 
 	master_key := tdConn.ztlsConn.GetHandshakeLog().KeyMaterial.MasterSecret.Value
-	if _, err = buf.WriteString(initial_tag); err != nil {
-		return
-	}
-	if err = binary.Write(buf, binary.BigEndian, uint8(len(master_key))); err != nil {
+
+	// write flags
+	if err = binary.Write(buf, binary.BigEndian, uint8(0)); err != nil {
 		return
 	}
 	buf.Write(master_key[:])
