@@ -125,6 +125,7 @@ func (tdConn *tapdanceConn) reconnect() (err error) {
 	tdConn.maxSend = 16*1024 - uint64(binary.BigEndian.Uint16(rand_hextet[0:2])%1984) - 1
 	// TODO: it's actually window size
 
+	// TODO: when multiple decoy sites become available, cycle through them here
 	tdConn.decoyHost, tdConn.decoyPort = GenerateDecoyAddress()
 	err = tdConn.establishTLStoDecoy()
 	if err != nil {
@@ -370,6 +371,31 @@ func (tdConn *tapdanceConn) write_as(b []byte, caller int) (n int, err error) {
 	return
 }
 
+// List of supported ciphers
+// Essentially all AES GCM ciphers, except for ANON and PSK
+// ANON are too dangerous in our setting
+// PSK might actually work, but are out of scope
+// Maybe also get rid of DSS?
+var TDSupportedCiphers = []uint16{
+	ztls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+	ztls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+	ztls.TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256,
+	ztls.TLS_ECDH_ECDSA_WITH_AES_256_GCM_SHA384,
+	ztls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+	ztls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+	ztls.TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256,
+	ztls.TLS_RSA_WITH_AES_128_GCM_SHA256,
+	ztls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+	ztls.TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
+	ztls.TLS_DHE_RSA_WITH_AES_256_GCM_SHA384,
+	ztls.TLS_DH_RSA_WITH_AES_128_GCM_SHA256,
+	ztls.TLS_DH_RSA_WITH_AES_256_GCM_SHA384,
+	ztls.TLS_DHE_DSS_WITH_AES_128_GCM_SHA256,
+	ztls.TLS_DHE_DSS_WITH_AES_256_GCM_SHA384,
+	ztls.TLS_DH_DSS_WITH_AES_128_GCM_SHA256,
+	ztls.TLS_DH_DSS_WITH_AES_256_GCM_SHA384,
+}
+
 func (tdConn *tapdanceConn) establishTLStoDecoy() (err error) {
 	//TODO: force stream cipher
 	addr := tdConn.decoyHost + ":" + strconv.Itoa(tdConn.decoyPort)
@@ -394,8 +420,14 @@ func (tdConn *tapdanceConn) establishTLStoDecoy() (err error) {
 	} else {
 		tdConn.ztlsConn, err = ztls.Dial("tcp", addr, config)
 	}
-	if err != nil {
-		return
+	if err == nil {
+		cipher := tdConn.ztlsConn.ConnectionState().CipherSuite
+		for _, c := range TDSupportedCiphers {
+			if c == cipher {
+				return
+			}
+		}
+		err = errors.New("Unsupported cipher.")
 	}
 	return
 }
