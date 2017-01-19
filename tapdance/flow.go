@@ -83,18 +83,12 @@ func (TDstate *TapDanceFlow) Redirect() (err error) {
 	}
 
 	forwardFromClientToServer := func ()() {
-		for !TDstate.proxy.stop {
-			n, err := io.Copy(TDstate.servConn, TDstate.userConn)
-			Logger.Debugf("[Flow " + strconv.FormatUint(uint64(TDstate.id), 10) +
-				"] forwardFromClientToServer returns, bytes sent: " +
-				strconv.FormatUint(uint64(n), 10))
-			if err != nil {
-				// TODO: maybe ignore other err?
-				errChan <- err
-				return
-			}
-		}
+		n, err := io.Copy(TDstate.servConn, TDstate.userConn)
+		Logger.Debugf("[Flow " + strconv.FormatUint(uint64(TDstate.id), 10) +
+			"] forwardFromClientToServer returns, bytes sent: " +
+			strconv.FormatUint(uint64(n), 10))
 		errChan <- err
+		return
 	}
 
 	go forwardFromServerToClient()
