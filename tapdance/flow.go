@@ -49,8 +49,11 @@ func (TDstate *TapDanceFlow) Redirect() (err error) {
 		return
 	}
 	errChan := make(chan error)
-	defer TDstate.userConn.Close()
-	defer TDstate.servConn.Close()
+	defer func() {
+		defer TDstate.userConn.Close()
+		defer TDstate.servConn.Close()
+		_ = <- errChan // wait for second goroutine to close
+	}()
 
 	forwardFromServerToClient := func ()() {
 		b := make([]byte, 16 * 1024 + 20 + 20 + 12)
@@ -61,7 +64,7 @@ func (TDstate *TapDanceFlow) Redirect() (err error) {
 				return
 			}
 			if n > 0 {
-				TDstate.userConn.SetWriteDeadline(time.Now().Add(time.Second * 2))
+				TDstate.userConn.SetWriteDeadline(time.Now().Add(time.Second * 10))
 				sent_n, err := TDstate.userConn.Write(b[:n])
 				if err != nil {
 					errChan <- err
