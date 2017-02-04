@@ -371,7 +371,8 @@ func (tdConn *tapdanceConn) write_as(b []byte, caller int) (n int, err error) {
 	return
 }
 
-// List of supported ciphers
+
+// List of actually supported ciphers(not a list of offered ciphers!)
 // Essentially all AES GCM ciphers, except for ANON and PSK
 // ANON are too dangerous in our setting
 // PSK might actually work, but are out of scope
@@ -396,10 +397,11 @@ var TDSupportedCiphers = []uint16{
 	ztls.TLS_DH_DSS_WITH_AES_256_GCM_SHA384,
 }
 
+
 func (tdConn *tapdanceConn) establishTLStoDecoy() (err error) {
 	//TODO: force stream cipher
 	addr := tdConn.decoyHost + ":" + strconv.Itoa(tdConn.decoyPort)
-	config := &ztls.Config{}
+	config := getZtlsConfig("Firefox50")
 	if tdConn.customDialer != nil {
 		var dialConn net.Conn
 		dialConn, err = tdConn.customDialer("tcp", addr)
@@ -411,16 +413,17 @@ func (tdConn *tapdanceConn) establishTLStoDecoy() (err error) {
 			dialConn.Close()
 			return
 		}
-		tdConn.ztlsConn = ztls.Client(dialConn, config)
+		tdConn.ztlsConn = ztls.Client(dialConn, &config)
 		err = tdConn.ztlsConn.Handshake()
 		if err != nil {
 			dialConn.Close()
 			return
 		}
 	} else {
-		tdConn.ztlsConn, err = ztls.Dial("tcp", addr, config)
+		tdConn.ztlsConn, err = ztls.Dial("tcp", addr, &config)
 	}
 	if err == nil {
+		// TODO: move up
 		cipher := tdConn.ztlsConn.ConnectionState().CipherSuite
 		for _, c := range TDSupportedCiphers {
 			if c == cipher {
