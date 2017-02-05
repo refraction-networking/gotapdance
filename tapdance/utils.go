@@ -55,6 +55,32 @@ func AesGcmDecrypt(ciphertext []byte, key []byte, iv []byte) (plaintext []byte, 
 	return
 }
 
+// Tries to get crypto random int in range [min, max]
+// In case of crypto failure -- return unsecure pseudorandom
+func getRandInt(min int, max int) (result int) {
+	// I can't believe Golang is making me do that
+	// Flashback to awful C/C++ libraries
+	diff := max - min
+	if diff < 0 {
+		Logger.Warningf("fetRandInt(): max is less than min")
+		min = max
+		diff *= -1
+	} else if diff == 0 {
+		Logger.Warningf("fetRandInt(): max == min")
+		return min
+	}
+	var v int64
+	err := binary.Read(rand.Reader, binary.LittleEndian, &v)
+	if v < 0 {
+		v *= -1
+	}
+	if err != nil {
+		Logger.Warningf("Unable to securely get getRandInt(): " + err.Error())
+		v = mrand.Int63()
+	}
+	fmt.Println(v)
+	return min + int(v % int64(diff + 1))
+}
 
 func obfuscateTag(stegoPayload []byte, stationPubkey [32]byte) (tag []byte, err error) {
 	var sharedSecret, clientPrivate, clientPublic, representative [32]byte
