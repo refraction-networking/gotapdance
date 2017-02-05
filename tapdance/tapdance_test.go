@@ -43,16 +43,10 @@ func asTestHandshakeLaunchProxy(t *testing.T) {
 
 
 func TestObfuscate(t *testing.T) {
-	keyFile := key_path + "pubkey.dev"
-
-	var stationPubkey [32]byte
-	sliceStaionPubkey, _ := ioutil.ReadFile(keyFile)
-	copy(stationPubkey[:], sliceStaionPubkey[0:32])
-
 	for i := 0; i < 1; i++ {
 		var randStr []byte = make([]byte, 186)
 		rand.Read(randStr)
-		obfuscated, err := obfuscateTag(randStr, stationPubkey)
+		obfuscated, err := obfuscateTag(randStr, td_station_pubkey)
 		if err != nil {
 			Logger.Errorf("Error: ", err.Error())
 			os.Exit(1)
