@@ -6,18 +6,28 @@ import (
 	"crypto/cipher"
 	"crypto/sha256"
 	"crypto/rand"
+	mrand "math/rand"
 	"crypto/aes"
 
 	"fmt"
 
 	"time"
 	"bytes"
+	"encoding/binary"
 )
 
 func GenerateDecoyAddress() (hostname string, port int) {
 	port = 443
+	var hostnames = []string{
+		"tapdance1.freeaeskey.xyz",
+	}//	"tapdance2.freeaeskey.xyz",
+	//"tapdance3.freeaeskey.xyz", // doesn't exist
+	//	"twitter.com", // doesn't have TD station on the way
+	//	"192.122.190.107", // nothing at all is hosted there
+	//}
+
 	//hostname = "54.85.9.24" // ecen5032.org
-	hostname = "tapdance1.freeaeskey.xyz"
+	hostname = hostnames[getRandInt(0, len(hostnames) - 1)]
 	return
 }
 
@@ -66,7 +76,6 @@ func getRandInt(min int, max int) (result int) {
 		min = max
 		diff *= -1
 	} else if diff == 0 {
-		Logger.Warningf("fetRandInt(): max == min")
 		return min
 	}
 	var v int64
@@ -78,7 +87,6 @@ func getRandInt(min int, max int) (result int) {
 		Logger.Warningf("Unable to securely get getRandInt(): " + err.Error())
 		v = mrand.Int63()
 	}
-	fmt.Println(v)
 	return min + int(v % int64(diff + 1))
 }
 
