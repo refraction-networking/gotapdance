@@ -207,9 +207,13 @@ func (tdConn *tapdanceConn) read_as(b []byte, caller int) (n int, err error) {
 	var readBytesTotal uint16
 	var readBytes int
 
-	// TapDance should NOT have a timeout, timeouts have to be handled by client and server
-	// 3 hours timeout just to connect stale connections once in a (long) while
-	tdConn.SetReadDeadline(time.Now().Add(time.Hour * 3))
+	if caller == TD_USER_CALL {
+		// TapDance should NOT have a timeout, timeouts have to be handled by client and server
+		// 3 hours timeout just to connect stale connections once in a (long) while
+		tdConn.SetReadDeadline(time.Now().Add(time.Hour * 3))
+	} else if caller == TD_INTERNAL_CALL {
+		tdConn.SetReadDeadline(time.Now().Add(time.Second * 15))
+	}
 
 	for readBytesTotal < 3 {
 		readBytes, err = tdConn.ztlsConn.Read(tdConn._read_buffer[readBytesTotal:])
@@ -327,10 +331,13 @@ func (tdConn *tapdanceConn) write_as(b []byte, caller int) (n int, err error) {
 	totalToSend := uint64(len(b))
 	sentTotal := uint64(0)
 	defer func() { n = int(sentTotal) }()
-	// TapDance should NOT have a timeout, timeouts have to be handled by client and server
-	// 3 hours timeout just to connect stale connections once in a (long) while
-	tdConn.SetWriteDeadline(time.Now().Add(time.Hour * 3))
-
+	if caller == TD_USER_CALL {
+		// TapDance should NOT have a timeout, timeouts have to be handled by client and server
+		// 3 hours timeout just to connect stale connections once in a (long) while
+		tdConn.SetWriteDeadline(time.Now().Add(time.Hour * 3))
+	} else if caller == TD_INTERNAL_CALL {
+		tdConn.SetWriteDeadline(time.Now().Add(time.Second * 15))
+	}
 	for sentTotal != totalToSend {
 		Logger.Debugf("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10) +
 			"] Already sent: " + strconv.FormatUint(tdConn.sentTotal, 10) +
