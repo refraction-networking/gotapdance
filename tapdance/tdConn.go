@@ -464,7 +464,14 @@ func (tdConn *tapdanceConn) prepareTDRequest() (tdRequest string, err error) {
 	}
 	//print_hex(tag, "tag")
 
-	tdRequest = "GET / HTTP/1.1\r\nHost: www.example.cn\r\nX-Ignore: "
+	// Don't even need the following HTTP request
+	// Ideally, it is never processed by decoy
+	tdRequest = "GET / HTTP/1.1\r\n"
+	tdRequest += "Host: tapdance.com\r\n"
+	tdRequest += "X-Ignore: "
+
+	tdRequest += getRandPadding(0, 750, 10)
+
 	keystreamOffset := len(tdRequest)
 	//Logger.Debugf("tag", tag)
 	keystreamSize := (len(tag)/3+1)*4 + keystreamOffset // we can't use first 2 bits of every byte

@@ -14,6 +14,7 @@ import (
 	"time"
 	"bytes"
 	"encoding/binary"
+	"strings"
 )
 
 func GenerateDecoyAddress() (hostname string, port int) {
@@ -88,6 +89,19 @@ func getRandInt(min int, max int) (result int) {
 		v = mrand.Int63()
 	}
 	return min + int(v % int64(diff + 1))
+}
+
+// Get padding of length [minLen, maxLen).
+// Distributed in pseudogaussian style.
+// Padded using symbol '#'. Known plaintext attacks, anyone?
+func getRandPadding(minLen int, maxLen int, smoothness int) string {
+	paddingLen := 0
+	for j := 0; j < smoothness; j++ {
+		paddingLen += getRandInt(minLen, maxLen)
+	}
+	paddingLen = paddingLen / smoothness
+
+	return strings.Repeat("#", paddingLen)
 }
 
 func obfuscateTag(stegoPayload []byte, stationPubkey [32]byte) (tag []byte, err error) {
