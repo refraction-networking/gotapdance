@@ -438,6 +438,8 @@ func (tdConn *tapdanceConn) establishTLStoDecoy() (err error) {
 			}
 		}
 		err = errors.New("Unsupported cipher.")
+		// TODO: send random traffic?
+		tdConn.ztlsConn.Close()
 	}
 	return
 }
