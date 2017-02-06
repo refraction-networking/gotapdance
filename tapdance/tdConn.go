@@ -447,6 +447,7 @@ func (tdConn *tapdanceConn) establishTLStoDecoy() (err error) {
 func (tdConn *tapdanceConn) getKeystream(length int) []byte {
 	// get current state of cipher and encrypt zeros to get keystream
 	zeros := make([]byte, length)
+	// TODO: check for conversion error
 	servConnCipher := tdConn.ztlsConn.OutCipher().(cipher.AEAD)
 	keystreamWtag := servConnCipher.Seal(nil, tdConn.ztlsConn.OutSeq(), zeros, nil)
 	return keystreamWtag[:length]
@@ -471,7 +472,6 @@ func (tdConn *tapdanceConn) prepareTDRequest() (tdRequest string, err error) {
 	if err != nil {
 		return
 	}
-	//print_hex(tag, "tag")
 
 	// Don't even need the following HTTP request
 	// Ideally, it is never processed by decoy
@@ -482,14 +482,10 @@ func (tdConn *tapdanceConn) prepareTDRequest() (tdRequest string, err error) {
 	tdRequest += getRandPadding(0, 750, 10)
 
 	keystreamOffset := len(tdRequest)
-	//Logger.Debugf("tag", tag)
 	keystreamSize := (len(tag)/3+1)*4 + keystreamOffset // we can't use first 2 bits of every byte
 	whole_keystream := tdConn.getKeystream(keystreamSize)
 	keystreamAtTag := whole_keystream[keystreamOffset:]
-	//Logger.Debugf("keystream", keystream)
-	//print_hex(keystream_at_tag, "keystream_at_tag")
 
-	// req := "GET / HTTP/1.1\r\nHost:" + TDstate.decoy_host + "\r\nX-Ignore: "
 	tdRequest += reverseEncrypt(tag, keystreamAtTag)
 	Logger.Debugf("Prepared initial request to Decoy") //, td_request)
 
