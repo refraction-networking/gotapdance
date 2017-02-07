@@ -48,20 +48,76 @@ var TDFirefox50Ciphers = []uint16{
 	0x000a,
 }
 
+type CacheKeyFunctor struct {
+}
+
+func (f CacheKeyFunctor) Key(a net.Addr) {
+	return a.String()
+}
+
 func getZtlsConfig(Browser string) ztls.Config {
 	switch Browser {
 	default:
 		fallthrough
 	case "Firefox50":
-		return ztls.Config{
-			ForceSessionTicketExt: true,
-			CipherSuites: TDFirefox50Ciphers,
-			SessionTicketsDisabled: false,
-			NextProtos: []string{"h2", "http/1.1"},
-			ExtendedMasterSecret: true,
+		conf := &ztls.Config{
+			InsecureSkipVerify: true,
 		}
+		hello := ztls.ClientHelloConfiguration{}
+		hello.HandshakeVersion = 0x0303
+
+		hello.CipherSuites = []uint16{
+			ztls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			ztls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+			ztls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+			ztls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+			ztls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+			ztls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			ztls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
+			ztls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
+			ztls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+			ztls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+			ztls.TLS_DHE_RSA_WITH_AES_128_CBC_SHA,
+			ztls.TLS_DHE_RSA_WITH_AES_256_CBC_SHA,
+			ztls.TLS_RSA_WITH_AES_128_CBC_SHA,
+			ztls.TLS_RSA_WITH_AES_256_CBC_SHA,
+			ztls.TLS_RSA_WITH_3DES_EDE_CBC_SHA,
+		}
+		hello.CompressionMethods = []uint8{0}
+		sni := ztls.SniExtension{[]string{}, true}
+		ec := ztls.SupportedCurvesExtension{[]ztls.CurveID{ztls.CurveP256, ztls.CurveP384, ztls.CurveP521}}
+		points := ztls.PointFormatExtension{[]uint8{0}}
+		st := ztls.SessionTicketExtension{[]byte{}, true}
+		//alpn := ztls.ALPNExtension{[]string{"h2", "http/1.1"}}
+		sigs := ztls.SignatureAlgorithmExtension{[]uint16{0x0401,
+			0x0501,
+			0x0601,
+			0x0201,
+			0x0403,
+			0x0503,
+			0x0603,
+			0x0203,
+			0x0502,
+			0x0402,
+			0x0202,
+		}}
+
+		hello.Extensions = []ztls.ClientExtension{sni,
+			ztls.ExtendedMasterSecretExtension{},
+			ztls.SecureRenegotiationExtension{},
+			ec,
+			points,
+			st,
+			ztls.NextProtocolNegotiationExtension{},
+			alpn,
+			ztls.StatusRequestExtension{},
+			sigs,
+			ztls.NewLRUClientSessionCache(0),
+			CacheKeyFunctor{},
+		}
+		conf.ClientFingerprint = &hello
+		return conf
 		// Android is TODO: capture extensions
 		// Chrome?
 	}
-
 }
