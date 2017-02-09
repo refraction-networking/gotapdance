@@ -257,25 +257,28 @@ func (tdConn *tapdanceConn) read_as(b []byte, caller int) (n int, err error) {
 
 	for readBytesTotal < totalBytesToRead {
 		readBytes, err = tdConn.ztlsConn.Read(tdConn._read_buffer[readBytesTotal:])
+		// TODO: wouldn't reconnect corrupt _read_buffer?
 		if caller == TD_USER_CALL && atomic.LoadInt32(&tdConn.reconnecting) != 0 {
 			tdConn.awaitReconnection()
 		} else if err != nil {
-			if (err.Error() == "EOF" ||
-				strings.Contains(err.Error(), "connection reset by peer")) &&
+			if (err.Error() == "EOF") && // TODO: is there a better check?
 				 caller == TD_USER_CALL {
+				Logger.Infof("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10) +
+					"] triggered reconnect in Read()")
 				tdConn.connect(TD_RECONNECT_CALL)
 				// TODO: think this moment through.
 				// Won't we lose any data, sent by TD station?
 			} else {
 				return
 			}
-			readBytesTotal += uint16(readBytes)
 		}
+		readBytesTotal += uint16(readBytes)
 		if readBytesTotal >= headerSize && totalBytesToRead == headerSize {
 			// once we read msg_len, add it to totalBytesToRead
 			msgType = tdConn._read_buffer[0]
 			msgLen = binary.BigEndian.Uint16(tdConn._read_buffer[1:3])
 			totalBytesToRead = headerSize + msgLen
+
 		}
 	}
 
