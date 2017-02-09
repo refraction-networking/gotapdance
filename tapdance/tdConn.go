@@ -184,8 +184,16 @@ func (tdConn *tapdanceConn) connect(mode int) (err error) {
 		}
 		_, err = tdConn.read_as(tdConn._read_buffer, mode)
 		if err != nil {
-			Logger.Errorf("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10) +
-				"] error reading from TapDance station :", err.Error())
+			str_err := err.Error()
+			if strings.Contains(str_err, ": i/o timeout") || // client timed out
+			   err.Error() == "EOF" { // decoy timed out
+				err = errors.New("TapDance station didn't pick up the request")
+				Logger.Errorf("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10) +
+					"] " + err.Error())
+			} else {
+				Logger.Errorf("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10) +
+					"] error reading from TapDance station :", err.Error())
+			}
 			tdConn.ztlsConn.Close()
 			continue
 		}
