@@ -316,6 +316,8 @@ func (tdConn *tapdanceConn) read_as(b []byte, caller int) (n int, err error) {
 			"] Successfully read DATA msg from server: " + string(b))
 	case MSG_CLOSE:
 		err = errors.New("MSG_CLOSE")
+		Logger.Infof("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10) +
+			"] received MSG_CLOSE")
 	default:
 		err = errors.New("Unknown message #" + strconv.FormatUint(uint64(msgType), 10))
 	}
