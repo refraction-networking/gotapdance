@@ -98,11 +98,7 @@ func (TDstate *TapDanceFlow) Redirect() (err error) {
 			} else {
 				TDstate.proxy.unexpectedError.inc()
 			}
-
-			Logger.Errorf("[Flow " + strconv.FormatUint(uint64(TDstate.id), 10) +
-				"] Redirect function returns, error: " + err.Error())
-			return err
 		}
 	}
-	return nil
+	return
 }
