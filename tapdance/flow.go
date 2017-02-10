@@ -3,7 +3,6 @@ package tapdance
 import (
 	"net"
 	"strconv"
-	"time"
 	"io"
 	"errors"
 	"strings"
@@ -56,7 +55,6 @@ func (TDstate *TapDanceFlow) Redirect() (err error) {
 	}()
 
 	forwardFromServerToClient := func ()() {
-		TDstate.userConn.SetWriteDeadline(time.Now().Add(time.Second * 5))
 		n, _err := io.Copy(TDstate.userConn, TDstate.servConn)
 		Logger.Debugf("[Flow " + strconv.FormatUint(uint64(TDstate.id), 10) +
 			"] forwardFromServerToClient returns, bytes sent: " +
