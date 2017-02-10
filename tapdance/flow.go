@@ -50,8 +50,8 @@ func (TDstate *TapDanceFlow) Redirect() (err error) {
 	}
 	errChan := make(chan error)
 	defer func() {
-		defer TDstate.userConn.Close()
-		defer TDstate.servConn.Close()
+		TDstate.userConn.Close()
+		TDstate.servConn.Close()
 		_ = <- errChan // wait for second goroutine to close
 	}()
 
@@ -65,6 +65,7 @@ func (TDstate *TapDanceFlow) Redirect() (err error) {
 			_err = errors.New("!!!Server returned without error")
 		}
 		errChan <- _err
+		return
 	}
 
 	forwardFromClientToServer := func ()() {
@@ -72,17 +73,17 @@ func (TDstate *TapDanceFlow) Redirect() (err error) {
 		Logger.Debugf("[Flow " + strconv.FormatUint(uint64(TDstate.id), 10) +
 			"] forwardFromClientToServer returns, bytes sent: " +
 			strconv.FormatUint(uint64(n), 10))
-		errChan <- _err
 		if _err == nil {
 			_err = errors.New("StoppedByUser")
 		}
+		errChan <- _err
 		return
 	}
 
 	go forwardFromServerToClient()
 	go forwardFromClientToServer()
 
-	if err := <-errChan; err != nil {
+	if err = <- errChan; err != nil {
 		if err.Error() != "MSG_CLOSE" && err.Error() != "StoppedByUser" {
 			TDstate.proxy.closedGracefully.inc()
 		} else {
