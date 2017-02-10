@@ -261,8 +261,11 @@ func (tdConn *tapdanceConn) read_as(b []byte, caller int) (n int, err error) {
 		if caller == TD_USER_CALL && atomic.LoadInt32(&tdConn.reconnecting) != 0 {
 			tdConn.awaitReconnection()
 		} else if err != nil {
-			if (err.Error() == "EOF") && // TODO: is there a better check?
-				 caller == TD_USER_CALL {
+			if (err.Error() == "EOF" ||
+				strings.Contains(err.Error(), "read: connection reset by peer")) &&
+				 caller == TD_USER_CALL { // TODO: is there a better check?
+				// TODO: check for whether any data was succesfully sent
+				// If not -- don't reconnect, just rotate
 				Logger.Infof("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10) +
 					"] triggered reconnect in Read()")
 				tdConn.connect(TD_RECONNECT_CALL)
