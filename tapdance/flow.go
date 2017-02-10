@@ -82,10 +82,11 @@ func (TDstate *TapDanceFlow) Redirect() (err error) {
 	go forwardFromClientToServer()
 
 	if err = <- errChan; err != nil {
-		if err.Error() != "MSG_CLOSE" && err.Error() != "StoppedByUser" {
+		if err.Error() == "MSG_CLOSE" || err.Error() == "StoppedByUser" {
 			Logger.Debugf("[Flow " + strconv.FormatUint(uint64(TDstate.id), 10) +
 				"] Redirect function returns gracefully: " + err.Error())
 			TDstate.proxy.closedGracefully.inc()
+			err = nil
 		} else {
 			str_err := err.Error()
 
