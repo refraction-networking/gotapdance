@@ -335,46 +335,50 @@ func (tdConn *tapdanceConn) Write(b []byte) (n int, err error) {
 	return
 }
 
-func (tdConn *tapdanceConn) write_as(b []byte, caller int) (n int, err error) {
+func (tdConn *tapdanceConn) write_as(b []byte, caller int) (sentTotal int, err error) {
 	totalToSend := uint64(len(b))
-	sentTotal := uint64(0)
-	defer func() { n = int(sentTotal) }()
+	_sentTotal := uint64(0)
+	toSend := uint64(0) // to send on this iteration
+	var n int
+	defer func() { sentTotal = int(_sentTotal) }()
 
-	for sentTotal != totalToSend {
+	for _sentTotal != totalToSend {
 		Logger.Debugf("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10) +
 			"] Already sent: " + strconv.FormatUint(tdConn.sentTotal, 10) +
 			". Requested to send: " + strconv.FormatUint(totalToSend, 10))
+
 		couldSend := tdConn.maxSend - tdConn.sentTotal
-		if couldSend > totalToSend-sentTotal {
-			_, err = tdConn.ztlsConn.Write(b[sentTotal:totalToSend])
-			if err != nil {
-				if caller == TD_USER_CALL && atomic.LoadInt32(&tdConn.reconnecting) != 0 {
-					tdConn.awaitReconnection()
-					continue
-				} else {
-					return
-				}
+
+		// check if we can send the whole buffer
+		// or if we have to send a chunk and reconnect
+		reconnectAfter := (couldSend < totalToSend - _sentTotal)
+		switch reconnectAfter {
+		case false: toSend = totalToSend - _sentTotal
+		case true: toSend = couldSend
+		}
+
+		n, err = tdConn.ztlsConn.Write(b[_sentTotal:_sentTotal + toSend])
+		if err != nil {
+			if (err.Error() == "EOF" ||
+				strings.Contains(err.Error(), "read: connection reset by peer")) &&
+				caller == TD_USER_CALL {
+				Logger.Infof("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10) +
+					"] triggered reconnect in Write()")
+				tdConn.connect(TD_RECONNECT_CALL)
+				reconnectAfter = false
+			} else {
+				return
 			}
-			tdConn.sentTotal += (totalToSend - sentTotal)
-			sentTotal = totalToSend
+		}
+		_sentTotal += uint64(n)
+
+		if !reconnectAfter {
+			tdConn.sentTotal += uint64(n)
 		} else {
-			_, err = tdConn.ztlsConn.Write(b[sentTotal : sentTotal+couldSend])
-			sentTotal += couldSend
-			if err != nil {
-				if caller == TD_USER_CALL && atomic.LoadInt32(&tdConn.reconnecting) != 0 {
-					tdConn.awaitReconnection()
-					continue
-				} else {
-					return
-				}
-			}
 			Logger.Infof("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10) +
 				"] Sent maximum " + strconv.FormatUint(tdConn.maxSend, 10) +
 				" bytes. Reconnecting to Tapdance.")
 			err = tdConn.connect(TD_RECONNECT_CALL)
-			if err != nil {
-				return
-			}
 		}
 	}
 	return
