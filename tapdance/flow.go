@@ -59,7 +59,7 @@ func (TDstate *TapDanceFlow) Redirect() (err error) {
 		TDstate.userConn.SetWriteDeadline(time.Now().Add(time.Second * 5))
 		n, _err := io.Copy(TDstate.userConn, TDstate.servConn)
 		Logger.Debugf("[Flow " + strconv.FormatUint(uint64(TDstate.id), 10) +
-			"] forwardFromClientToServer returns, bytes sent: " +
+			"] forwardFromServerToClient returns, bytes sent: " +
 			strconv.FormatUint(uint64(n), 10))
 		if _err == nil {
 			_err = errors.New("!!!Server returned without error")
