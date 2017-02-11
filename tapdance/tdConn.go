@@ -247,14 +247,17 @@ func (tdConn *tapdanceConn) read_as(b []byte, caller int) (n int, err error) {
 	// if MSG_TYPE == DATA:
 	//    4-length: DATA
 
-	var readBytesTotal, totalBytesToRead uint16
 	var readBytes int
-	var headerSize, msgLen, magicVal, expectedMagicVal uint16
-	var msgType uint8
-	headerSize = 3
-	totalBytesToRead = 3
-	n = 0
+	var readBytesTotal uint16
+	headerSize := uint16(3)
+	totalBytesToRead := headerSize
 
+	var msgLen uint16
+	var msgType uint8
+
+	headerIsRead := false
+
+	// Read into special buffer, if it is connect/reconnect
 	var read_buffer []byte
 	switch caller {
 	case TD_RECONNECT_CALL: fallthrough
@@ -263,9 +266,39 @@ func (tdConn *tapdanceConn) read_as(b []byte, caller int) (n int, err error) {
 	default: panic("tdConn.read_as was called with incorrect caller " + string(caller))
 	}
 
-	// TODO: read only totalBytesToRead?
+	// This function checks if message type, given particular caller, is appropriate.
+	// In case it is appropriate - returns nil, otherwise - the error
+	checkMsgType := func(_msgType uint8, _caller int) (error) {
+		switch _msgType {
+		case MSG_RECONNECT:
+			if _caller == TD_USER_CALL {
+				return errors.New("Received RECONNECT message in initialized connection")
+			} else if _caller == TD_INIT_CALL {
+				return errors.New("Received RECONNECT message instead of INIT!")
+			}
+		case MSG_INIT:
+			if _caller == TD_USER_CALL {
+				return errors.New("Received INIT message in initialized connection")
+			}
+			if _caller == TD_RECONNECT_CALL {
+				// TODO: will be error eventually
+				Logger.Warningf("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10) +
+					"] Got INIT instead of reconnect! Moving on")
+			}
+		case MSG_DATA:
+			if _caller == TD_RECONNECT_CALL || _caller == TD_INIT_CALL {
+				return errors.New("Received DATA message in uninitialized connection")
+			}
+		case MSG_CLOSE:
+			// always appropriate
+		default:
+			return errors.New("Unknown message #" + strconv.FormatUint(uint64(_msgType), 10))
+		}
+		return nil
+	}
+
 	for readBytesTotal < totalBytesToRead {
-		readBytes, err = tdConn.ztlsConn.Read(read_buffer[readBytesTotal:])
+		readBytes, err = tdConn.ztlsConn.Read(read_buffer[readBytesTotal:totalBytesToRead])
 		if caller == TD_USER_CALL && atomic.LoadInt32(&tdConn.reconnecting) != 0 {
 			tdConn.awaitReconnection()
 		} else if err != nil {
@@ -284,32 +317,30 @@ func (tdConn *tapdanceConn) read_as(b []byte, caller int) (n int, err error) {
 			}
 		}
 		readBytesTotal += uint16(readBytes)
-		if readBytesTotal >= headerSize && totalBytesToRead == headerSize {
-			// once we read msg_len, add it to totalBytesToRead
+
+		if readBytesTotal >= headerSize && !headerIsRead {
+			// Once we read the header
+			headerIsRead = true
+
+			// Check if the message type is appropriate
 			msgType = read_buffer[0]
+			err = checkMsgType(msgType, caller)
+			if err != nil {
+				return
+			}
+
+			// Add msgLen to totalBytesToRead
 			msgLen = binary.BigEndian.Uint16(read_buffer[1:3])
 			totalBytesToRead = headerSize + msgLen
-
 		}
 	}
 
+	// Process actual message
 	switch msgType {
 	case MSG_RECONNECT:
-		if caller == TD_USER_CALL {
-			err = errors.New("Received RECONNECT message in initialized connection")
-		} else if caller == TD_INIT_CALL {
-			err = errors.New("Received RECONNECT message instead of INIT!")
-		}
 		fallthrough
 	case MSG_INIT:
-		if caller == TD_USER_CALL {
-			err = errors.New("Received INIT message in initialized connection")
-		}
-		if caller == TD_RECONNECT_CALL && msgType == MSG_INIT {
-			// TODO: will be error eventually
-			Logger.Warningf("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10) +
-				"] Got INIT instead of reconnect! Moving on")
-		}
+		var magicVal, expectedMagicVal uint16
 		magicVal = binary.BigEndian.Uint16(read_buffer[3:5])
 		expectedMagicVal = uint16(0x2a75)
 		if magicVal != expectedMagicVal {
@@ -320,7 +351,6 @@ func (tdConn *tapdanceConn) read_as(b []byte, caller int) (n int, err error) {
 		}
 		Logger.Infof("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10) +
 			"] Successfully connected to Tapdance Station!")
-		// TODO: copy extra bytes into shared buffer
 	case MSG_DATA:
 		n = int(readBytesTotal - headerSize)
 		copy(b, read_buffer[headerSize:readBytesTotal])
@@ -330,8 +360,6 @@ func (tdConn *tapdanceConn) read_as(b []byte, caller int) (n int, err error) {
 		err = errors.New("MSG_CLOSE")
 		Logger.Infof("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10) +
 			"] received MSG_CLOSE")
-	default:
-		err = errors.New("Unknown message #" + strconv.FormatUint(uint64(msgType), 10))
 	}
 	return
 }
