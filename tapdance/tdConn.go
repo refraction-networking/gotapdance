@@ -255,9 +255,17 @@ func (tdConn *tapdanceConn) read_as(b []byte, caller int) (n int, err error) {
 	totalBytesToRead = 3
 	n = 0
 
+	var read_buffer []byte
+	switch caller {
+	case TD_RECONNECT_CALL: fallthrough
+	case TD_INIT_CALL: read_buffer = make([]byte, 4096)
+	case TD_USER_CALL: read_buffer = tdConn._read_buffer[:]
+	default: panic("tdConn.read_as was called with incorrect caller " + string(caller))
+	}
+
+	// TODO: read only totalBytesToRead?
 	for readBytesTotal < totalBytesToRead {
-		readBytes, err = tdConn.ztlsConn.Read(tdConn._read_buffer[readBytesTotal:])
-		// TODO: wouldn't reconnect corrupt _read_buffer?
+		readBytes, err = tdConn.ztlsConn.Read(read_buffer[readBytesTotal:])
 		if caller == TD_USER_CALL && atomic.LoadInt32(&tdConn.reconnecting) != 0 {
 			tdConn.awaitReconnection()
 		} else if err != nil {
@@ -278,8 +286,8 @@ func (tdConn *tapdanceConn) read_as(b []byte, caller int) (n int, err error) {
 		readBytesTotal += uint16(readBytes)
 		if readBytesTotal >= headerSize && totalBytesToRead == headerSize {
 			// once we read msg_len, add it to totalBytesToRead
-			msgType = tdConn._read_buffer[0]
-			msgLen = binary.BigEndian.Uint16(tdConn._read_buffer[1:3])
+			msgType = read_buffer[0]
+			msgLen = binary.BigEndian.Uint16(read_buffer[1:3])
 			totalBytesToRead = headerSize + msgLen
 
 		}
@@ -302,7 +310,7 @@ func (tdConn *tapdanceConn) read_as(b []byte, caller int) (n int, err error) {
 			Logger.Warningf("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10) +
 				"] Got INIT instead of reconnect! Moving on")
 		}
-		magicVal = binary.BigEndian.Uint16(tdConn._read_buffer[3:5])
+		magicVal = binary.BigEndian.Uint16(read_buffer[3:5])
 		expectedMagicVal = uint16(0x2a75)
 		if magicVal != expectedMagicVal {
 			err = errors.New("INIT message: magic value mismatch! Expected: " +
@@ -312,9 +320,10 @@ func (tdConn *tapdanceConn) read_as(b []byte, caller int) (n int, err error) {
 		}
 		Logger.Infof("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10) +
 			"] Successfully connected to Tapdance Station!")
+		// TODO: copy extra bytes into shared buffer
 	case MSG_DATA:
 		n = int(readBytesTotal - headerSize)
-		copy(b, tdConn._read_buffer[headerSize:readBytesTotal])
+		copy(b, read_buffer[headerSize:readBytesTotal])
 		Logger.Debugf("[Flow " + strconv.FormatUint(uint64(tdConn.id), 10) +
 			"] Successfully read DATA msg from server: " + string(b))
 	case MSG_CLOSE:
