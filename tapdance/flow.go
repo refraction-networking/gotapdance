@@ -18,7 +18,7 @@ const (
 // Connection-oriented state
 type TapDanceFlow struct {
 	// tunnel index and start time
-	id           uint
+	id           uint64
 	startMs      uint64 // TODO: unused
 
 	// reference to global proxy
@@ -29,7 +29,7 @@ type TapDanceFlow struct {
 };
 
 // constructor
-func NewTapDanceFlow(proxy *TapdanceProxy, id uint) *TapDanceFlow {
+func NewTapDanceFlow(proxy *TapdanceProxy, id uint64) *TapDanceFlow {
 	state := new(TapDanceFlow)
 
 	state.proxy = proxy

@@ -2,14 +2,14 @@ package tapdance
 
 import "sync"
 
-type counter_uint struct {
+type counter_uint64 struct {
 	sync.Mutex
-	value uint
+	value uint64
 }
 
-func (c *counter_uint) inc() (uint) {
+func (c *counter_uint64) inc() (uint64) {
 	c.Lock()
-	if c.value == ^uint(0) {
+	if c.value == ^uint64(0) {
 		// if max
 		c.value = 0
 	} else {
@@ -19,10 +19,10 @@ func (c *counter_uint) inc() (uint) {
 	return c.value
 }
 
-func (c *counter_uint) dec() (uint) {
+func (c *counter_uint64) dec() (uint64) {
 	c.Lock()
 	if c.value == 0 {
-		c.value = ^uint(0)
+		c.value = ^uint64(0)
 	} else {
 		c.value--
 	}
@@ -30,7 +30,7 @@ func (c *counter_uint) dec() (uint) {
 	return c.value
 }
 
-func (c *counter_uint) get() (value uint) {
+func (c *counter_uint64) get() (value uint64) {
 	c.Lock()
 	value = c.value
 	c.Unlock()
