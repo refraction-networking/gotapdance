@@ -30,17 +30,17 @@ type TapdanceProxy struct {
 
 	listenPort    int
 
-	countTunnels  counter_uint
+	countTunnels  counter_uint64
 
 	// statistics
-	notPickedUp       counter_uint
-	timedOut          counter_uint
-	closedGracefully  counter_uint
-	unexpectedError   counter_uint
+	notPickedUp       counter_uint64
+	timedOut          counter_uint64
+	closedGracefully  counter_uint64
+	unexpectedError   counter_uint64
 
 	connections   struct {
 		sync.RWMutex
-		m map[uint]*TapDanceFlow
+		m map[uint64]*TapDanceFlow
 	      }
 
 	stop          bool
@@ -56,7 +56,7 @@ func NewTapdanceProxy(listenPort int) *TapdanceProxy {
 	// TODO: do I need it?
 	copy(proxy.stationPubkey[:], td_station_pubkey[0:32])
 
-	proxy.connections.m = make(map[uint]*TapDanceFlow)
+	proxy.connections.m = make(map[uint64]*TapDanceFlow)
 	proxy.State = TD_INITIALIZED
 
 	Logger.Infof("Succesfully initialized new Tapdance Proxy." +
