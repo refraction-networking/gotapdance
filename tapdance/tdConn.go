@@ -713,10 +713,10 @@ func (tdConn *tapdanceConn) Close() (err error) {
 		close(tdConn.stopped)
 		atomic.StoreInt32(&tdConn.state, TD_STATE_CLOSED)
 	}
+	tdConn.setError(errors.New("Forced shutdown by user"), false)
 	if tdConn.ztlsConn != nil {
 		err = tdConn.ztlsConn.Close()
 	}
-	tdConn.setError(errors.New("Closed"), false)
 	return
 }
 
