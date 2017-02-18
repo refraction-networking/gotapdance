@@ -15,6 +15,7 @@ import (
 	"math"
 //	"encoding/hex"
 	"io"
+	"sync"
 )
 
 type tapdanceConn struct {
@@ -45,6 +46,7 @@ type tapdanceConn struct {
 
 	state           int32
 	err             error       // closing error TODO: lock me
+	errMu           sync.Mutex
 
 	readChannel     chan []byte // HAVE TO BE NON-BLOCKING
 	writeChannel    chan []byte //
@@ -146,7 +148,7 @@ func (tdConn *tapdanceConn) engineMain() {
 			if err != nil {
 				Logger.Debugln("[Flow " + tdConn.idStr() + "] write_td" +
 					"failed with " + err.Error())
-				tdConn.err = err
+				tdConn.setError(err, false)
 				return
 			}
 		}
@@ -157,9 +159,7 @@ func (tdConn *tapdanceConn) readSubEngine() {
 	var read_bytes int
 	var err error
 	defer func() {
-		if tdConn.err == nil && err != nil {
-			tdConn.err = err
-		}
+		tdConn.setError(err, false)
 		Logger.Debugln("[Flow " + tdConn.idStr() + "] exit readSubEngine()")
 		close(tdConn.readerStopped)
 		tdConn.Close()
@@ -169,6 +169,7 @@ func (tdConn *tapdanceConn) readSubEngine() {
 		switch atomic.LoadInt32(&tdConn.state) {
 		case TD_STATE_RECONNECT:
 			if err == io.EOF {
+				err = nil
 				// Let main goroutine know read've stopped, enter barrier
 				tdConn.readerStopped <- true
 				okReconnect := <-tdConn.doneReconnect
@@ -202,7 +203,6 @@ func (tdConn *tapdanceConn) readSubEngine() {
 						continue
 					}
 				}
-				tdConn.err = err
 				Logger.Debugln("[Flow " + tdConn.idStr() + "] read_msg()" +
 					"failed with " + err.Error())
 				return
@@ -213,6 +213,9 @@ func (tdConn *tapdanceConn) readSubEngine() {
 
 func (tdConn *tapdanceConn) connect() {
 	var reconnect bool
+	// store current error, set it as connection-wide error if all attempts to connect failed
+	currErr := errors.New("No connection attempts were made yet")
+
 	defer func() {
 		tdConn.sentTotal = 0
 		connectOk := (tdConn.err == nil)
@@ -255,8 +258,6 @@ func (tdConn *tapdanceConn) connect() {
 		expectedMsg = MSG_INIT
 	}
 
-	// store current error, set it as connection-wide error if all attempts to connect failed
-	currErr := errors.New("No connection attempts were made yet")
 	for i := 0; i < connection_attempts; i++ {
 		if !reconnect {
 			if i >= 2 {
@@ -355,7 +356,7 @@ func (tdConn *tapdanceConn) connect() {
 		tdConn.sentTotal = 0
 		return
 	}
-	tdConn.err = currErr
+	tdConn.setError(currErr, false)
 	return
 }
 
@@ -672,6 +673,20 @@ func (tdConn *tapdanceConn) idStr() string {
 	return strconv.FormatUint(uint64(tdConn.id), 10)
 }
 
+func (tdConn *tapdanceConn) setError(err error, overwrite bool) {
+	if err == nil {
+		return
+	}
+	tdConn.errMu.Lock()
+	defer tdConn.errMu.Unlock()
+	if tdConn.err == nil && !overwrite {
+		return
+	} else {
+		tdConn.err = err
+	}
+
+}
+
 func (tdConn *tapdanceConn) tryScheduleReconnect() {
 	for {
 		if atomic.CompareAndSwapInt32(&tdConn.state,
@@ -701,9 +716,7 @@ func (tdConn *tapdanceConn) Close() (err error) {
 	if tdConn.ztlsConn != nil {
 		err = tdConn.ztlsConn.Close()
 	}
-	if tdConn.err == nil {
-		tdConn.err = io.EOF
-	}
+	tdConn.setError(errors.New("Closed"), false)
 	return
 }
 
