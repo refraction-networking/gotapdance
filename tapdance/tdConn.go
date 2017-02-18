@@ -18,6 +18,7 @@ import (
 )
 
 type tapdanceConn struct {
+	tcpConn         *net.TCPConn
 	ztlsConn        *ztls.Conn
 	customDialer    func(string, string) (net.Conn, error)
 
@@ -246,10 +247,10 @@ func (tdConn *tapdanceConn) connect() {
 	tdConn.maxSend = 16 * 1024 - uint64(getRandInt(1, 1984))
 
 	if reconnect {
-		tdConn.ztlsConn.Close()
 		connection_attempts = 2
 		expectedMsg = MSG_RECONNECT
 		_ = <-tdConn.readerStopped // wait for readEngine to stop
+		tdConn.ztlsConn.Close()
 	} else {
 		connection_attempts = 6
 		expectedMsg = MSG_INIT
@@ -587,26 +588,34 @@ func (tdConn *tapdanceConn) establishTLStoDecoy() (err error) {
 	//TODO: force stream cipher
 	addr := tdConn.decoyHost + ":" + strconv.Itoa(tdConn.decoyPort)
 	config := getZtlsConfig("Firefox50")
+	var dialConn net.Conn
 	if tdConn.customDialer != nil {
-		var dialConn net.Conn
 		dialConn, err = tdConn.customDialer("tcp", addr)
 		if err != nil {
-			return
-		}
-		config.ServerName, _, err = net.SplitHostPort(addr)
-		if err != nil {
-			dialConn.Close()
-			return
-		}
-		tdConn.ztlsConn = ztls.Client(dialConn, &config)
-		err = tdConn.ztlsConn.Handshake()
-		if err != nil {
-			dialConn.Close()
-			return
+			return err
 		}
 	} else {
-		tdConn.ztlsConn, err = ztls.Dial("tcp", addr, &config)
+		tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
+		if err != nil {
+			return err
+		}
+		dialConn, err = net.DialTCP("tcp", nil, tcpAddr)
+		if err != nil {
+			return err
+		}
 	}
+	config.ServerName, _, err = net.SplitHostPort(addr)
+	if err != nil {
+		dialConn.Close()
+		return
+	}
+	tdConn.ztlsConn = ztls.Client(dialConn, &config)
+	err = tdConn.ztlsConn.Handshake()
+	if err != nil {
+		dialConn.Close()
+		return
+	}
+	tdConn.tcpConn = dialConn.(*net.TCPConn)
 	return
 }
 
