@@ -499,7 +499,7 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 // after a fixed time limit; see SetDeadline and SetWriteDeadline.
 func (tdConn *tapdanceConn) Write(b []byte) (n int, err error) {
 	select {
-	case <-tdConn.stopped: return
+	case <-tdConn.stopped:
 	case tdConn.writeChannel <- b:
 		n = len(b)
 	}
