@@ -90,7 +90,7 @@ customDialer func(string, string) (net.Conn, error)) (tdConn *tapdanceConn, err 
 
 	rand.Read(tdConn.remoteConnId[:])
 
-	tdConn._readBuffer = make([]byte, 16 * 1024 + 20 + 20 + 12)
+	tdConn._readBuffer = make([]byte, 3) // Only read headers into it
 	tdConn._writeBuffer = make([]byte, 16 * 1024 + 20 + 20 + 12)
 
 	tdConn.stopped = make(chan bool)
@@ -157,7 +157,6 @@ func (tdConn *tapdanceConn) engineMain() {
 }
 
 func (tdConn *tapdanceConn) readSubEngine() {
-	var read_bytes int
 	var err error
 	defer func() {
 		tdConn.setError(err, false)
@@ -199,8 +198,7 @@ func (tdConn *tapdanceConn) readSubEngine() {
 			tdConn.tryScheduleReconnect()
 			continue
 		default:
-			Logger.Debugln("[Flow " + tdConn.idStr() + "] read_bytes, err: ", read_bytes, err)
-			read_bytes, err = tdConn.read_msg(MSG_DATA)
+			_, err = tdConn.read_msg(MSG_DATA)
 			if err != nil {
 				if err == io.EOF {
 					// TODO: something?
@@ -378,19 +376,23 @@ func (tdConn *tapdanceConn) connect() {
 // Read reads data from the connection.
 // Read can be made to time out and return a Error with Timeout() == true
 // after a fixed time limit; see SetDeadline and SetReadDeadline.
-//
-// TODO: doesn't yet support multiple concurrent Read() calls as
-// required by https://golang.org/pkg/net/#Conn.
 func (tdConn *tapdanceConn) Read(b []byte) (n int, err error) {
+	// TODO: FIX THAT EMBARRASSMENT
+	// Buffer is reallocated and recopied twice!
+	// If len(b) < 1500, then things will break
+	// But now Read() could be invoked by multiple goroutines, hooray(no)
+	// Golang doesn't let me do 'b = <-tdConn.readChannel' =/
+
 	select {
-	case <-tdConn.stopped:
 	case bb := <-tdConn.readChannel:
 		n = len(bb)
 		if n != 0 {
 			copy(b, bb)
 		}
 	}
-	err = tdConn.err
+	if n == 0 {
+		err = tdConn.err
+	}
 	return
 }
 
@@ -410,17 +412,6 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 
 	var msgLen uint16
 	var msgType uint8
-
-	headerIsRead := false
-
-	// Read into special buffer, if it is connect/reconnect
-	var read_buffer []byte
-	switch expectedMsg {
-	case MSG_RECONNECT: fallthrough
-	case MSG_INIT: read_buffer = make([]byte, 4096)
-	case MSG_DATA: read_buffer = tdConn._readBuffer[:]
-	default: panic("tdConn.read_msg was called with incorrect msg " + string(expectedMsg))
-	}
 
 	// This function checks if message type, given particular caller, is appropriate.
 	// In case it is appropriate - returns nil, otherwise - the error
@@ -453,28 +444,37 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 		return nil
 	}
 
+	readBytes, err = tdConn.ztlsConn.Read(tdConn._readBuffer[:headerSize])
+	if err != nil {
+		return
+	}
+	readBytesTotal = uint16(readBytes)
+	if readBytesTotal < headerSize {
+		panic("readBytesTotal < headerSize")
+		// TODO: remove panic eventually, just to see if that happens
+		return
+	}
+
+	// Check if the message type is appropriate
+	msgType = tdConn._readBuffer[0]
+	err = checkMsgType(msgType, expectedMsg)
+	if err != nil {
+		return
+	}
+
+	// Add msgLen to totalBytesToRead
+	msgLen = binary.BigEndian.Uint16(tdConn._readBuffer[1:3])
+	totalBytesToRead = headerSize + msgLen
+	// TODO: check if msgLen is not absurd.
+	read_buffer := make([]byte, msgLen)
+
+	// Get the rest of the message
 	for readBytesTotal < totalBytesToRead {
-		readBytes, err = tdConn.ztlsConn.Read(read_buffer[readBytesTotal:totalBytesToRead])
+		readBytes, err = tdConn.ztlsConn.Read(read_buffer[readBytesTotal-headerSize:msgLen])
 		if err != nil {
 			return
 		}
 		readBytesTotal += uint16(readBytes)
-
-		if readBytesTotal >= headerSize && !headerIsRead {
-			// Once we read the header
-			headerIsRead = true
-
-			// Check if the message type is appropriate
-			msgType = read_buffer[0]
-			err = checkMsgType(msgType, expectedMsg)
-			if err != nil {
-				return
-			}
-
-			// Add msgLen to totalBytesToRead
-			msgLen = binary.BigEndian.Uint16(read_buffer[1:3])
-			totalBytesToRead = headerSize + msgLen
-		}
 	}
 
 //	Logger.Debugln("[Flow " + tdConn.idStr() + "] read\n", hex.Dump(read_buffer[:totalBytesToRead]))
@@ -485,7 +485,11 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 		fallthrough
 	case MSG_INIT:
 		var magicVal, expectedMagicVal uint16
-		magicVal = binary.BigEndian.Uint16(read_buffer[3:5])
+		if len(read_buffer) < 2 {
+			err = errors.New("INIT message body too short!")
+			return
+		}
+		magicVal = binary.BigEndian.Uint16(read_buffer[:2])
 		expectedMagicVal = uint16(0x2a75)
 		if magicVal != expectedMagicVal {
 			err = errors.New("INIT message: magic value mismatch! Expected: " +
@@ -498,10 +502,9 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 	case MSG_DATA:
 		n = int(readBytesTotal - headerSize)
 		select {
-			case tdConn.readChannel <- read_buffer[headerSize:readBytesTotal]:
+			case tdConn.readChannel <- read_buffer[:]:
 				Logger.Debugf("[Flow " + tdConn.idStr() +
-					"] Successfully read DATA msg from server",
-					len(read_buffer[headerSize:readBytesTotal]))
+					"] Successfully read DATA msg from server", msgLen)
 			case <-tdConn.stopped: return
 			}
 	case MSG_CLOSE:
