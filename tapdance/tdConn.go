@@ -45,8 +45,8 @@ type tapdanceConn struct {
 	stationPubkey   *[32]byte
 
 	state           int32
-	err             error       // closing error TODO: lock me
-	errMu           sync.Mutex
+	err             error       // closing error
+	errMu           sync.Mutex  // make it RWMutex and RLock on read?
 
 	readChannel     chan []byte // HAVE TO BE NON-BLOCKING
 	writeChannel    chan []byte //
@@ -140,13 +140,14 @@ func (tdConn *tapdanceConn) engineMain() {
 		case <-tdConn.stopped:
 			return
 		case <-tdConn.writerTimeout:
+			// TODO <low priority>: check if any data was sent or received
 			tdConn.tryScheduleReconnect()
 			continue
 		case tdConn._writeBuffer = <-tdConn.writeChannel:
 			tdConn.writeMsgSize = len(tdConn._writeBuffer)
 			_, err := tdConn.write_td(tdConn._writeBuffer[:tdConn.writeMsgSize])
 			if err != nil {
-				Logger.Debugln("[Flow " + tdConn.idStr() + "] write_td" +
+				Logger.Debugln("[Flow " + tdConn.idStr() + "] write_td() " +
 					"failed with " + err.Error())
 				tdConn.setError(err, false)
 				return
@@ -210,7 +211,7 @@ func (tdConn *tapdanceConn) readSubEngine() {
 						continue
 					}
 				}
-				Logger.Debugln("[Flow " + tdConn.idStr() + "] read_msg()" +
+				Logger.Debugln("[Flow " + tdConn.idStr() + "] read_msg() " +
 					"failed with " + err.Error())
 				return
 			}
