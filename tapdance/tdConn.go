@@ -171,10 +171,17 @@ func (tdConn *tapdanceConn) readSubEngine() {
 			if err == io.EOF {
 				err = nil
 				// Let main goroutine know read've stopped, enter barrier
-				tdConn.readerStopped <- true
-				okReconnect := <-tdConn.doneReconnect
-				if !okReconnect {
-					break
+				select {
+				case <-tdConn.stopped: return
+				case tdConn.readerStopped <- true:
+				}
+
+				select {
+				case <-tdConn.stopped: return
+				case okReconnect := <-tdConn.doneReconnect:
+					if !okReconnect {
+						return
+					}
 				}
 			} else if err != nil {
 				return
@@ -227,11 +234,15 @@ func (tdConn *tapdanceConn) connect() {
 			atomic.StoreInt32(&tdConn.state, TD_STATE_CLOSED)
 		}
 		if reconnect {
-			tdConn.doneReconnect <- connectOk
+			select {
+			case tdConn.doneReconnect <- connectOk:
+			case <-tdConn.stopped:
+			}
+
 		}
 	}()
 
-	switch tdConn.state {
+	switch atomic.LoadInt32(&tdConn.state) {
 	case TD_STATE_RECONNECT: reconnect = true
 	case TD_STATE_NEW: reconnect = false
 	case TD_STATE_CONNECTED: Logger.Errorf("Flow " + tdConn.idStr() + "] called reconnect" +
@@ -251,7 +262,10 @@ func (tdConn *tapdanceConn) connect() {
 	if reconnect {
 		connection_attempts = 2
 		expectedMsg = MSG_RECONNECT
-		_ = <-tdConn.readerStopped // wait for readEngine to stop
+		select {
+		case _ = <-tdConn.readerStopped: // wait for readEngine to stop
+		case <-tdConn.stopped: return
+		}
 		tdConn.ztlsConn.Close()
 	} else {
 		connection_attempts = 6
@@ -482,10 +496,13 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 			"] Successfully connected to Tapdance Station!")
 	case MSG_DATA:
 		n = int(readBytesTotal - headerSize)
-		tdConn.readChannel <- read_buffer[headerSize:readBytesTotal]
-		Logger.Debugf("[Flow " + tdConn.idStr() +
-			"] Successfully read DATA msg from server",
-			len(read_buffer[headerSize:readBytesTotal]))
+		select {
+			case tdConn.readChannel <- read_buffer[headerSize:readBytesTotal]:
+				Logger.Debugf("[Flow " + tdConn.idStr() +
+					"] Successfully read DATA msg from server",
+					len(read_buffer[headerSize:readBytesTotal]))
+			case <-tdConn.stopped: return
+			}
 	case MSG_CLOSE:
 		err = errors.New("MSG_CLOSE")
 		Logger.Infof("[Flow " + tdConn.idStr() +
@@ -689,11 +706,11 @@ func (tdConn *tapdanceConn) setError(err error, overwrite bool) {
 
 func (tdConn *tapdanceConn) tryScheduleReconnect() {
 	for {
-		if atomic.CompareAndSwapInt32(&tdConn.state,
-			TD_STATE_CONNECTED, TD_STATE_RECONNECT) {
-			return
-		} else if atomic.LoadInt32(&tdConn.state) != TD_STATE_CONNECTED {
-			return
+		switch atomic.LoadInt32(&tdConn.state) {
+		case TD_STATE_CONNECTED:
+			_ = atomic.CompareAndSwapInt32(&tdConn.state,
+				TD_STATE_CONNECTED, TD_STATE_RECONNECT)
+		default: return
 		}
 	}
 }
@@ -709,11 +726,11 @@ func (tdConn *tapdanceConn) ServerRandom() []byte {
 // Close closes the connection.
 // Any blocked Read or Write operations will be unblocked and return errors.
 func (tdConn *tapdanceConn) Close() (err error) {
+	tdConn.setError(errors.New("Forced shutdown by user"), false)
 	if atomic.CompareAndSwapInt32(&tdConn.channelsStopped, 0, 1) {
 		close(tdConn.stopped)
 		atomic.StoreInt32(&tdConn.state, TD_STATE_CLOSED)
 	}
-	tdConn.setError(errors.New("Forced shutdown by user"), false)
 	if tdConn.ztlsConn != nil {
 		err = tdConn.ztlsConn.Close()
 	}
