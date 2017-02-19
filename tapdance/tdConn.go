@@ -702,7 +702,7 @@ func (tdConn *tapdanceConn) setError(err error, overwrite bool) {
 	}
 	tdConn.errMu.Lock()
 	defer tdConn.errMu.Unlock()
-	if tdConn.err == nil && !overwrite {
+	if tdConn.err != nil && !overwrite {
 		return
 	} else {
 		tdConn.err = err
