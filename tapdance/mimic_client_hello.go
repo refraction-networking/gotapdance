@@ -1,6 +1,9 @@
 package tapdance
 
-import "github.com/zmap/zgrab/ztools/ztls"
+import (
+	"github.com/zmap/zgrab/ztools/ztls"
+	"net"
+)
 
 // List of ciphers we offer in Client Hello
 // NOT A LIST OF CIPHER SUITES THAT ACTUALLY WORK
@@ -51,7 +54,7 @@ var TDFirefox50Ciphers = []uint16{
 type CacheKeyFunctor struct {
 }
 
-func (f CacheKeyFunctor) Key(a net.Addr) {
+func (f CacheKeyFunctor) Key(a net.Addr) string {
 	return a.String()
 }
 
@@ -60,10 +63,10 @@ func getZtlsConfig(Browser string) ztls.Config {
 	default:
 		fallthrough
 	case "Firefox50":
-		conf := &ztls.Config{
+		conf := ztls.Config{
 			InsecureSkipVerify: true,
 		}
-		hello := ztls.ClientHelloConfiguration{}
+		hello := ztls.ClientFingerprintConfiguration{}
 		hello.HandshakeVersion = 0x0303
 
 		hello.CipherSuites = []uint16{
@@ -84,7 +87,7 @@ func getZtlsConfig(Browser string) ztls.Config {
 			ztls.TLS_RSA_WITH_3DES_EDE_CBC_SHA,
 		}
 		hello.CompressionMethods = []uint8{0}
-		sni := ztls.SniExtension{[]string{}, true}
+		sni := ztls.SNIExtension{[]string{}, true}
 		ec := ztls.SupportedCurvesExtension{[]ztls.CurveID{ztls.CurveP256, ztls.CurveP384, ztls.CurveP521}}
 		points := ztls.PointFormatExtension{[]uint8{0}}
 		st := ztls.SessionTicketExtension{[]byte{}, true}
@@ -102,26 +105,26 @@ func getZtlsConfig(Browser string) ztls.Config {
 			0x0202,
 		}}
 
-		hello.Extensions = []ztls.ClientExtension{sni,
-			ztls.ExtendedMasterSecretExtension{},
-			ztls.SecureRenegotiationExtension{},
-			ec,
-			points,
-			st,
-			ztls.NextProtocolNegotiationExtension{},
-			alpn,
-			ztls.StatusRequestExtension{},
-			sigs,
-			ztls.NewLRUClientSessionCache(0),
-			CacheKeyFunctor{},
+		hello.SessionCache = ztls.NewLRUClientSessionCache(0)
+		hello.CacheKey = &CacheKeyFunctor{}
+		hello.Extensions = []ztls.ClientExtension{&sni,
+			&ztls.ExtendedMasterSecretExtension{},
+			&ztls.SecureRenegotiationExtension{},
+			&ec,
+			&points,
+			&st,
+			&ztls.NextProtocolNegotiationExtension{},
+			&alpn,
+			&ztls.StatusRequestExtension{},
+			&sigs,
 		}
-		conf.ClientFingerprint = &hello
+		conf.ClientFingerprintConfiguration = &hello
 		return conf
 	case "Android4.4":
-		conf := &ztls.Config{
+		conf := ztls.Config{
 			InsecureSkipVerify: true,
 		}
-		hello := ztls.ClientHelloConfiguration{}
+		hello := ztls.ClientFingerprintConfiguration{}
 		hello.HandshakeVersion = 0x0303
 		hello.CipherSuites = []uint16{
 			ztls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
@@ -154,7 +157,7 @@ func getZtlsConfig(Browser string) ztls.Config {
 			0x00ff}
 
 		hello.CompressionMethods = []uint8{0}
-		sni := ztls.SniExtension{[]string{}, true}
+		sni := ztls.SNIExtension{[]string{}, true}
 		st := ztls.SessionTicketExtension{[]byte{}, true}
 		sigs := ztls.SignatureAlgorithmExtension{[]uint16{
 			0x0601,
@@ -176,8 +179,16 @@ func getZtlsConfig(Browser string) ztls.Config {
 		}}
 		points := ztls.PointFormatExtension{[]uint8{0}}
 		ec := ztls.SupportedCurvesExtension{[]ztls.CurveID{ztls.CurveP521, ztls.CurveP384, ztls.CurveP256}}
-		hello.Extensions = []ztls.ClientExtension{sni, st, sigs, ztls.NextProtocolNegotiationExtension{}, points, ec}
-		conf.ClientFingerprint = &hello
+		hello.Extensions = []ztls.ClientExtension{
+			&sni,
+			&st,
+			&sigs,
+			&ztls.NextProtocolNegotiationExtension{},
+			&points,
+			&ec}
+		hello.SessionCache = ztls.NewLRUClientSessionCache(0)
+		hello.CacheKey = &CacheKeyFunctor{}
+		conf.ClientFingerprintConfiguration = &hello
 		return conf
 		// Chrome?
 	}
