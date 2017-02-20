@@ -68,7 +68,6 @@ func getZtlsConfig(Browser string) ztls.Config {
 		}
 		hello := ztls.ClientFingerprintConfiguration{}
 		hello.HandshakeVersion = 0x0303
-
 		hello.CipherSuites = []uint16{
 			ztls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
 			ztls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
@@ -104,7 +103,6 @@ func getZtlsConfig(Browser string) ztls.Config {
 			0x0402,
 			0x0202,
 		}}
-
 		hello.SessionCache = ztls.NewLRUClientSessionCache(0)
 		hello.CacheKey = &CacheKeyFunctor{}
 		hello.Extensions = []ztls.ClientExtension{&sni,
@@ -120,6 +118,7 @@ func getZtlsConfig(Browser string) ztls.Config {
 		}
 		conf.ClientFingerprintConfiguration = &hello
 		return conf
+
 	case "Android4.4":
 		conf := ztls.Config{
 			InsecureSkipVerify: true,
@@ -155,7 +154,6 @@ func getZtlsConfig(Browser string) ztls.Config {
 			ztls.TLS_RSA_WITH_RC4_128_SHA,
 			ztls.TLS_RSA_WITH_RC4_128_MD5,
 			0x00ff}
-
 		hello.CompressionMethods = []uint8{0}
 		sni := ztls.SNIExtension{[]string{}, true}
 		st := ztls.SessionTicketExtension{[]byte{}, true}
@@ -190,6 +188,66 @@ func getZtlsConfig(Browser string) ztls.Config {
 		hello.CacheKey = &CacheKeyFunctor{}
 		conf.ClientFingerprintConfiguration = &hello
 		return conf
-		// Chrome?
+
+	//Asterisk because we don't have Channel ID extension, which would require a ztls PR
+	case "Chrome47*":
+		conf := ztls.Config{
+			InsecureSkipVerify: true,
+		}
+		hello := ztls.ClientFingerprintConfiguration{}
+		hello.HandshakeVersion = 0x0303
+		hello.CipherSuites = []uint16{
+			ztls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			ztls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+			ztls.TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
+			ztls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+			ztls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+			ztls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
+			ztls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+			ztls.TLS_DHE_RSA_WITH_AES_256_CBC_SHA,
+			ztls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
+			ztls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+			ztls.TLS_DHE_RSA_WITH_AES_128_CBC_SHA,
+			ztls.TLS_RSA_WITH_AES_128_GCM_SHA256,
+			ztls.TLS_RSA_WITH_AES_256_CBC_SHA,
+			ztls.TLS_RSA_WITH_AES_128_CBC_SHA,
+			ztls.TLS_RSA_WITH_3DES_EDE_CBC_SHA,
+		}
+		hello.CompressionMethods = []uint8{0}
+		sni := ztls.SNIExtension{[]string{}, true}
+		ec := ztls.SupportedCurvesExtension{[]ztls.CurveID{ztls.CurveP256, ztls.CurveP384}}
+		points := ztls.PointFormatExtension{[]uint8{0}}
+		st := ztls.SessionTicketExtension{[]byte{}, true}
+		alpn := ztls.ALPNExtension{[]string{"http/1.1", "spdy/3.1", "h2"}}
+		sigs := ztls.SignatureAlgorithmExtension{[]uint16{0x0401,
+			0x0601,
+			0x0603,
+			0x0501,
+			0x0503,
+			0x0401,
+			0x0403,
+			0x0301,
+			0x0303,
+			0x0201,
+			0x0203,
+		}}
+		hello.SessionCache = ztls.NewLRUClientSessionCache(0)
+		hello.CacheKey = &CacheKeyFunctor{}
+		hello.Extensions = []ztls.ClientExtension{
+			&ztls.SecureRenegotiationExtension{},
+			&sni,
+			&ztls.ExtendedMasterSecretExtension{},
+			&st,
+			&sigs,
+			&ztls.StatusRequestExtension{},
+			&ztls.NextProtocolNegotiationExtension{},
+			&ztls.SCTExtension{},
+			&alpn,
+			&points,
+			&ec,
+		}
+		conf.ClientFingerprintConfiguration = &hello
+		return conf
+
 	}
 }
