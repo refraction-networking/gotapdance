@@ -181,11 +181,11 @@ func getZtlsConfig(Browser string) ztls.Config {
 		ec := ztls.SupportedCurvesExtension{[]ztls.CurveID{ztls.CurveP521, ztls.CurveP384, ztls.CurveP256}}
 		hello.Extensions = []ztls.ClientExtension{
 			&sni,
+			&points,
+			&ec,
 			&st,
 			&sigs,
-			&ztls.NextProtocolNegotiationExtension{},
-			&points,
-			&ec}
+			&ztls.NextProtocolNegotiationExtension{}}
 		hello.SessionCache = ztls.NewLRUClientSessionCache(0)
 		hello.CacheKey = &CacheKeyFunctor{}
 		conf.ClientFingerprintConfiguration = &hello
