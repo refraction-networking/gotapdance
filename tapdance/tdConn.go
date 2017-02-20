@@ -165,11 +165,17 @@ func (tdConn *tapdanceConn) readSubEngine() {
 		tdConn.Close()
 	}()
 
+	var toReconnect bool
 	for {
 		switch atomic.LoadInt32(&tdConn.state) {
+		case TD_STATE_CONNECTED:
+			if !toReconnect {
+				break
+			}
+			tdConn.tryScheduleReconnect()
+			fallthrough
 		case TD_STATE_RECONNECT:
-			if err == io.EOF {
-				err = nil
+			if toReconnect {
 				// Let main goroutine know read've stopped, enter barrier
 				select {
 				case <-tdConn.stopped: return
@@ -183,11 +189,10 @@ func (tdConn *tapdanceConn) readSubEngine() {
 						return
 					}
 				}
-			} else if err != nil {
-				return
+				err = nil
+				toReconnect = false
+				continue
 			}
-			fallthrough
-		case TD_STATE_CONNECTED:
 		default: return
 		}
 
@@ -200,15 +205,19 @@ func (tdConn *tapdanceConn) readSubEngine() {
 		default:
 			_, err = tdConn.read_msg(MSG_DATA)
 			if err != nil {
-				if err == io.EOF {
+				Logger.Debugln("[Flow " + tdConn.idStr() + "] read err", err)
+				toReconnect = (err == io.EOF || err == io.ErrUnexpectedEOF)
+				if toReconnect{
 					// TODO: something?
 					continue
 				}
+				/*
 				if e2, ok := err.(*net.OpError); ok {
 					if e2.Err.Error() == "use of closed network connection" {
-						continue
+						return
 					}
-				}
+				}*/
+
 				Logger.Debugln("[Flow " + tdConn.idStr() + "] read_msg() " +
 					"failed with " + err.Error())
 				return
@@ -502,11 +511,12 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 	case MSG_DATA:
 		n = int(readBytesTotal - headerSize)
 		select {
-			case tdConn.readChannel <- read_buffer[:]:
-				Logger.Debugf("[Flow " + tdConn.idStr() +
-					"] Successfully read DATA msg from server", msgLen)
-			case <-tdConn.stopped: return
-			}
+		case tdConn.readChannel <- read_buffer[:]:
+			Logger.Debugf("[Flow " + tdConn.idStr() +
+				"] Successfully read DATA msg from server", msgLen)
+		case <-tdConn.stopped: return
+		// TODO: add reconnect here?
+		}
 	case MSG_CLOSE:
 		err = errors.New("MSG_CLOSE")
 		Logger.Infof("[Flow " + tdConn.idStr() +
