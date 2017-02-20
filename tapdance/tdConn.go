@@ -233,12 +233,13 @@ func (tdConn *tapdanceConn) connect() {
 
 	defer func() {
 		tdConn.sentTotal = 0
-		connectOk := (tdConn.err == nil)
+		_err := tdConn.getError()
+		connectOk := (_err == nil)
 		if connectOk {
 			Logger.Debugf("[Flow " + tdConn.idStr() + "] connect success")
 			atomic.StoreInt32(&tdConn.state, TD_STATE_CONNECTED)
 		} else {
-			Logger.Debugf("[Flow " + tdConn.idStr() + "] connect fail")
+			Logger.Debugf("[Flow " + tdConn.idStr() + "] connect fail", _err)
 			atomic.StoreInt32(&tdConn.state, TD_STATE_CLOSED)
 		}
 		if reconnect {
@@ -400,7 +401,7 @@ func (tdConn *tapdanceConn) Read(b []byte) (n int, err error) {
 		}
 	}
 	if n == 0 {
-		err = tdConn.err
+		err = tdConn.getError()
 	}
 	return
 }
@@ -535,7 +536,7 @@ func (tdConn *tapdanceConn) Write(b []byte) (n int, err error) {
 	case <-tdConn.stopped:
 	}
 	if n == 0 {
-		err = tdConn.err
+		err = tdConn.getError()
 	}
 	return
 }
@@ -718,6 +719,12 @@ func (tdConn *tapdanceConn) setError(err error, overwrite bool) {
 		tdConn.err = err
 	}
 
+}
+
+func (tdConn *tapdanceConn) getError() (err error) {
+	tdConn.errMu.Lock()
+	defer tdConn.errMu.Unlock()
+	return tdConn.err
 }
 
 func (tdConn *tapdanceConn) tryScheduleReconnect() {
