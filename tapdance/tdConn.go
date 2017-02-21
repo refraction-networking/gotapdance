@@ -392,18 +392,28 @@ func (tdConn *tapdanceConn) Read(b []byte) (n int, err error) {
 	// If len(b) < 1500, then things will break
 	// But now Read() could be invoked by multiple goroutines, hooray(no)
 	// Golang doesn't let me do 'b = <-tdConn.readChannel' =/
-
-	select {
-	case bb := <-tdConn.readChannel:
-		n = len(bb)
-		if n != 0 {
-			copy(b, bb)
+	defer func(){
+		if n == 0 {
+			err = tdConn.getError()
+		}
+	}()
+	for {
+		chanTimeout := time.After(3 * time.Second)
+		select {
+		case bb := <-tdConn.readChannel:
+			n = len(bb)
+			if n != 0 {
+				copy(b, bb)
+			}
+			return
+		case <-chanTimeout:
+			select {
+			case <-tdConn.stopped:
+				return
+			default:
+			}
 		}
 	}
-	if n == 0 {
-		err = tdConn.getError()
-	}
-	return
 }
 
 func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
