@@ -130,7 +130,7 @@ func (tdConn *tapdanceConn) engineMain() {
 		}
 
 		if tdConn.writeMsgSize != 0 {
-			_, _ = tdConn.write_td(tdConn._writeBuffer[tdConn.writeMsgIndex:tdConn.writeMsgSize])
+			_, _ = tdConn.write_td(tdConn._writeBuffer[tdConn.writeMsgIndex:tdConn.writeMsgSize], false)
 			if atomic.LoadInt32(&tdConn.state) != TD_STATE_CONNECTED {
 				continue
 			}
@@ -145,7 +145,7 @@ func (tdConn *tapdanceConn) engineMain() {
 			continue
 		case tdConn._writeBuffer = <-tdConn.writeChannel:
 			tdConn.writeMsgSize = len(tdConn._writeBuffer)
-			_, err := tdConn.write_td(tdConn._writeBuffer[:tdConn.writeMsgSize])
+			_, err := tdConn.write_td(tdConn._writeBuffer[:tdConn.writeMsgSize], false)
 			if err != nil {
 				Logger.Debugln("[Flow " + tdConn.idStr() + "] write_td() " +
 					"failed with " + err.Error())
@@ -343,7 +343,7 @@ func (tdConn *tapdanceConn) connect() {
 		}
 
 		tdConn.sentTotal = 0
-		_, currErr = tdConn.write_td([]byte(tdRequest))
+		_, currErr = tdConn.write_td([]byte(tdRequest), true)
 		if currErr != nil {
 			Logger.Errorf("[Flow " + tdConn.idStr() +
 				"] Could not send initial TD request, error: " + currErr.Error())
@@ -554,19 +554,21 @@ func (tdConn *tapdanceConn) Write(b []byte) (n int, err error) {
 	return
 }
 
-func (tdConn *tapdanceConn) write_td(b []byte) (n int, err error) {
+func (tdConn *tapdanceConn) write_td(b []byte, connect bool) (n int, err error) {
 	totalToSend := uint64(len(b))
 
 	Logger.Debugf("[Flow " + tdConn.idStr() +
 		"] Already sent: " + strconv.FormatUint(tdConn.sentTotal, 10) +
 		". Requested to send: " + strconv.FormatUint(totalToSend, 10))
-	defer func() {
-		tdConn.sentTotal += uint64(n)
-		if tdConn.writeMsgIndex >= tdConn.writeMsgSize {
-			tdConn.writeMsgIndex = 0
-			tdConn.writeMsgSize = 0
-		}
-	}()
+	if !connect {
+		defer func() {
+			tdConn.sentTotal += uint64(n)
+			if tdConn.writeMsgIndex >= tdConn.writeMsgSize {
+				tdConn.writeMsgIndex = 0
+				tdConn.writeMsgSize = 0
+			}
+		}()
+	}
 
 	couldSend := tdConn.maxSend - tdConn.sentTotal
 	toSend := uint64(0) // to send on this iteration
@@ -599,12 +601,15 @@ func (tdConn *tapdanceConn) write_td(b []byte) (n int, err error) {
 	}
 
 	// TODO: why does it break if I don't make a copy here?
-	bb := make([]byte, len(b))
+	bb := make([]byte, toSend)
+
 	copy(bb, b)
-	//Logger.Debugln("[Flow " + tdConn.idStr() + "] sending\n", hex.Dump(bb[:toSend]))
 	n, err = tdConn.ztlsConn.Write(bb[:])
 
-	tdConn.writeMsgIndex += n
+	if !connect {
+		tdConn.writeMsgIndex += n
+	}
+
 	if err != nil {
 		atomic.StoreInt32(&tdConn.state, TD_STATE_CLOSED)
 	}
