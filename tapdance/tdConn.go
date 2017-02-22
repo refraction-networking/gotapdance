@@ -540,9 +540,12 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 // Write can be made to time out and return a Error with Timeout() == true
 // after a fixed time limit; see SetDeadline and SetWriteDeadline.
 func (tdConn *tapdanceConn) Write(b []byte) (n int, err error) {
+	// TODO: why does it break if I don't make a copy here?
+	bb := make([]byte, len(b))
+	copy(bb, b)
 	select {
-	case tdConn.writeChannel <-b:
-		n = len(b)
+	case tdConn.writeChannel <-bb:
+		n = len(bb)
 	case <-tdConn.stopped:
 	}
 	if n == 0 {
@@ -595,8 +598,12 @@ func (tdConn *tapdanceConn) write_td(b []byte) (n int, err error) {
 		toSend = totalToSend
 	}
 
-	//Logger.Debugln("[Flow " + tdConn.idStr() + "] sending\n", hex.Dump(b[:toSend]))
-	n, err = tdConn.ztlsConn.Write(b[:toSend])
+	// TODO: why does it break if I don't make a copy here?
+	bb := make([]byte, len(b))
+	copy(bb, b)
+	//Logger.Debugln("[Flow " + tdConn.idStr() + "] sending\n", hex.Dump(bb[:toSend]))
+	n, err = tdConn.ztlsConn.Write(bb[:])
+
 	tdConn.writeMsgIndex += n
 	if err != nil {
 		atomic.StoreInt32(&tdConn.state, TD_STATE_CLOSED)
