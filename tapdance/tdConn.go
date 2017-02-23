@@ -207,20 +207,19 @@ func (tdConn *tapdanceConn) readSubEngine() {
 			if err != nil {
 				Logger.Debugln("[Flow " + tdConn.idStr() + "] read err", err)
 				toReconnect = (err == io.EOF || err == io.ErrUnexpectedEOF)
-				if toReconnect{
-					// TODO: something?
-					continue
-				}
-				/*
-				if e2, ok := err.(*net.OpError); ok {
-					if e2.Err.Error() == "use of closed network connection" {
-						return
+				if nErr, ok := err.(*net.OpError); ok {
+					if nErr.Err.Error() == "use of closed network connection" {
+						toReconnect = true
 					}
-				}*/
+				}
 
-				Logger.Debugln("[Flow " + tdConn.idStr() + "] read_msg() " +
-					"failed with " + err.Error())
-				return
+				if toReconnect{
+					continue
+				} else {
+					Logger.Debugln("[Flow " + tdConn.idStr() + "] read_msg() " +
+						"failed with " + err.Error())
+					return
+				}
 			}
 		}
 	}
