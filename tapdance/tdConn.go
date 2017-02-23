@@ -439,18 +439,16 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 		switch _actualMsg {
 		case MSG_RECONNECT:
 			if _expectedMsg == MSG_DATA {
-				return errors.New("Received RECONNECT message in initialized connection")
+				return errors.New("Received unexpected RECONNECT message")
 			} else if _expectedMsg == MSG_INIT {
-				return errors.New("Received RECONNECT message instead of INIT!")
+				return errors.New("Received RECONNECT message instead of INIT")
 			}
 		case MSG_INIT:
 			if _expectedMsg == MSG_DATA {
 				return errors.New("Received INIT message in initialized connection")
 			}
 			if _expectedMsg == MSG_RECONNECT {
-				// TODO: will be error eventually
-				Logger.Warningf("[Flow " + tdConn.idStr() +
-					"] Got INIT instead of reconnect! Moving on")
+				return errors.New("Received INIT message instead of RECONNECT")
 			}
 		case MSG_DATA:
 			if _expectedMsg == MSG_RECONNECT || _expectedMsg == MSG_INIT {
