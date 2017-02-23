@@ -480,7 +480,6 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 	// Add msgLen to totalBytesToRead
 	msgLen = binary.BigEndian.Uint16(tdConn._readBuffer[1:3])
 	totalBytesToRead = headerSize + msgLen
-	// TODO: check if msgLen is not absurd.
 	read_buffer := make([]byte, msgLen)
 
 	// Get the rest of the message
