@@ -462,15 +462,12 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 		return nil
 	}
 
-	readBytes, err = tdConn.ztlsConn.Read(tdConn._readBuffer[:headerSize])
-	if err != nil {
-		return
-	}
-	readBytesTotal = uint16(readBytes)
-	if readBytesTotal < headerSize {
-		panic("readBytesTotal < headerSize")
-		// TODO: remove panic eventually, just to see if that happens
-		return
+	for readBytesTotal < totalBytesToRead {
+		readBytes, err = tdConn.ztlsConn.Read(tdConn._readBuffer[readBytesTotal:headerSize])
+		if err != nil {
+			return
+		}
+		readBytesTotal += uint16(readBytes)
 	}
 
 	// Check if the message type is appropriate
