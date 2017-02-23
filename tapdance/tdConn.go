@@ -286,14 +286,10 @@ func (tdConn *tapdanceConn) connect() {
 				// sleep to prevent overwhelming decoy servers
 				waitTime := time.After(time.Second *
 					time.Duration(math.Pow(3, float64(i - 1))))
-				for {
-					select {
-					case <-waitTime:
-						break
-					case <-tdConn.stopped:
-						return
-					}
-					time.Sleep(0)
+				select {
+				case <-waitTime:
+				case <-tdConn.stopped:
+					return
 				}
 			}
 			tdConn.decoyHost, tdConn.decoyPort = GenerateDecoyAddress()
