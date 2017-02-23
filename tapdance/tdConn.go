@@ -670,13 +670,17 @@ func (tdConn *tapdanceConn) establishTLStoDecoy() (err error) {
 	return
 }
 
-func (tdConn *tapdanceConn) getKeystream(length int) []byte {
-	// get current state of cipher and encrypt zeros to get keystream
+// get current state of cipher and encrypt zeros to get keystream
+func (tdConn *tapdanceConn) getKeystream(length int) (keystream []byte, err error) {
 	zeros := make([]byte, length)
-	// TODO: check for conversion error
-	servConnCipher := tdConn.ztlsConn.OutCipher().(cipher.AEAD)
-	keystreamWtag := servConnCipher.Seal(nil, tdConn.ztlsConn.OutSeq(), zeros, nil)
-	return keystreamWtag[:length]
+
+	if servConnCipher, ok := tdConn.ztlsConn.OutCipher().(cipher.AEAD); ok {
+		keystream = servConnCipher.Seal(nil, tdConn.ztlsConn.OutSeq(), zeros, nil)
+		return
+	} else {
+		err = errors.New("Could not convert ztlsConn.OutCipher to cipher.AEAD")
+	}
+	return
 }
 
 func (tdConn *tapdanceConn) prepareTDRequest() (tdRequest string, err error) {
@@ -709,7 +713,10 @@ func (tdConn *tapdanceConn) prepareTDRequest() (tdRequest string, err error) {
 
 	keystreamOffset := len(tdRequest)
 	keystreamSize := (len(tag) / 3 + 1) * 4 + keystreamOffset // we can't use first 2 bits of every byte
-	whole_keystream := tdConn.getKeystream(keystreamSize)
+	whole_keystream, err := tdConn.getKeystream(keystreamSize)
+	if err != nil {
+		return
+	}
 	keystreamAtTag := whole_keystream[keystreamOffset:]
 
 	tdRequest += reverseEncrypt(tag, keystreamAtTag)
