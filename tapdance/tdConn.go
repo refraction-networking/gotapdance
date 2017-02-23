@@ -13,7 +13,6 @@ import (
 	"sync/atomic"
 	"time"
 	"math"
-//	"encoding/hex"
 	"io"
 	"sync"
 )
@@ -96,7 +95,7 @@ customDialer func(string, string) (net.Conn, error)) (tdConn *tapdanceConn, err 
 	tdConn.stopped = make(chan bool)
 	tdConn.readerStopped = make(chan bool)
 	tdConn.doneReconnect = make(chan bool)
-	tdConn.writeChannel = make(chan []byte, 1)
+	tdConn.writeChannel = make(chan []byte, 1) // TODO: make it blocking?
 	tdConn.readChannel = make(chan []byte, 1)
 
 	tdConn.state = TD_STATE_NEW
@@ -104,14 +103,18 @@ customDialer func(string, string) (net.Conn, error)) (tdConn *tapdanceConn, err 
 
 	err = tdConn.err
 	if err == nil {
+		/* If connection was successful, TapDance launches 2 goroutines:
+		first one handles sending of the data and does reconnection,
+		second goroutine handles reading.
+		*/
 		go tdConn.readSubEngine()
 		go tdConn.engineMain()
 	}
 	return
 }
 
+// Does writing to socket and reconnection
 func (tdConn *tapdanceConn) engineMain() {
-	// Does writing to socket and (re)connection
 	defer func() {
 		Logger.Debugln("[Flow " + tdConn.idStr() + "] exit engineMain()")
 		close(tdConn.doneReconnect)
@@ -129,6 +132,7 @@ func (tdConn *tapdanceConn) engineMain() {
 		default: return
 		}
 
+		// If just reconnected, but still have user outgoing user data - send it
 		if tdConn.writeMsgSize != 0 {
 			_, _ = tdConn.write_td(tdConn._writeBuffer[tdConn.writeMsgIndex:tdConn.writeMsgSize], false)
 			if atomic.LoadInt32(&tdConn.state) != TD_STATE_CONNECTED {
@@ -156,6 +160,7 @@ func (tdConn *tapdanceConn) engineMain() {
 	}
 }
 
+// Reads from socket, sleeps during reconnection
 func (tdConn *tapdanceConn) readSubEngine() {
 	var err error
 	defer func() {
@@ -495,13 +500,13 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 	case MSG_INIT:
 		var magicVal, expectedMagicVal uint16
 		if len(read_buffer) < 2 {
-			err = errors.New("INIT message body too short!")
+			err = errors.New("Message body too short!")
 			return
 		}
 		magicVal = binary.BigEndian.Uint16(read_buffer[:2])
 		expectedMagicVal = uint16(0x2a75)
 		if magicVal != expectedMagicVal {
-			err = errors.New("INIT message: magic value mismatch! Expected: " +
+			err = errors.New("Magic value mismatch! Expected: " +
 				strconv.FormatUint(uint64(expectedMagicVal), 10) +
 				", but received: " + strconv.FormatUint(uint64(magicVal), 10))
 			return
@@ -632,7 +637,6 @@ var TDSupportedCiphers = []uint16{
 }
 
 func (tdConn *tapdanceConn) establishTLStoDecoy() (err error) {
-	//TODO: force stream cipher
 	addr := tdConn.decoyHost + ":" + strconv.Itoa(tdConn.decoyPort)
 	config := getZtlsConfig("Firefox50")
 	var dialConn net.Conn
