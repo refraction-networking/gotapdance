@@ -1,23 +1,23 @@
 package tapdance
 
 import (
+	"github.com/Sirupsen/logrus"
 	"net"
 	"strconv"
 	"sync"
-	"github.com/Sirupsen/logrus"
 )
 
 var Logger = logrus.New()
 
 var td_station_pubkey = [32]byte{211, 127, 10, 139, 150, 180, 97, 15, 56, 188, 7, 155, 7, 102, 41, 34,
-			70, 194, 210, 170, 50, 53, 234, 49, 42, 240, 41, 27, 91, 38, 247, 67}
+	70, 194, 210, 170, 50, 53, 234, 49, 42, 240, 41, 27, 91, 38, 247, 67}
 
 const initial_tag = "SPTELEX"
 const (
 	TD_INITIALIZED = "Initialized"
-	TD_LISTENING = "Listening"
-	TD_STOPPED = "Stopped"
-	TD_ERROR = "Error"
+	TD_LISTENING   = "Listening"
+	TD_STOPPED     = "Stopped"
+	TD_ERROR       = "Error"
 )
 
 // global object
@@ -26,26 +26,25 @@ type TapdanceProxy struct {
 
 	stationPubkey [32]byte // contents of keyfile
 
-	listener      net.Listener
+	listener net.Listener
 
-	listenPort    int
+	listenPort int
 
-	countTunnels  counter_uint64
+	countTunnels counter_uint64
 
 	// statistics
-	notPickedUp       counter_uint64
-	timedOut          counter_uint64
-	closedGracefully  counter_uint64
-	unexpectedError   counter_uint64
+	notPickedUp      counter_uint64
+	timedOut         counter_uint64
+	closedGracefully counter_uint64
+	unexpectedError  counter_uint64
 
-	connections   struct {
+	connections struct {
 		sync.RWMutex
 		m map[uint64]*TapDanceFlow
-	      }
+	}
 
-	stop          bool
+	stop bool
 }
-
 
 func NewTapdanceProxy(listenPort int) *TapdanceProxy {
 	//Logger.Level = logrus.DebugLevel
@@ -82,7 +81,7 @@ func (proxy *TapdanceProxy) Listen() error {
 
 	last_print_time := timeMs()
 	for !proxy.stop {
-		if timeMs() > last_print_time + 10000 {
+		if timeMs() > last_print_time+10000 {
 			Logger.Infof(proxy.GetStatistics())
 			last_print_time = timeMs()
 		}
@@ -139,7 +138,7 @@ func (proxy *TapdanceProxy) handleUserConn(userConn net.Conn) {
 }
 
 func (proxy *TapdanceProxy) GetStatistics() (statistics string) {
-	statistics =  "Flows total: " +
+	statistics = "Flows total: " +
 		strconv.FormatUint(uint64(proxy.countTunnels.get()), 10)
 	statistics += ". Not picked up: " +
 		strconv.FormatUint(uint64(proxy.notPickedUp.get()), 10)
@@ -151,7 +150,6 @@ func (proxy *TapdanceProxy) GetStatistics() (statistics string) {
 		strconv.FormatUint(uint64(proxy.closedGracefully.get()), 10)
 	return
 }
-
 
 func (proxy *TapdanceProxy) GetStats() (stats string) {
 	stats = proxy.State + "\nPort: " + strconv.Itoa(proxy.listenPort) +
