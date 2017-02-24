@@ -1,34 +1,34 @@
 package tapdance
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"crypto/sha256"
 	"github.com/agl/ed25519/extra25519"
 	"golang.org/x/crypto/curve25519"
-	"crypto/cipher"
-	"crypto/sha256"
-	"crypto/rand"
 	mrand "math/rand"
-	"crypto/aes"
 
 	"fmt"
 
-	"time"
 	"bytes"
 	"encoding/binary"
 	"strings"
+	"time"
 )
 
 func GenerateDecoyAddress() (hostname string, port int) {
 	port = 443
 	var hostnames = []string{
 		"tapdance1.freeaeskey.xyz",
-	}//	"tapdance2.freeaeskey.xyz",
+	} //	"tapdance2.freeaeskey.xyz",
 	//"tapdance3.freeaeskey.xyz", // doesn't exist
 	//	"twitter.com", // doesn't have TD station on the way
 	//	"192.122.190.107", // nothing at all is hosted there
 	//}
 
 	//hostname = "54.85.9.24" // ecen5032.org
-	hostname = hostnames[getRandInt(0, len(hostnames) - 1)]
+	hostname = hostnames[getRandInt(0, len(hostnames)-1)]
 	return
 }
 
@@ -88,7 +88,7 @@ func getRandInt(min int, max int) (result int) {
 		Logger.Warningf("Unable to securely get getRandInt(): " + err.Error())
 		v = mrand.Int63()
 	}
-	return min + int(v % int64(diff + 1))
+	return min + int(v%int64(diff+1))
 }
 
 // Get padding of length [minLen, maxLen).
@@ -144,24 +144,24 @@ func reverseEncrypt(ciphertext []byte, keyStream []byte) (plaintext string) {
 	// of each byte in the ciphertext arbitrarily; the upper 2
 	// bits will have to be 01, so that our plaintext ends up
 	// in the desired range.
-	var ka, kb, kc, kd byte    // key stream bytes
-	var ca, cb, cc, cd byte    // ciphertext bytes
-	var pa, pb, pc, pd byte    // plaintext bytes
-	var sa, sb, sc byte        // secret bytes
+	var ka, kb, kc, kd byte // key stream bytes
+	var ca, cb, cc, cd byte // ciphertext bytes
+	var pa, pb, pc, pd byte // plaintext bytes
+	var sa, sb, sc byte     // secret bytes
 
 	var tag_idx, keystream_idx int
 
 	for tag_idx < len(ciphertext) {
 		ka = keyStream[keystream_idx]
-		kb = keyStream[keystream_idx + 1]
-		kc = keyStream[keystream_idx + 2]
-		kd = keyStream[keystream_idx + 3]
+		kb = keyStream[keystream_idx+1]
+		kc = keyStream[keystream_idx+2]
+		kd = keyStream[keystream_idx+3]
 		keystream_idx += 4
 
 		// read 3 bytes
 		sa = ciphertext[tag_idx]
-		sb = ciphertext[tag_idx + 1]
-		sc = ciphertext[tag_idx + 2]
+		sb = ciphertext[tag_idx+1]
+		sc = ciphertext[tag_idx+2]
 		tag_idx += 3
 
 		// figure out what plaintext needs to be in base64 encode
@@ -184,10 +184,6 @@ func reverseEncrypt(ciphertext []byte, keyStream []byte) (plaintext string) {
 	return
 }
 
-func timeMs() int64 {
-	return time.Now().UnixNano() / (int64(time.Millisecond)/int64(time.Nanosecond))
-}
-
 func printHex(byteArray []byte, name string) {
 	fmt.Print(name, ": [")
 	for i := 0; i < len(byteArray); i++ {
@@ -195,7 +191,7 @@ func printHex(byteArray []byte, name string) {
 			//fmt.Printf("%x", byte_array[i])
 			fmt.Printf("%v, ", byteArray[i])
 		} else {
-		//	fmt.Printf("0%x", byte_array[i])
+			//	fmt.Printf("0%x", byte_array[i])
 			fmt.Printf("%v, ", byteArray[i])
 		}
 	}
