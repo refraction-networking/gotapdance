@@ -1,16 +1,17 @@
 package tapdance
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
+	"io/ioutil"
+	"os"
+	"os/exec"
+	"strings"
 	"testing"
 	"time"
-	"io/ioutil"
-	"os/exec"
-	"crypto/rand"
-	"os"
-	"strings"
-	"encoding/hex"
 )
+
 const key_path = "/home/sfrolov/go/src/github.com/SergeyFrolov/gotapdance/assets/"
 
 func asTestHandshakeLaunchProxy(t *testing.T) {
@@ -35,12 +36,11 @@ func asTestHandshakeLaunchProxy(t *testing.T) {
 	}()
 	err := <-errChan
 	tap_dance_proxy.Stop()
-	if  err != nil {
+	if err != nil {
 		fmt.Println(err)
 		t.Fail()
 	}
 }
-
 
 func TestObfuscate(t *testing.T) {
 	for i := 0; i < 1; i++ {
@@ -66,7 +66,7 @@ func TestAES_GCM_EncryptDecrypt(t *testing.T) {
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
-	rePlaintext, err :=  AesGcmDecrypt(cryptotext, key, iv)
+	rePlaintext, err := AesGcmDecrypt(cryptotext, key, iv)
 
 	printHex(iv, "iv")
 	printHex(key, "key")

@@ -7,7 +7,7 @@ type counter_uint64 struct {
 	value uint64
 }
 
-func (c *counter_uint64) inc() (uint64) {
+func (c *counter_uint64) inc() uint64 {
 	c.Lock()
 	defer c.Unlock()
 	if c.value == ^uint64(0) {
@@ -19,7 +19,7 @@ func (c *counter_uint64) inc() (uint64) {
 	return c.value
 }
 
-func (c *counter_uint64) dec() (uint64) {
+func (c *counter_uint64) dec() uint64 {
 	c.Lock()
 	defer c.Unlock()
 	if c.value == 0 {
@@ -36,4 +36,3 @@ func (c *counter_uint64) get() (value uint64) {
 	value = c.value
 	return
 }
-
