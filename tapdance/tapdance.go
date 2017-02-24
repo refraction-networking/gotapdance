@@ -5,6 +5,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"time"
 )
 
 var Logger = logrus.New()
@@ -43,6 +44,8 @@ type TapdanceProxy struct {
 		m map[uint64]*TapDanceFlow
 	}
 
+	statsTicker *time.Ticker
+
 	stop bool
 }
 
@@ -65,6 +68,14 @@ func NewTapdanceProxy(listenPort int) *TapdanceProxy {
 	return proxy
 }
 
+func (proxy *TapdanceProxy) statsHelper() error {
+	proxy.statsTicker = time.NewTicker(time.Second * time.Duration(10))
+	for _ = range proxy.statsTicker.C {
+		Logger.Infof(proxy.GetStatistics())
+	}
+	return nil
+}
+
 func (proxy *TapdanceProxy) Listen() error {
 	var err error
 	listenAddress := "0.0.0.0:" + strconv.Itoa(proxy.listenPort)
@@ -78,13 +89,9 @@ func (proxy *TapdanceProxy) Listen() error {
 		return err
 	}
 	Logger.Infof("Accepting connections at port " + strconv.Itoa(proxy.listenPort))
+	go proxy.statsHelper()
 
-	last_print_time := timeMs()
 	for !proxy.stop {
-		if timeMs() > last_print_time+10000 {
-			Logger.Infof(proxy.GetStatistics())
-			last_print_time = timeMs()
-		}
 		if conn, err := proxy.listener.Accept(); err == nil {
 			go proxy.handleUserConn(conn)
 		} else {
@@ -109,6 +116,7 @@ func (proxy *TapdanceProxy) Stop() error {
 		tdState.servConn.Close()
 	}
 	proxy.connections.Unlock()
+	proxy.statsTicker.Stop()
 	return nil
 }
 
@@ -119,6 +127,7 @@ func (proxy *TapdanceProxy) handleUserConn(userConn net.Conn) {
 		delete(proxy.connections.m, tdState.id)
 		proxy.connections.Unlock()
 	}()
+
 	if err != nil {
 		userConn.Close()
 		//Logger.Errorf("Establishing initial connection to decoy server failed with " + err.Error())
