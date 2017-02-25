@@ -59,6 +59,13 @@ type tapdanceConn struct {
 	doneReconnect   chan bool
 	stopped         chan bool
 	channelsStopped int32
+
+	// read_data holds data between Read() calls when the
+	// caller's buffer is to small to receive all the data
+	// read in a message from the station.
+	read_data_buffer []byte
+	read_data_index  int
+	read_data_count  int
 }
 
 const (
@@ -91,6 +98,8 @@ func DialTapDance(
 
 	tdConn._readBuffer = make([]byte, 3) // Only read headers into it
 	tdConn._writeBuffer = make([]byte, 16*1024+20+20+12)
+
+	tdConn.read_data_buffer = make([]byte, 2024)
 
 	tdConn.stopped = make(chan bool)
 	tdConn.readerStopped = make(chan bool)
@@ -399,31 +408,40 @@ func (tdConn *tapdanceConn) connect() {
 func (tdConn *tapdanceConn) Read(b []byte) (n int, err error) {
 	// TODO: FIX THAT EMBARRASSMENT
 	// Buffer is reallocated and recopied twice!
-	// If len(b) < 1500, then things will break
-	// But now Read() could be invoked by multiple goroutines, hooray(no)
 	// Golang doesn't let me do 'b = <-tdConn.readChannel' =/
+	// Doesn't support multiple readers
+
 	defer func() {
 		if n == 0 {
 			err = tdConn.getError()
 		}
 	}()
-	for {
+
+	// If there's no ready data in buffer - get some
+	if tdConn.read_data_count == 0 {
 		chanTimeout := time.After(3 * time.Second)
 		select {
-		case bb := <-tdConn.readChannel:
-			n = len(bb)
-			if n != 0 {
-				copy(b, bb)
-			}
-			return
+		case tdConn.read_data_buffer = <-tdConn.readChannel:
+			tdConn.read_data_count = len(tdConn.read_data_buffer)
+			tdConn.read_data_index = 0
 		case <-chanTimeout:
-			select {
-			case <-tdConn.stopped:
-				return
-			default:
-			}
+			return
+			// readers should be correctly handing "0, nil"
 		}
 	}
+
+	// If there is unread data in buffer - copy it
+	if tdConn.read_data_count > 0 {
+		n = tdConn.read_data_count
+		if n > cap(b) {
+			n = cap(b)
+		}
+		n = copy(b, tdConn.read_data_buffer[tdConn.read_data_index:tdConn.read_data_index+n])
+		b = b[:]
+		tdConn.read_data_index += n
+		tdConn.read_data_count -= n
+	}
+	return
 }
 
 func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
