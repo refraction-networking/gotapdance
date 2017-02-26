@@ -1,10 +1,10 @@
 package tapdance
 
 import (
+	"errors"
+	"io"
 	"net"
 	"strconv"
-	"io"
-	"errors"
 	"strings"
 )
 
@@ -18,18 +18,18 @@ const (
 // Connection-oriented state
 type TapDanceFlow struct {
 	// tunnel index and start time
-	id           uint
-	startMs      uint64 // TODO: unused
+	id      uint64
+	startMs uint64 // TODO: unused
 
 	// reference to global proxy
-	proxy        *TapdanceProxy
+	proxy *TapdanceProxy
 
-	servConn     *tapdanceConn
-	userConn     net.Conn
-};
+	servConn *tapdanceConn
+	userConn net.Conn
+}
 
 // constructor
-func NewTapDanceFlow(proxy *TapdanceProxy, id uint) *TapDanceFlow {
+func NewTapDanceFlow(proxy *TapdanceProxy, id uint64) *TapDanceFlow {
 	state := new(TapDanceFlow)
 
 	state.proxy = proxy
@@ -51,10 +51,10 @@ func (TDstate *TapDanceFlow) Redirect() (err error) {
 	defer func() {
 		TDstate.userConn.Close()
 		TDstate.servConn.Close()
-		_ = <- errChan // wait for second goroutine to close
+		_ = <-errChan // wait for second goroutine to close
 	}()
 
-	forwardFromServerToClient := func ()() {
+	forwardFromServerToClient := func() {
 		n, _err := io.Copy(TDstate.userConn, TDstate.servConn)
 		Logger.Debugf("[Flow " + strconv.FormatUint(uint64(TDstate.id), 10) +
 			"] forwardFromServerToClient returns, bytes sent: " +
@@ -66,7 +66,7 @@ func (TDstate *TapDanceFlow) Redirect() (err error) {
 		return
 	}
 
-	forwardFromClientToServer := func ()() {
+	forwardFromClientToServer := func() {
 		n, _err := io.Copy(TDstate.servConn, TDstate.userConn)
 		Logger.Debugf("[Flow " + strconv.FormatUint(uint64(TDstate.id), 10) +
 			"] forwardFromClientToServer returns, bytes sent: " +
@@ -81,7 +81,7 @@ func (TDstate *TapDanceFlow) Redirect() (err error) {
 	go forwardFromServerToClient()
 	go forwardFromClientToServer()
 
-	if err = <- errChan; err != nil {
+	if err = <-errChan; err != nil {
 		if err.Error() == "MSG_CLOSE" || err.Error() == "StoppedByUser" {
 			Logger.Debugf("[Flow " + strconv.FormatUint(uint64(TDstate.id), 10) +
 				"] Redirect function returns gracefully: " + err.Error())
