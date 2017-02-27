@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"strings"
-	"time"
 )
 
 func GenerateDecoyAddress() (hostname string, port int) {
