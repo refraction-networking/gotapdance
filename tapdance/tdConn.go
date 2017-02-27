@@ -15,6 +15,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"runtime"
 )
 
 type tapdanceConn struct {
@@ -240,6 +241,7 @@ func (tdConn *tapdanceConn) readSubEngine() {
 				}
 			}
 		}
+		runtime.Gosched()
 	}
 }
 
