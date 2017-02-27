@@ -15,6 +15,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"runtime"
 )
 
 type tapdanceConn struct {
@@ -240,6 +241,7 @@ func (tdConn *tapdanceConn) readSubEngine() {
 				}
 			}
 		}
+		runtime.Gosched()
 	}
 }
 
@@ -623,11 +625,7 @@ func (tdConn *tapdanceConn) write_td(b []byte, connect bool) (n int, err error) 
 		toSend = totalToSend
 	}
 
-	// TODO: why does it break if I don't make a copy here?
-	bb := make([]byte, toSend)
-
-	copy(bb, b)
-	n, err = tdConn.ztlsConn.Write(bb[:])
+	n, err = tdConn.ztlsConn.Write(b[:toSend])
 
 	if !connect {
 		tdConn.writeMsgIndex += n
