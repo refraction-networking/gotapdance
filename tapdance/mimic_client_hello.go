@@ -54,11 +54,11 @@ func getZtlsConfig(Browser string) ztls.Config {
 		fallthrough
 	case "Firefox50":
 		return ztls.Config{
-			ForceSessionTicketExt: true,
-			CipherSuites: TDFirefox50Ciphers,
+			ForceSessionTicketExt:  true,
+			CipherSuites:           TDFirefox50Ciphers,
 			SessionTicketsDisabled: false,
-			NextProtos: []string{"h2", "http/1.1"},
-			ExtendedMasterSecret: true,
+			NextProtos:             []string{"h2", "http/1.1"},
+			ExtendedMasterSecret:   true,
 		}
 		// Android is TODO: capture extensions
 		// Chrome?

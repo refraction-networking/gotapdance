@@ -69,8 +69,8 @@ func NewTapdanceProxy(listenPort int) *TapdanceProxy {
 }
 
 func (proxy *TapdanceProxy) statsHelper() error {
-	proxy.statsTicker = time.NewTicker(time.Second * time.Duration(10))
-	for _ = range proxy.statsTicker.C {
+	proxy.statsTicker = time.NewTicker(time.Second * time.Duration(60))
+	for range proxy.statsTicker.C {
 		Logger.Infof(proxy.GetStatistics())
 	}
 	return nil
