@@ -122,6 +122,7 @@ func getZtlsConfig(Browser string) ztls.Config {
 	case "Android4.4":
 		conf := ztls.Config{
 			InsecureSkipVerify: true,
+			ForceSuites:        true,
 		}
 		hello := ztls.ClientFingerprintConfiguration{}
 		hello.HandshakeVersion = 0x0303
