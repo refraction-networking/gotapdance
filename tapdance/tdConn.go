@@ -10,12 +10,12 @@ import (
 	"io"
 	"math"
 	"net"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-	"runtime"
 )
 
 type tapdanceConn struct {
@@ -344,7 +344,7 @@ func (tdConn *tapdanceConn) connect() {
 		if !cipherIsSupported(tdConn.ztlsConn.ConnectionState().CipherSuite) {
 			Logger.Errorf("[Flow " + tdConn.idStr() +
 				"] decoy " + tdConn.decoyHost + ", offered unsupported cipher #" +
-				strconv.FormatUint(uint64(tdConn.id), 10))
+				strconv.FormatUint(uint64(tdConn.ztlsConn.ConnectionState().CipherSuite), 10))
 			currErr = errors.New("Unsupported cipher.")
 			tdConn.ztlsConn.Close()
 			continue
