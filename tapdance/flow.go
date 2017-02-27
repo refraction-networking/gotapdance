@@ -6,6 +6,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -19,7 +20,7 @@ const (
 type TapDanceFlow struct {
 	// tunnel index and start time
 	id      uint64
-	startMs uint64 // TODO: unused
+	startMs time.Time
 
 	// reference to global proxy
 	proxy *TapdanceProxy
@@ -35,7 +36,7 @@ func NewTapDanceFlow(proxy *TapdanceProxy, id uint64) *TapDanceFlow {
 	state.proxy = proxy
 	state.id = id
 
-	state.startMs = uint64(timeMs())
+	state.startMs = time.Now()
 
 	Logger.Debugf("Created new TDState ", state)
 	return state

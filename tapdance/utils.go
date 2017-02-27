@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"strings"
-	"time"
 )
 
 func GenerateDecoyAddress() (hostname string, port int) {
@@ -182,10 +181,6 @@ func reverseEncrypt(ciphertext []byte, keyStream []byte) (plaintext string) {
 		plaintext += string(pd)
 	}
 	return
-}
-
-func timeMs() int64 {
-	return time.Now().UnixNano() / (int64(time.Millisecond) / int64(time.Nanosecond))
 }
 
 func printHex(byteArray []byte, name string) {
