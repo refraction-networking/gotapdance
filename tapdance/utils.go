@@ -16,21 +16,6 @@ import (
 	"strings"
 )
 
-func GenerateDecoyAddress() (hostname string, port int) {
-	port = 443
-	var hostnames = []string{
-		"tapdance1.freeaeskey.xyz",
-	} //	"tapdance2.freeaeskey.xyz",
-	//"tapdance3.freeaeskey.xyz", // doesn't exist
-	//	"twitter.com", // doesn't have TD station on the way
-	//	"192.122.190.107", // nothing at all is hosted there
-	//}
-
-	//hostname = "54.85.9.24" // ecen5032.org
-	hostname = hostnames[getRandInt(0, len(hostnames)-1)]
-	return
-}
-
 func AesGcmEncrypt(plaintext []byte, key []byte, iv []byte) (ciphertext []byte, err error) {
 	// The key argument should be the AES key, either 16 or 32 bytes
 	// to select AES-128 or AES-256.

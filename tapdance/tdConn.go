@@ -33,8 +33,8 @@ type tapdanceConn struct {
 	maxSend   uint64
 	sentTotal uint64
 
-	decoyHost string
-	decoyPort int
+	decoyAddr string // ipv4_addr:port
+	decoySNI  string
 
 	_readBuffer  []byte
 	_writeBuffer []byte
@@ -318,18 +318,18 @@ func (tdConn *tapdanceConn) connect() {
 					return
 				}
 			}
-			tdConn.decoyHost, tdConn.decoyPort = GenerateDecoyAddress()
+			tdConn.decoySNI, tdConn.decoyAddr = Assets.getDecoyAddress()
 		}
 
 		currErr = tdConn.establishTLStoDecoy()
 		if currErr != nil {
 			Logger.Errorf("[Flow " + tdConn.idStr() +
-				"] establishTLStoDecoy(" + tdConn.decoyHost +
+				"] establishTLStoDecoy(" + tdConn.decoySNI +
 				") failed with " + currErr.Error())
 			continue
 		} else {
 			Logger.Infof("[Flow " + tdConn.idStr() +
-				"] Connected to decoy " + tdConn.decoyHost)
+				"] Connected to decoy " + tdConn.decoySNI)
 		}
 
 		// Check if cipher is supported
@@ -343,7 +343,7 @@ func (tdConn *tapdanceConn) connect() {
 		}
 		if !cipherIsSupported(tdConn.ztlsConn.ConnectionState().CipherSuite) {
 			Logger.Errorf("[Flow " + tdConn.idStr() +
-				"] decoy " + tdConn.decoyHost + ", offered unsupported cipher #" +
+				"] decoy " + tdConn.decoySNI + ", offered unsupported cipher #" +
 				strconv.FormatUint(uint64(tdConn.ztlsConn.ConnectionState().CipherSuite), 10))
 			currErr = errors.New("Unsupported cipher.")
 			tdConn.ztlsConn.Close()
@@ -663,16 +663,15 @@ var TDSupportedCiphers = []uint16{
 }
 
 func (tdConn *tapdanceConn) establishTLStoDecoy() (err error) {
-	addr := tdConn.decoyHost + ":" + strconv.Itoa(tdConn.decoyPort)
 	config := getZtlsConfig("Firefox50")
 	var dialConn net.Conn
 	if tdConn.customDialer != nil {
-		dialConn, err = tdConn.customDialer("tcp", addr)
+		dialConn, err = tdConn.customDialer("tcp", tdConn.decoyAddr)
 		if err != nil {
 			return err
 		}
 	} else {
-		tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
+		tcpAddr, err := net.ResolveTCPAddr("tcp", tdConn.decoyAddr)
 		if err != nil {
 			return err
 		}
@@ -681,7 +680,7 @@ func (tdConn *tapdanceConn) establishTLStoDecoy() (err error) {
 			return err
 		}
 	}
-	config.ServerName, _, err = net.SplitHostPort(addr)
+	config.ServerName, _, err = net.SplitHostPort(tdConn.decoyAddr)
 	if err != nil {
 		dialConn.Close()
 		return
@@ -732,7 +731,7 @@ func (tdConn *tapdanceConn) prepareTDRequest() (tdRequest string, err error) {
 	// Don't even need the following HTTP request
 	// Ideally, it is never processed by decoy
 	tdRequest = "GET / HTTP/1.1\r\n"
-	tdRequest += "Host: " + tdConn.decoyHost + "\r\n"
+	tdRequest += "Host: " + tdConn.decoySNI + "\r\n"
 	tdRequest += "X-Ignore: "
 
 	tdRequest += getRandPadding(0, 750, 10)

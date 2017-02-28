@@ -10,8 +10,6 @@ import (
 
 var Logger = logrus.New()
 
-var td_station_pubkey = [32]byte{211, 127, 10, 139, 150, 180, 97, 15, 56, 188, 7, 155, 7, 102, 41, 34,
-	70, 194, 210, 170, 50, 53, 234, 49, 42, 240, 41, 27, 91, 38, 247, 67}
 
 const initial_tag = "SPTELEX"
 const (
