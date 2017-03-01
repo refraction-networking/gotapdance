@@ -318,13 +318,13 @@ func (tdConn *tapdanceConn) connect() {
 					return
 				}
 			}
-			tdConn.decoySNI, tdConn.decoyAddr = Assets.getDecoyAddress()
+			tdConn.decoySNI, tdConn.decoyAddr = Assets().GetDecoyAddress()
 		}
 
 		currErr = tdConn.establishTLStoDecoy()
 		if currErr != nil {
-			Logger.Errorf("[Flow " + tdConn.idStr() +
-				"] establishTLStoDecoy(" + tdConn.decoySNI +
+			Logger.Errorf("[Flow " + tdConn.idStr() + "] establishTLStoDecoy(" +
+				tdConn.decoySNI + "," + tdConn.decoyAddr +
 				") failed with " + currErr.Error())
 			continue
 		} else {
@@ -663,7 +663,7 @@ var TDSupportedCiphers = []uint16{
 }
 
 func (tdConn *tapdanceConn) establishTLStoDecoy() (err error) {
-	config := getZtlsConfig("Firefox50")
+	config := getZtlsConfig("Firefox50", tdConn.decoySNI)
 	var dialConn net.Conn
 	if tdConn.customDialer != nil {
 		dialConn, err = tdConn.customDialer("tcp", tdConn.decoyAddr)
@@ -680,10 +680,15 @@ func (tdConn *tapdanceConn) establishTLStoDecoy() (err error) {
 			return err
 		}
 	}
-	config.ServerName, _, err = net.SplitHostPort(tdConn.decoyAddr)
-	if err != nil {
-		dialConn.Close()
-		return
+	if config.ServerName == "" {
+		// if SNI is unset -- try IP
+		config.ServerName, _, err = net.SplitHostPort(tdConn.decoyAddr)
+		if err != nil {
+			dialConn.Close()
+			return
+		}
+		Logger.Infoln("[Flow " + tdConn.idStr() + "]: SNI was nil. Setting it to" +
+			config.ServerName)
 	}
 	tdConn.ztlsConn = ztls.Client(dialConn, &config)
 	err = tdConn.ztlsConn.Handshake()

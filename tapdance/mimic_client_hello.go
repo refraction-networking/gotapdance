@@ -58,14 +58,14 @@ func (f CacheKeyFunctor) Key(a net.Addr) string {
 	return a.String()
 }
 
-func getZtlsConfig(Browser string) ztls.Config {
+func getZtlsConfig(Browser string, sni string) ztls.Config {
+	conf := ztls.Config{}
+	conf.RootCAs = Assets().GetRoots()
+	conf.ServerName = sni
 	switch Browser {
 	default:
 		fallthrough
 	case "Firefox50":
-		conf := ztls.Config{
-			InsecureSkipVerify: true,
-		}
 		hello := ztls.ClientFingerprintConfiguration{}
 		hello.HandshakeVersion = 0x0303
 		hello.CipherSuites = []uint16{
@@ -120,10 +120,7 @@ func getZtlsConfig(Browser string) ztls.Config {
 		return conf
 
 	case "Android4.4":
-		conf := ztls.Config{
-			InsecureSkipVerify: true,
-			ForceSuites:        true,
-		}
+		conf.ForceSuites = true
 		hello := ztls.ClientFingerprintConfiguration{}
 		hello.HandshakeVersion = 0x0303
 		hello.CipherSuites = []uint16{
@@ -192,9 +189,6 @@ func getZtlsConfig(Browser string) ztls.Config {
 
 	//Asterisk because we don't have Channel ID extension, which would require a ztls PR
 	case "Chrome47*":
-		conf := ztls.Config{
-			InsecureSkipVerify: true,
-		}
 		hello := ztls.ClientFingerprintConfiguration{}
 		hello.HandshakeVersion = 0x0303
 		hello.CipherSuites = []uint16{

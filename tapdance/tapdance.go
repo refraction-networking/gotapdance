@@ -10,7 +10,6 @@ import (
 
 var Logger = logrus.New()
 
-
 const initial_tag = "SPTELEX"
 const (
 	TD_INITIALIZED = "Initialized"
