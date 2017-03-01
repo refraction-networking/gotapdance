@@ -93,7 +93,7 @@ func DialTapDance(
 	tdConn.id = id
 	tdConn.ztlsConn = nil
 
-	tdConn.stationPubkey = &td_station_pubkey
+	tdConn.stationPubkey = Assets().GetPubkey()
 
 	rand.Read(tdConn.remoteConnId[:])
 

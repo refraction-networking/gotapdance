@@ -53,7 +53,7 @@ func NewTapdanceProxy(listenPort int) *TapdanceProxy {
 	proxy := new(TapdanceProxy)
 	proxy.listenPort = listenPort
 	// TODO: do I need it?
-	copy(proxy.stationPubkey[:], td_station_pubkey[0:32])
+	copy(proxy.stationPubkey[:], Assets().GetPubkey()[:])
 
 	proxy.connections.m = make(map[uint64]*TapDanceFlow)
 	proxy.State = TD_INITIALIZED
