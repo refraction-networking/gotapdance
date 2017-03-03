@@ -59,7 +59,7 @@ type tapdanceConn struct {
 	readerStopped   chan bool
 	doneReconnect   chan bool
 	stopped         chan bool
-	channelsStopped int32
+	closeOnce       sync.Once
 
 	// read_data holds data between Read() calls when the
 	// caller's buffer is to small to receive all the data
@@ -178,6 +178,7 @@ func (tdConn *tapdanceConn) readSubEngine() {
 		tdConn.setError(err, false)
 		Logger.Debugln("[Flow " + tdConn.idStr() + "] exit readSubEngine()")
 		close(tdConn.readerStopped)
+		close(tdConn.readChannel)
 		tdConn.Close()
 	}()
 
@@ -408,27 +409,17 @@ func (tdConn *tapdanceConn) connect() {
 // Read can be made to time out and return a Error with Timeout() == true
 // after a fixed time limit; see SetDeadline and SetReadDeadline.
 func (tdConn *tapdanceConn) Read(b []byte) (n int, err error) {
-	// TODO: FIX THAT EMBARRASSMENT
-	// Buffer is reallocated and recopied twice!
-	// Golang doesn't let me do 'b = <-tdConn.readChannel' =/
-	// Doesn't support multiple readers
-
-	defer func() {
-		if n == 0 {
-			err = tdConn.getError()
-		}
-	}()
+	// TODO: Doesn't support multiple readers
 
 	// If there's no ready data in buffer - get some
 	if tdConn.read_data_count == 0 {
-		chanTimeout := time.After(3 * time.Second)
-		select {
-		case tdConn.read_data_buffer = <-tdConn.readChannel:
+		var open bool
+		tdConn.read_data_buffer, open = <-tdConn.readChannel
+		if open {
 			tdConn.read_data_count = len(tdConn.read_data_buffer)
 			tdConn.read_data_index = 0
-		case <-chanTimeout:
-			return
-			// readers should be correctly handing "0, nil"
+		} else {
+			return 0, io.EOF
 		}
 	}
 
@@ -442,6 +433,9 @@ func (tdConn *tapdanceConn) Read(b []byte) (n int, err error) {
 		b = b[:]
 		tdConn.read_data_index += n
 		tdConn.read_data_count -= n
+	}
+	if n == 0 {
+		err = tdConn.getError()
 	}
 	return
 }
@@ -803,14 +797,15 @@ func (tdConn *tapdanceConn) ServerRandom() []byte {
 // Any blocked Read or Write operations will be unblocked and return errors.
 func (tdConn *tapdanceConn) Close() (err error) {
 	tdConn.setError(errors.New("Forced shutdown by user"), false)
-	if atomic.CompareAndSwapInt32(&tdConn.channelsStopped, 0, 1) {
+	tdConn.closeOnce.Do(func() {
 		close(tdConn.stopped)
 		atomic.StoreInt32(&tdConn.state, TD_STATE_CLOSED)
-	}
-	if tdConn.ztlsConn != nil {
-		err = tdConn.ztlsConn.Close()
-	}
-	return
+		if tdConn.ztlsConn != nil {
+			err = tdConn.ztlsConn.Close()
+		}
+		return
+	})
+	return errors.New("Already closed")
 }
 
 // LocalAddr returns the local network address.
