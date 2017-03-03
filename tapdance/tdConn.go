@@ -718,8 +718,8 @@ func (tdConn *tapdanceConn) prepareTDRequest() (tdRequest string, err error) {
 		return
 	}
 	buf.Write(master_key[:])
-	buf.Write(tdConn.ServerRandom())
-	buf.Write(tdConn.ClientRandom())
+	buf.Write(tdConn.serverRandom())
+	buf.Write(tdConn.clientRandom())
 	buf.Write(tdConn.remoteConnId[:]) // connection id for persistence
 
 	tag, err := obfuscateTag(buf.Bytes(), *tdConn.stationPubkey) // What we encode into the ciphertext
@@ -785,11 +785,11 @@ func (tdConn *tapdanceConn) tryScheduleReconnect() {
 	}
 }
 
-func (tdConn *tapdanceConn) ClientRandom() []byte {
+func (tdConn *tapdanceConn) clientRandom() []byte {
 	return tdConn.ztlsConn.GetHandshakeLog().ClientHello.Random
 }
 
-func (tdConn *tapdanceConn) ServerRandom() []byte {
+func (tdConn *tapdanceConn) serverRandom() []byte {
 	return tdConn.ztlsConn.GetHandshakeLog().ServerHello.Random
 }
 
