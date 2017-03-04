@@ -8,7 +8,6 @@ import (
 	"errors"
 	"github.com/zmap/zgrab/ztools/ztls"
 	"io"
-	"math"
 	"net"
 	"runtime"
 	"strconv"
@@ -69,14 +68,7 @@ type tapdanceConn struct {
 	read_data_count  int
 }
 
-const (
-	TD_STATE_NEW = iota
-	TD_STATE_CONNECTED
-	TD_STATE_RECONNECT
-	TD_STATE_CLOSED
-)
 
-const timeoutInSeconds = 30
 
 /* Create new TapDance connection
 Args:
@@ -291,7 +283,7 @@ func (tdConn *tapdanceConn) connect() {
 	var connection_attempts int
 
 	// Randomize tdConn.maxSend to avoid heuristics
-	tdConn.maxSend = 16*1024 - uint64(getRandInt(1, 1984))
+	tdConn.maxSend = uint64(getRandInt(sendLimitMin, sendLimitMax))
 
 	if reconnect {
 		connection_attempts = 2
@@ -309,10 +301,8 @@ func (tdConn *tapdanceConn) connect() {
 
 	for i := 0; i < connection_attempts; i++ {
 		if !reconnect {
-			if i >= 2 {
-				// sleep to prevent overwhelming decoy servers
-				waitTime := time.After(time.Second *
-					time.Duration(math.Pow(3, float64(i-1))))
+			// sleep to prevent overwhelming decoy servers
+			if waitTime := sleepBeforeConnect(i); waitTime != nil {
 				select {
 				case <-waitTime:
 				case <-tdConn.stopped:
@@ -394,7 +384,9 @@ func (tdConn *tapdanceConn) connect() {
 		// 3 hours timeout just to connect stale connections once in a (long) while
 		tdConn.SetDeadline(time.Now().Add(time.Hour * 3))
 
-		tdConn.writerTimeout = time.After(timeoutInSeconds * time.Second)
+
+		tdConn.writerTimeout = time.After(time.Duration(getRandInt(timeoutMin, timeoutMax)) *
+			time.Second)
 		// reader shouldn't timeout yet
 		tdConn.readerTimeout = time.After(1 * time.Hour)
 

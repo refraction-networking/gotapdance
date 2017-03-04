@@ -9,12 +9,7 @@ import (
 	"time"
 )
 
-const (
-	MSG_DATA = iota // iota auto increments
-	MSG_INIT
-	MSG_RECONNECT
-	MSG_CLOSE
-)
+
 
 // Connection-oriented state
 type TapDanceFlow struct {
