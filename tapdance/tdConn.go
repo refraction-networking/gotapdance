@@ -55,10 +55,10 @@ type tapdanceConn struct {
 
 	// used by 2 engines to communicate /w one another
 	// true is sent upon success
-	readerStopped   chan bool
-	doneReconnect   chan bool
-	stopped         chan bool
-	closeOnce       sync.Once
+	readerStopped chan bool
+	doneReconnect chan bool
+	stopped       chan bool
+	closeOnce     sync.Once
 
 	// read_data holds data between Read() calls when the
 	// caller's buffer is to small to receive all the data
@@ -67,8 +67,6 @@ type tapdanceConn struct {
 	read_data_index  int
 	read_data_count  int
 }
-
-
 
 /* Create new TapDance connection
 Args:
@@ -383,7 +381,6 @@ func (tdConn *tapdanceConn) connect() {
 		// TapDance should NOT have a timeout, timeouts have to be handled by client and server
 		// 3 hours timeout just to connect stale connections once in a (long) while
 		tdConn.SetDeadline(time.Now().Add(time.Hour * 3))
-
 
 		tdConn.writerTimeout = time.After(time.Duration(getRandInt(timeoutMin, timeoutMax)) *
 			time.Second)

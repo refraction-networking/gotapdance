@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-
-
 // Connection-oriented state
 type TapDanceFlow struct {
 	// tunnel index and start time

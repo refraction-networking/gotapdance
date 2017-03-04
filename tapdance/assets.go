@@ -19,9 +19,9 @@ var defaultDecoys = []decoyServer{
 
 type assets struct {
 	sync.RWMutex
-	once sync.Once
-	path          string
-	decoys        []decoyServer
+	once   sync.Once
+	path   string
+	decoys []decoyServer
 
 	stationPubkey [32]byte
 	roots         *x509.CertPool
@@ -64,7 +64,7 @@ TODO:
 - savePubkey
 - saveRoots
 - SetRoots
- */
+*/
 
 func (a *assets) GetAssetsDir() string {
 	a.RLock()
