@@ -123,7 +123,7 @@ func TestGetRandInt(t *testing.T) {
 
 }
 
-func TestFunctional(t *testing.T) {
+func TestSendSeq(t *testing.T) {
 	buf := new(bytes.Buffer)
 	for i := 0; i < 8192; i++ {
 		h := fmt.Sprintf("%04x", i)
