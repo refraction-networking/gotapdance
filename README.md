@@ -9,17 +9,12 @@ GOPATH="${HOME}/go/"
 
  ```bash
 go get github.com/SergeyFrolov/gotapdance github.com/Sirupsen/logrus \
-           github.com/agl/ed25519/extra25519 github.com/zmap/zgrab/ztools/x509 \
-           github.com/zmap/zgrab/ztools/ztls golang.org/x/crypto/curve25519 \
+           github.com/agl/ed25519/extra25519 github.com/zmap/zcrypto/x509 \
+           github.com/zmap/zcrypto/tls golang.org/x/crypto/curve25519 \
            golang.org/x/mobile/cmd/gomobile  
 ```
 
-3. Only if you need [gomobile](https://godoc.org/golang.org/x/mobile/cmd/gomobile) (e.g. non-CLI version):
- ```bash
-gomobile init
-```
-
-4. There are 3 versions of TapDance client:
+3. There are 3 versions of TapDance client:
 
   * [Command Line Interface](cli)
 
@@ -31,7 +26,7 @@ gomobile init
 
     * [Golang Bindings](proxybind)
 
-  * [Pure Golang cross-platform GUI](gui) – ugly, but the same code compiles virtually everywhere (tested on Ubuntu and Android, but supposed to work on iOS and Windows PC as well)
+  * [Pure Golang cross-platform GUI](gui) – ugly, not maintaed, lives as PoC. This code compiles virtually everywhere (tested on Ubuntu and Android, but supposed to work on iOS and Windows PC as well)
 
 # Usage
 After one of the above clients is built and launched, it will start listening for requests on port 10500.
