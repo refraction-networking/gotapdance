@@ -6,7 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"errors"
-	"github.com/zmap/zgrab/ztools/ztls"
+	"github.com/zmap/zgrab/ztools/tls"
 	"io"
 	"net"
 	"runtime"
@@ -19,7 +19,7 @@ import (
 
 type tapdanceConn struct {
 	tcpConn      *net.TCPConn
-	ztlsConn     *ztls.Conn
+	tlsConn      *tls.Conn
 	customDialer func(string, string) (net.Conn, error)
 
 	id uint64
@@ -81,7 +81,7 @@ func DialTapDance(
 
 	tdConn.customDialer = customDialer
 	tdConn.id = id
-	tdConn.ztlsConn = nil
+	tdConn.tlsConn = nil
 
 	tdConn.stationPubkey = Assets().GetPubkey()
 
@@ -291,7 +291,7 @@ func (tdConn *tapdanceConn) connect() {
 		case <-tdConn.stopped:
 			return
 		}
-		tdConn.ztlsConn.Close()
+		tdConn.tlsConn.Close()
 	} else {
 		connection_attempts = 6
 		expectedMsg = MSG_INIT
@@ -330,12 +330,12 @@ func (tdConn *tapdanceConn) connect() {
 			}
 			return false
 		}
-		if !cipherIsSupported(tdConn.ztlsConn.ConnectionState().CipherSuite) {
+		if !cipherIsSupported(tdConn.tlsConn.ConnectionState().CipherSuite) {
 			Logger.Errorf("[Flow " + tdConn.idStr() +
 				"] decoy " + tdConn.decoySNI + ", offered unsupported cipher #" +
-				strconv.FormatUint(uint64(tdConn.ztlsConn.ConnectionState().CipherSuite), 10))
+				strconv.FormatUint(uint64(tdConn.tlsConn.ConnectionState().CipherSuite), 10))
 			currErr = errors.New("Unsupported cipher.")
-			tdConn.ztlsConn.Close()
+			tdConn.tlsConn.Close()
 			continue
 		}
 
@@ -348,7 +348,7 @@ func (tdConn *tapdanceConn) connect() {
 		if currErr != nil {
 			Logger.Errorf("[Flow " + tdConn.idStr() +
 				"] Preparation of initial TD request failed with " + currErr.Error())
-			tdConn.ztlsConn.Close()
+			tdConn.tlsConn.Close()
 			continue
 		}
 
@@ -357,7 +357,7 @@ func (tdConn *tapdanceConn) connect() {
 		if currErr != nil {
 			Logger.Errorf("[Flow " + tdConn.idStr() +
 				"] Could not send initial TD request, error: " + currErr.Error())
-			tdConn.ztlsConn.Close()
+			tdConn.tlsConn.Close()
 			continue
 		}
 
@@ -374,7 +374,7 @@ func (tdConn *tapdanceConn) connect() {
 				Logger.Errorf("[Flow "+tdConn.idStr()+
 					"] error reading from TapDance station :", currErr.Error())
 			}
-			tdConn.ztlsConn.Close()
+			tdConn.tlsConn.Close()
 			continue
 		}
 
@@ -476,7 +476,7 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 	}
 
 	for readBytesTotal < totalBytesToRead {
-		readBytes, err = tdConn.ztlsConn.Read(tdConn._readBuffer[readBytesTotal:headerSize])
+		readBytes, err = tdConn.tlsConn.Read(tdConn._readBuffer[readBytesTotal:headerSize])
 		if err != nil {
 			return
 		}
@@ -497,7 +497,7 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 
 	// Get the rest of the message
 	for readBytesTotal < totalBytesToRead {
-		readBytes, err = tdConn.ztlsConn.Read(read_buffer[readBytesTotal-headerSize : msgLen])
+		readBytes, err = tdConn.tlsConn.Read(read_buffer[readBytesTotal-headerSize : msgLen])
 		if err != nil {
 			return
 		}
@@ -608,7 +608,7 @@ func (tdConn *tapdanceConn) write_td(b []byte, connect bool) (n int, err error) 
 		toSend = totalToSend
 	}
 
-	n, err = tdConn.ztlsConn.Write(b[:toSend])
+	n, err = tdConn.tlsConn.Write(b[:toSend])
 
 	if !connect {
 		tdConn.writeMsgIndex += n
@@ -626,23 +626,23 @@ func (tdConn *tapdanceConn) write_td(b []byte, connect bool) (n int, err error) 
 // PSK might actually work, but are out of scope
 // Maybe also get rid of DSS?
 var TDSupportedCiphers = []uint16{
-	ztls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-	ztls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-	ztls.TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256,
-	ztls.TLS_ECDH_ECDSA_WITH_AES_256_GCM_SHA384,
-	ztls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-	ztls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-	ztls.TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256,
-	ztls.TLS_RSA_WITH_AES_128_GCM_SHA256,
-	ztls.TLS_RSA_WITH_AES_256_GCM_SHA384,
-	ztls.TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
-	ztls.TLS_DHE_RSA_WITH_AES_256_GCM_SHA384,
-	ztls.TLS_DH_RSA_WITH_AES_128_GCM_SHA256,
-	ztls.TLS_DH_RSA_WITH_AES_256_GCM_SHA384,
-	ztls.TLS_DHE_DSS_WITH_AES_128_GCM_SHA256,
-	ztls.TLS_DHE_DSS_WITH_AES_256_GCM_SHA384,
-	ztls.TLS_DH_DSS_WITH_AES_128_GCM_SHA256,
-	ztls.TLS_DH_DSS_WITH_AES_256_GCM_SHA384,
+	tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+	tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+	tls.TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256,
+	tls.TLS_ECDH_ECDSA_WITH_AES_256_GCM_SHA384,
+	tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+	tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+	tls.TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256,
+	tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
+	tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+	tls.TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
+	tls.TLS_DHE_RSA_WITH_AES_256_GCM_SHA384,
+	tls.TLS_DH_RSA_WITH_AES_128_GCM_SHA256,
+	tls.TLS_DH_RSA_WITH_AES_256_GCM_SHA384,
+	tls.TLS_DHE_DSS_WITH_AES_128_GCM_SHA256,
+	tls.TLS_DHE_DSS_WITH_AES_256_GCM_SHA384,
+	tls.TLS_DH_DSS_WITH_AES_128_GCM_SHA256,
+	tls.TLS_DH_DSS_WITH_AES_256_GCM_SHA384,
 }
 
 func (tdConn *tapdanceConn) establishTLStoDecoy() (err error) {
@@ -673,8 +673,8 @@ func (tdConn *tapdanceConn) establishTLStoDecoy() (err error) {
 		Logger.Infoln("[Flow " + tdConn.idStr() + "]: SNI was nil. Setting it to" +
 			config.ServerName)
 	}
-	tdConn.ztlsConn = ztls.Client(dialConn, &config)
-	err = tdConn.ztlsConn.Handshake()
+	tdConn.tlsConn = tls.Client(dialConn, &config)
+	err = tdConn.tlsConn.Handshake()
 	if err != nil {
 		dialConn.Close()
 		return
@@ -687,11 +687,11 @@ func (tdConn *tapdanceConn) establishTLStoDecoy() (err error) {
 func (tdConn *tapdanceConn) getKeystream(length int) (keystream []byte, err error) {
 	zeros := make([]byte, length)
 
-	if servConnCipher, ok := tdConn.ztlsConn.OutCipher().(cipher.AEAD); ok {
-		keystream = servConnCipher.Seal(nil, tdConn.ztlsConn.OutSeq(), zeros, nil)
+	if servConnCipher, ok := tdConn.tlsConn.OutCipher().(cipher.AEAD); ok {
+		keystream = servConnCipher.Seal(nil, tdConn.tlsConn.OutSeq(), zeros, nil)
 		return
 	} else {
-		err = errors.New("Could not convert ztlsConn.OutCipher to cipher.AEAD")
+		err = errors.New("Could not convert tlsConn.OutCipher to cipher.AEAD")
 	}
 	return
 }
@@ -700,7 +700,7 @@ func (tdConn *tapdanceConn) prepareTDRequest() (tdRequest string, err error) {
 	// Generate initial TapDance request
 	buf := new(bytes.Buffer) // What we have to encrypt with the shared secret using AES
 
-	master_key := tdConn.ztlsConn.GetHandshakeLog().KeyMaterial.MasterSecret.Value
+	master_key := tdConn.tlsConn.GetHandshakeLog().KeyMaterial.MasterSecret.Value
 
 	// write flags
 	if err = binary.Write(buf, binary.BigEndian, uint8(0)); err != nil {
@@ -775,11 +775,11 @@ func (tdConn *tapdanceConn) tryScheduleReconnect() {
 }
 
 func (tdConn *tapdanceConn) clientRandom() []byte {
-	return tdConn.ztlsConn.GetHandshakeLog().ClientHello.Random
+	return tdConn.tlsConn.GetHandshakeLog().ClientHello.Random
 }
 
 func (tdConn *tapdanceConn) serverRandom() []byte {
-	return tdConn.ztlsConn.GetHandshakeLog().ServerHello.Random
+	return tdConn.tlsConn.GetHandshakeLog().ServerHello.Random
 }
 
 // Close closes the connection.
@@ -789,8 +789,8 @@ func (tdConn *tapdanceConn) Close() (err error) {
 	tdConn.closeOnce.Do(func() {
 		close(tdConn.stopped)
 		atomic.StoreInt32(&tdConn.state, TD_STATE_CLOSED)
-		if tdConn.ztlsConn != nil {
-			err = tdConn.ztlsConn.Close()
+		if tdConn.tlsConn != nil {
+			err = tdConn.tlsConn.Close()
 		}
 		return
 	})
@@ -799,12 +799,12 @@ func (tdConn *tapdanceConn) Close() (err error) {
 
 // LocalAddr returns the local network address.
 func (tdConn *tapdanceConn) LocalAddr() net.Addr {
-	return tdConn.ztlsConn.LocalAddr()
+	return tdConn.tlsConn.LocalAddr()
 }
 
 // RemoteAddr returns the remote network address.
 func (tdConn *tapdanceConn) RemoteAddr() net.Addr {
-	return tdConn.ztlsConn.RemoteAddr()
+	return tdConn.tlsConn.RemoteAddr()
 }
 
 // SetDeadline sets the read and write deadlines associated
@@ -821,13 +821,13 @@ func (tdConn *tapdanceConn) RemoteAddr() net.Addr {
 //
 // A zero value for t means I/O operations will not time out.
 func (tdConn *tapdanceConn) SetDeadline(t time.Time) error {
-	return tdConn.ztlsConn.SetDeadline(t)
+	return tdConn.tlsConn.SetDeadline(t)
 }
 
 // SetReadDeadline sets the deadline for future Read calls.
 // A zero value for t means Read will not time out.
 func (tdConn *tapdanceConn) SetReadDeadline(t time.Time) error {
-	return tdConn.ztlsConn.SetReadDeadline(t)
+	return tdConn.tlsConn.SetReadDeadline(t)
 }
 
 // SetWriteDeadline sets the deadline for future Write calls.
@@ -835,5 +835,5 @@ func (tdConn *tapdanceConn) SetReadDeadline(t time.Time) error {
 // some of the data was successfully written.
 // A zero value for t means Write will not time out.
 func (tdConn *tapdanceConn) SetWriteDeadline(t time.Time) error {
-	return tdConn.ztlsConn.SetWriteDeadline(t)
+	return tdConn.tlsConn.SetWriteDeadline(t)
 }
