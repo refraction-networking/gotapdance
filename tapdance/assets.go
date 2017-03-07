@@ -30,21 +30,16 @@ type assets struct {
 var assetsInstance *assets
 var assetsOnce sync.Once
 
-// Don't call this function, if you use non-standard path
-func Assets() *assets {
-	return AssetsByPath("./assets/")
-}
-
 // Path is expected (but doesn't have) to have several files
 // 1) "decoys" that has a list in following format:
 //       ip1:SNI1
 //       ip2:SNI2
 // 2) "station_pubkey" contains TapDance station Public Key
 // 3) "roots" contains x509 roots
-func AssetsByPath(path string) *assets {
+func Assets() *assets {
 	assetsOnce.Do(func() {
 		assetsInstance = &assets{
-			path:   path,
+			path:   "./assets/",
 			decoys: defaultDecoys,
 			stationPubkey: [32]byte{211, 127, 10, 139, 150, 180, 97, 15, 56, 188, 7,
 				155, 7, 102, 41, 34, 70, 194, 210, 170, 50, 53, 234, 49, 42, 240,
