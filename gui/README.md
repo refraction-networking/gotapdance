@@ -1,3 +1,10 @@
+## Get gomobile
+You'd need [gomobile](https://godoc.org/golang.org/x/mobile/cmd/gomobile) to compile GUI version:
+ ```bash
+ go get golang.org/x/mobile/cmd/gomobile
+ gomobile init
+```
+
 ## Build Android
 Make sure you initialized gomobile, installed adb and plugged in your phone.
 To test if your plugged phone is visible to adb you may use
