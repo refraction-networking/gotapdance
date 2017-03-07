@@ -1,7 +1,7 @@
 package tapdance
 
 import (
-	"github.com/zmap/zgrab/ztools/tls"
+	"github.com/zmap/zcrypto/tls"
 	"net"
 )
 

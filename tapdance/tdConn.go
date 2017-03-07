@@ -6,7 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"errors"
-	"github.com/zmap/zgrab/ztools/tls"
+	"github.com/zmap/zcrypto/tls"
 	"io"
 	"net"
 	"runtime"
