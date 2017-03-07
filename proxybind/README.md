@@ -1,3 +1,10 @@
+## Get gomobile
+You'd need [gomobile](https://godoc.org/golang.org/x/mobile/cmd/gomobile) to compile GUI version:
+ ```bash
+ go get golang.org/x/mobile/cmd/gomobile
+ gomobile init
+```
+
 ##  Wrapper
 ### To simply build proxybind.aar library for Android:
 ```
