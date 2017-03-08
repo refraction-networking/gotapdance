@@ -371,8 +371,12 @@ func (tdConn *tapdanceConn) connect() {
 				Logger.Errorf("[Flow " + tdConn.idStr() +
 					"] " + currErr.Error())
 			} else {
-				Logger.Errorf("[Flow "+tdConn.idStr()+
-					"] error reading from TapDance station: " + currErr.Error())
+				// any other error will be fatal
+				Logger.Errorf("[Flow " + tdConn.idStr() +
+					"] fatal error reading from TapDance station: " +
+					currErr.Error())
+				tdConn.setError(currErr, false)
+				return
 			}
 			tdConn.tlsConn.Close()
 			continue
