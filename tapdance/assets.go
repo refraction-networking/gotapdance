@@ -14,7 +14,7 @@ type decoyServer struct {
 
 var defaultDecoys = []decoyServer{
 	{ip: "192.122.190.104", sni: "tapdance1.freeaeskey.xyz"},
-	//{ip: "192.122.190.105", sni: "tapdance2.freeaeskey.xyz"},
+	{ip: "192.122.190.105", sni: "tapdance2.freeaeskey.xyz"},
 }
 
 type assets struct {
