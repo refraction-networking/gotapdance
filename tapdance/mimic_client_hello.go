@@ -111,7 +111,7 @@ func getZtlsConfig(Browser string, sni string) tls.Config {
 			&ec,
 			&points,
 			&st,
-			&tls.NextProtocolNegotiationExtension{},
+			&tls.NextProtocolNegotiationExtension{[]string{"h2", "http/1.1"}},
 			&alpn,
 			&tls.StatusRequestExtension{},
 			&sigs,
@@ -181,7 +181,7 @@ func getZtlsConfig(Browser string, sni string) tls.Config {
 			&ec,
 			&st,
 			&sigs,
-			&tls.NextProtocolNegotiationExtension{}}
+			&tls.NextProtocolNegotiationExtension{[]string{"h2", "http/1.1"}}}
 		hello.SessionCache = tls.NewLRUClientSessionCache(0)
 		hello.CacheKey = &CacheKeyFunctor{}
 		conf.ClientFingerprintConfiguration = &hello
@@ -235,7 +235,7 @@ func getZtlsConfig(Browser string, sni string) tls.Config {
 			&st,
 			&sigs,
 			&tls.StatusRequestExtension{},
-			&tls.NextProtocolNegotiationExtension{},
+			&tls.NextProtocolNegotiationExtension{[]string{"http/1.1", "spdy/3.1", "h2"}},
 			&tls.SCTExtension{},
 			&alpn,
 			&points,
