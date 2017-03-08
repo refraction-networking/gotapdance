@@ -95,7 +95,7 @@ func DialTapDance(
 	tdConn.stopped = make(chan bool)
 	tdConn.readerStopped = make(chan bool)
 	tdConn.doneReconnect = make(chan bool)
-	tdConn.writeChannel = make(chan []byte, 1) // TODO: make it blocking?
+	tdConn.writeChannel = make(chan []byte)
 	tdConn.readChannel = make(chan []byte, 1)
 
 	tdConn.state = TD_STATE_NEW
