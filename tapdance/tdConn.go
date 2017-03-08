@@ -367,12 +367,12 @@ func (tdConn *tapdanceConn) connect() {
 			if strings.Contains(str_err, ": i/o timeout") || // client timed out
 				currErr.Error() == "EOF" {
 				// decoy timed out
-				currErr = errors.New("TapDance station didn't pick up the request:" + str_err)
+				currErr = errors.New("TapDance station didn't pick up the request: " + str_err)
 				Logger.Errorf("[Flow " + tdConn.idStr() +
 					"] " + currErr.Error())
 			} else {
 				Logger.Errorf("[Flow "+tdConn.idStr()+
-					"] error reading from TapDance station :", currErr.Error())
+					"] error reading from TapDance station: " + currErr.Error())
 			}
 			tdConn.tlsConn.Close()
 			continue
