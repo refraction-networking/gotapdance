@@ -412,7 +412,7 @@ func (tdConn *tapdanceConn) Read(b []byte) (n int, err error) {
 			tdConn.read_data_count = len(tdConn.read_data_buffer)
 			tdConn.read_data_index = 0
 		} else {
-			return 0, io.EOF
+			return 0, tdConn.getError()
 		}
 	}
 
@@ -541,7 +541,7 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 			// TODO: add reconnect here?
 		}
 	case MSG_CLOSE:
-		err = errors.New("MSG_CLOSE")
+		err = io.EOF
 		Logger.Infof("[Flow " + tdConn.idStr() +
 			"] received MSG_CLOSE")
 	}

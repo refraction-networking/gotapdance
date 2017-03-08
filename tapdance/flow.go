@@ -54,7 +54,7 @@ func (TDstate *TapDanceFlow) Redirect() (err error) {
 			"] forwardFromServerToClient returns, bytes sent: " +
 			strconv.FormatUint(uint64(n), 10))
 		if _err == nil {
-			_err = errors.New("!!!Server returned without error")
+			_err = errors.New("server returned without error")
 		}
 		errChan <- _err
 		return
