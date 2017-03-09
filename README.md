@@ -14,6 +14,7 @@ go get github.com/SergeyFrolov/gotapdance github.com/Sirupsen/logrus \
            github.com/zmap/zcrypto/tls golang.org/x/crypto/curve25519 \
            golang.org/x/mobile/cmd/gomobile  
 ```
+Ignore the "no buildable Go source files" warning.
 
 If you have outdated versions of libraries above you might want to do `go get -u all`
 
