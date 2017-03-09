@@ -215,6 +215,10 @@ func (tdConn *tapdanceConn) readSubEngine() {
 		default:
 			_, err = tdConn.read_msg(MSG_DATA)
 			if err != nil {
+				if err.Error() == "MSG_CLOSE" {
+					err = io.EOF
+					return
+				}
 				Logger.Debugln("[Flow "+tdConn.idStr()+"] read err", err)
 				toReconnect = (err == io.EOF || err == io.ErrUnexpectedEOF)
 				if nErr, ok := err.(*net.OpError); ok {
@@ -548,7 +552,7 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 			// TODO: add reconnect here?
 		}
 	case MSG_CLOSE:
-		err = io.EOF
+		err = errors.New("MSG_CLOSE")
 		Logger.Infof("[Flow " + tdConn.idStr() +
 			"] received MSG_CLOSE")
 	}
