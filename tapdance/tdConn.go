@@ -481,10 +481,14 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 
 	for readBytesTotal < totalBytesToRead {
 		readBytes, err = tdConn.tlsConn.Read(tdConn._readBuffer[readBytesTotal:headerSize])
+
+		readBytesTotal += uint16(readBytes)
+		if err == io.EOF && readBytesTotal != 0 {
+			break
+		}
 		if err != nil {
 			return
 		}
-		readBytesTotal += uint16(readBytes)
 	}
 
 	// Check if the message type is appropriate
@@ -502,10 +506,13 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 	// Get the rest of the message
 	for readBytesTotal < totalBytesToRead {
 		readBytes, err = tdConn.tlsConn.Read(read_buffer[readBytesTotal-headerSize : msgLen])
+		readBytesTotal += uint16(readBytes)
+		if err == io.EOF {
+			break
+		}
 		if err != nil {
 			return
 		}
-		readBytesTotal += uint16(readBytes)
 	}
 
 	//	Logger.Debugln("[Flow " + tdConn.idStr() + "] read\n", hex.Dump(read_buffer[:totalBytesToRead]))
