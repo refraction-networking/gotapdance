@@ -66,6 +66,10 @@ type tapdanceConn struct {
 	read_data_buffer []byte
 	read_data_index  int
 	read_data_count  int
+
+	// for statistics
+	writeReconnects   int
+	timeoutReconnects int
 }
 
 /* Create new TapDance connection
@@ -126,6 +130,9 @@ func (tdConn *tapdanceConn) engineMain() {
 		case TD_STATE_RECONNECT:
 			tdConn.tcpConn.CloseWrite()
 			Logger.Debugln("[Flow " + tdConn.idStr() + "] write closed")
+			Logger.Infoln("[Flow " + tdConn.idStr() + "] reconnecting!" +
+				" write_total: " + strconv.Itoa(tdConn.writeReconnects) +
+				" timeout_total: " + strconv.Itoa(tdConn.timeoutReconnects))
 			tdConn.connect()
 			continue
 		case TD_STATE_CONNECTED:
@@ -146,6 +153,7 @@ func (tdConn *tapdanceConn) engineMain() {
 			return
 		case <-tdConn.writerTimeout:
 			// TODO <low priority>: check if any data was sent or received
+			tdConn.timeoutReconnects++
 			tdConn.tryScheduleReconnect()
 			continue
 		case tdConn._writeBuffer = <-tdConn.writeChannel:
@@ -608,6 +616,7 @@ func (tdConn *tapdanceConn) write_td(b []byte, connect bool) (n int, err error) 
 	*/
 	needReconnect := (couldSend < totalToSend)
 	if needReconnect {
+		tdConn.writeReconnects++
 		tdConn.tryScheduleReconnect()
 		if tdConn.sentTotal != 0 {
 			// reconnect right away
