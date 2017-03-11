@@ -4,8 +4,11 @@ go:
  - 1.7.4
  - 1.8.x
 
-before_script:
+before_install:
  - sudo apt-get install libegl1-mesa-dev libgles2-mesa-dev libx11-dev
+
+sudo: required
+dist: trusty
 
 script:
  - go test -v ./tapdance/
