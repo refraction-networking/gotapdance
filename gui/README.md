@@ -1,3 +1,9 @@
+## Install egl libraries:
+On Ubuntu:
+```
+sudo apt-get install libegl1-mesa-dev libgles2-mesa-dev libx11-dev
+```
+
 ## Get gomobile
 You'd need [gomobile](https://godoc.org/golang.org/x/mobile/cmd/gomobile) to compile GUI version:
  ```bash
