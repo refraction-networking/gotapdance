@@ -2,7 +2,10 @@ language: go
 
 go:
  - 1.7.4
- - release
+ - 1.8.x
+
+before_script:
+ - sudo apt-get install libegl1-mesa-dev libgles2-mesa-dev libx11-dev
 
 script:
  - go test -v ./tapdance/
