@@ -111,7 +111,7 @@ func TestReverseEncrypt(t *testing.T) {
 func TestGetRandInt(t *testing.T) {
 	n_values := 20000
 	results := make([]int, n_values)
-	fmt.Println("Generating", n_values, " values between 6 and 14")
+	fmt.Println("Generating", n_values, " values between 0 and 14")
 	var avg int
 	for i := 0; i < n_values; i++ {
 		n := getRandInt(0, 14)
