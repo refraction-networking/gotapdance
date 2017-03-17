@@ -175,9 +175,9 @@ func (tdConn *tapdanceConn) readSubEngine() {
 	defer func() {
 		tdConn.setError(err, false)
 		Logger.Debugln("[Flow " + tdConn.idStr() + "] exit readSubEngine()")
+		tdConn.Close()
 		close(tdConn.readerStopped)
 		close(tdConn.readChannel)
-		tdConn.Close()
 	}()
 
 	var toReconnect bool
@@ -298,10 +298,19 @@ func (tdConn *tapdanceConn) connect() {
 	if reconnect {
 		connection_attempts = 2
 		expectedMsg = MSG_RECONNECT
-		select {
-		case _ = <-tdConn.readerStopped: // wait for readEngine to stop
-		case <-tdConn.stopped:
-			return
+		awaitFINTimeout := time.After(waitForFINTimeout * time.Second)
+		readerStopped := false
+		for !readerStopped {
+			select {
+			case _ = <-tdConn.readerStopped: // wait for readEngine to stop
+				readerStopped = true
+				continue
+			case <-awaitFINTimeout:
+				Logger.Errorf("[Flow " + tdConn.idStr() + "] FIN await timeout!")
+				tdConn.tlsConn.Close()
+			case <-tdConn.stopped:
+				return
+			}
 		}
 		tdConn.tlsConn.Close()
 	} else {
@@ -351,7 +360,7 @@ func (tdConn *tapdanceConn) connect() {
 			continue
 		}
 
-		tdConn.SetDeadline(time.Now().Add(time.Second * 15))
+		tdConn.SetDeadline(time.Now().Add(deadlineConnectTDStation * time.Second))
 
 		var tdRequest string
 		tdRequest, currErr = tdConn.prepareTDRequest()
@@ -395,9 +404,7 @@ func (tdConn *tapdanceConn) connect() {
 		}
 
 		// TapDance should NOT have a timeout, timeouts have to be handled by client and server
-		// 3 hours timeout just to connect stale connections once in a (long) while
-		tdConn.SetDeadline(time.Now().Add(time.Hour * 3))
-
+		tdConn.SetDeadline(time.Time{}) // unsets timeout
 		tdConn.writerTimeout = time.After(time.Duration(getRandInt(timeoutMin, timeoutMax)) *
 			time.Second)
 		// reader shouldn't timeout yet
@@ -678,11 +685,8 @@ func (tdConn *tapdanceConn) establishTLStoDecoy() (err error) {
 			return err
 		}
 	} else {
-		tcpAddr, err := net.ResolveTCPAddr("tcp", tdConn.decoyAddr)
-		if err != nil {
-			return err
-		}
-		dialConn, err = net.DialTCP("tcp", nil, tcpAddr)
+		dialConn, err = net.DialTimeout("tcp", tdConn.decoyAddr,
+			deadlineTCPtoDecoy*time.Second)
 		if err != nil {
 			return err
 		}

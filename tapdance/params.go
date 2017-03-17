@@ -11,6 +11,10 @@ const timeoutMin = 20
 const sendLimitMax = 16 * 1024
 const sendLimitMin = 16*1024 - 1984
 
+const deadlineConnectTDStation = 15 // timeout for sending TD request and getting a response
+const deadlineTCPtoDecoy = 10       // deadline to establish TCP connection to decoy
+const waitForFINTimeout = 18        // time to wait for FIN to come back after socket shutdown
+
 const (
 	MSG_DATA = iota // iota auto increments
 	MSG_INIT
