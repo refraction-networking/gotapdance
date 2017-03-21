@@ -1,6 +1,7 @@
 package tapdance
 
 import (
+	"github.com/golang/protobuf/proto"
 	"bytes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -453,20 +454,15 @@ func (tdConn *tapdanceConn) Read(b []byte) (n int, err error) {
 }
 
 func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
-	// 1 byte of each message is MSG_TYPE
-	// 2-3: length of message
-	// if MSG_TYPE == INIT or RECONNECT:
-	//   4-5: magic_val
-	// if MSG_TYPE == DATA:
-	//    4-length: DATA
+	// For each message we first read outer protocol header to see if it's protobuf or data
 
 	var readBytes int
-	var readBytesTotal uint16
-	headerSize := uint16(3)
-	totalBytesToRead := headerSize
+	var readBytesTotal uint16 // both header and body
+	headerSize := uint16(2)
+	totalBytesToRead := headerSize // first -- just header, then +body
 	defer func() { n = int(readBytesTotal) }()
 
-	var msgLen uint16
+	var msgLen uint32
 	var msgType uint8
 
 	// This function checks if message type, given particular caller, is appropriate.
@@ -498,33 +494,68 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 		return nil
 	}
 
-	for readBytesTotal < totalBytesToRead {
+	/*
+	Each message is a 16-bit net-order int "TL" (type+len), followed by a data blob.
+	If TL is negative, the blob is pure app data, with length abs(TL).
+	If TL is positive, the blob is a protobuf, with length TL.
+	If TL is 0, then read the following 4 bytes. Those 4 bytes are a net-order u32.
+            This u32 is the length of the blob, which begins after this u32.
+            The blob is a protobuf.
+	*/
+	const (
+		raw_data = iota
+		protobuf
+	)
+	var outerProtoMsgType uint8
+
+	//TODO: check FIN+last data
+	for readBytesTotal < headerSize {
 		readBytes, err = tdConn.tlsConn.Read(tdConn._readBuffer[readBytesTotal:headerSize])
 
 		readBytesTotal += uint16(readBytes)
-		if err == io.EOF && readBytesTotal != 0 {
+		if err == io.EOF && readBytesTotal == headerSize {
 			break
 		}
 		if err != nil {
 			return
 		}
 	}
-
-	// Check if the message type is appropriate
-	msgType = tdConn._readBuffer[0]
-	err = checkMsgType(msgType, expectedMsg)
+	// Get TIL
+	var typeLen int16
+	err = binary.Read(tdConn._readBuffer[0:2], binary.BigEndian, typeLen)
 	if err != nil {
 		return
 	}
+	if typeLen < 0 {
+		outerProtoMsgType = raw_data
+		msgLen = -typeLen
+	} else if typeLen > 0 {
+		outerProtoMsgType = protobuf
+		msgLen = typeLen
+	} else {
+		// protobuf with size over 32KB, not fitting into 2-byte TL
+		outerProtoMsgType = protobuf
+		headerSize += 4
+		for readBytesTotal < headerSize {
+			readBytes, err = tdConn.tlsConn.Read(tdConn._readBuffer[readBytesTotal:headerSize])
 
-	// Add msgLen to totalBytesToRead
-	msgLen = binary.BigEndian.Uint16(tdConn._readBuffer[1:3])
+			readBytesTotal += uint16(readBytes)
+			if err == io.EOF && readBytesTotal == headerSize {
+				break
+			}
+			if err != nil {
+				return
+			}
+		}
+		msgLen = binary.BigEndian.Uint32(tdConn._readBuffer[2:6])
+	}
+
 	totalBytesToRead = headerSize + msgLen
 	read_buffer := make([]byte, msgLen)
 
 	// Get the rest of the message
 	for readBytesTotal < totalBytesToRead {
-		readBytes, err = tdConn.tlsConn.Read(read_buffer[readBytesTotal-headerSize : msgLen])
+		readBytes, err = tdConn.tlsConn.Read(read_buffer[readBytesTotal-headerSize:msgLen])
 		readBytesTotal += uint16(readBytes)
 		if err == io.EOF {
 			break
@@ -532,6 +563,27 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 		if err != nil {
 			return
 		}
+	}
+
+	switch outerProtoMsgType {
+	case raw_data:
+		n = int(readBytesTotal - headerSize)
+		select {
+		case tdConn.readChannel <- read_buffer[:]:
+			Logger.Debugf("[Flow "+tdConn.idStr()+
+				"] Successfully read DATA msg from server", msgLen)
+		case <-tdConn.stopped:
+			return
+		}
+	case protobuf:
+		msg := StationToClient{}
+		err = proto.Unmarshal(read_buffer[:], msg)
+		if err != nil {
+			return
+		}
+		if msg.StateTransition
+
+	default: panic("Corrupted outerProtoMsgType")
 	}
 
 	//	Logger.Debugln("[Flow " + tdConn.idStr() + "] read\n", hex.Dump(read_buffer[:totalBytesToRead]))
@@ -557,15 +609,7 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 		Logger.Infof("[Flow " + tdConn.idStr() +
 			"] Successfully connected to Tapdance Station!")
 	case MSG_DATA:
-		n = int(readBytesTotal - headerSize)
-		select {
-		case tdConn.readChannel <- read_buffer[:]:
-			Logger.Debugf("[Flow "+tdConn.idStr()+
-				"] Successfully read DATA msg from server", msgLen)
-		case <-tdConn.stopped:
-			return
-			// TODO: add reconnect here?
-		}
+
 	case MSG_CLOSE:
 		err = errors.New("MSG_CLOSE")
 		Logger.Infof("[Flow " + tdConn.idStr() +
