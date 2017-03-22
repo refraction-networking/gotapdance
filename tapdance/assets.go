@@ -1,20 +1,24 @@
 package tapdance
 
 import (
+	"encoding/json"
+	"github.com/pkg/errors"
 	"github.com/zmap/zcrypto/x509"
 	"io/ioutil"
+	"os"
+	"path"
 	"strconv"
 	"sync"
 )
 
 type decoyServer struct {
-	ip  string
-	sni string
+	IP  string `json:"IP"`
+	SNI string `json:"SNI"`
 }
 
 var defaultDecoys = []decoyServer{
-	{ip: "192.122.190.104", sni: "tapdance1.freeaeskey.xyz"},
-	{ip: "192.122.190.105", sni: "tapdance2.freeaeskey.xyz"},
+	{IP: "192.122.190.104", SNI: "tapdance1.freeaeskey.xyz"},
+	{IP: "192.122.190.105", SNI: "tapdance2.freeaeskey.xyz"},
 }
 
 type assets struct {
@@ -25,6 +29,10 @@ type assets struct {
 
 	stationPubkey [32]byte
 	roots         *x509.CertPool
+
+	filenameStationPubkey string
+	filenameRoots         string
+	filenameDecoys        string
 }
 
 var assetsInstance *assets
@@ -44,22 +52,14 @@ func Assets() *assets {
 			stationPubkey: [32]byte{211, 127, 10, 139, 150, 180, 97, 15, 56, 188, 7,
 				155, 7, 102, 41, 34, 70, 194, 210, 170, 50, 53, 234, 49, 42, 240,
 				41, 27, 91, 38, 247, 67},
+			filenameRoots:         "roots",
+			filenameDecoys:        "decoys",
+			filenameStationPubkey: "station_pubkey",
 		}
 		assetsInstance.readConfigs()
 	})
 	return assetsInstance
 }
-
-/*
-TODO:
-- SetDecoys
-- readDecoys
-- saveDecoys
-- SetPubkey
-- savePubkey
-- saveRoots
-- SetRoots
-*/
 
 func (a *assets) GetAssetsDir() string {
 	a.RLock()
@@ -76,31 +76,58 @@ func (a *assets) SetAssetsDir(path string) {
 }
 
 func (a *assets) readConfigs() {
-	pubkeyFilename := a.path + "station_pubkey"
-	rootsFilename := a.path + "roots"
-	//decoysFilename := a.path + "decoys"
-
-	staionPubkey, err := ioutil.ReadFile(pubkeyFilename)
-	if err != nil {
-		Logger.Errorln("Could not read keyfile: " + err.Error())
-	} else if len(staionPubkey) != 32 {
-		Logger.Errorln("Unexpected keyfile length! Expected: 32. Got: " +
-			strconv.Itoa(len(staionPubkey)))
-	} else {
+	readPubkey := func() error {
+		filename := path.Join(a.path, a.filenameStationPubkey)
+		staionPubkey, err := ioutil.ReadFile(filename)
+		if err != nil {
+			return err
+		}
+		if len(staionPubkey) != 32 {
+			return errors.New("Unexpected keyfile length! Expected: 32. Got: " +
+				strconv.Itoa(len(staionPubkey)))
+		}
 		copy(a.stationPubkey[:], staionPubkey[0:32])
+		return nil
 	}
 
-	rootCerts, err := ioutil.ReadFile(rootsFilename)
-	if err != nil {
-		Logger.Errorln("Could not read root ca file: " + err.Error())
-	} else {
+	readRoots := func() error {
+		filename := path.Join(a.path, a.filenameRoots)
+		rootCerts, err := ioutil.ReadFile(filename)
+		if err != nil {
+			return err
+		}
 		roots := x509.NewCertPool()
 		ok := roots.AppendCertsFromPEM(rootCerts)
 		if !ok {
-			Logger.Errorln("Failed to parse root certificates")
+			return errors.New("Failed to parse root certificates")
 		} else {
 			a.roots = roots
 		}
+		return nil
+	}
+
+	readDecoys := func() error {
+		filename := path.Join(a.path, a.filenameDecoys)
+		buf, err := ioutil.ReadFile(filename)
+		if err != nil {
+			return err
+		}
+		err = json.Unmarshal(buf, &a.decoys)
+		return err
+	}
+
+	var err error
+	err = readPubkey()
+	if err != nil {
+		Logger.Warningln("Failed to read keyfile: " + err.Error())
+	}
+	err = readRoots()
+	if err != nil {
+		Logger.Warningln("Failed to read root ca file: " + err.Error())
+	}
+	err = readDecoys()
+	if err != nil {
+		Logger.Warningln("Failed to read decoy file: " + err.Error())
 	}
 }
 
@@ -111,8 +138,8 @@ func (a *assets) GetDecoyAddress() (sni string, addr string) {
 	defer a.RUnlock()
 
 	decoyIndex := getRandInt(0, len(a.decoys)-1)
-	addr = a.decoys[decoyIndex].ip + ":443"
-	sni = a.decoys[decoyIndex].sni
+	addr = a.decoys[decoyIndex].IP + ":443"
+	sni = a.decoys[decoyIndex].SNI
 	return
 }
 
@@ -129,3 +156,62 @@ func (a *assets) GetPubkey() *[32]byte {
 
 	return &(a.stationPubkey)
 }
+
+// Set Public key in persistent way (e.g. store to disk)
+func (a *assets) SetPubkey(pubkey [32]byte) (err error) {
+	a.Lock()
+	defer a.Unlock()
+
+	a.stationPubkey = pubkey
+	err = a.savePubkey()
+	return
+}
+
+// Set decoys in persistent way (e.g. store to disk)
+func (a *assets) SetDecoys(decoys []decoyServer) (err error) {
+	a.Lock()
+	defer a.Unlock()
+
+	a.decoys = decoys
+	err = a.saveDecoys()
+	return
+}
+
+func (a *assets) saveDecoys() error {
+	// TODO: switch from JSON to protobuf
+	buf, err := json.Marshal(a.decoys)
+	if err != nil {
+		return err
+	}
+	filename := path.Join(a.path, a.filenameDecoys)
+	tmpFilename := path.Join(a.path, "."+a.filenameDecoys+".tmp")
+	err = ioutil.WriteFile(tmpFilename, buf[:], 0644)
+	if err != nil {
+		return err
+	}
+	os.Rename(tmpFilename, filename)
+	return nil
+}
+
+func (a *assets) savePubkey() error {
+	filename := path.Join(a.path, a.filenameStationPubkey)
+	tmpFilename := path.Join(a.path, "."+a.filenameStationPubkey+".tmp")
+	err := ioutil.WriteFile(tmpFilename, a.stationPubkey[:], 0644)
+	if err != nil {
+		return err
+	}
+	os.Rename(tmpFilename, filename)
+	return nil
+}
+
+/*
+We probably don't need those functions.
+If we do: how to marshall roots?
+
+func (a *assets) setRoots() error {
+}
+
+func (a *assets) saveRoots() error {
+	a.roots
+}
+*/
