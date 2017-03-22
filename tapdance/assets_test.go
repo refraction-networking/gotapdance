@@ -12,6 +12,7 @@ import (
 )
 
 func TestAssets_Decoys(t *testing.T) {
+	oldpath := Assets().path
 	Assets().saveDecoys()
 	dir1, err := ioutil.TempDir("/tmp/", "decoy1")
 	if err != nil {
@@ -104,11 +105,13 @@ func TestAssets_Decoys(t *testing.T) {
 	os.Remove(path.Join(dir2, Assets().filenameDecoys))
 	os.Remove(dir1)
 	os.Remove(dir2)
-	Assets().SetAssetsDir("./assets/")
+	Assets().SetAssetsDir(oldpath)
 	fmt.Println("TestAssets_Decoys OK")
 }
 
 func TestAssets_Pubkey(t *testing.T) {
+	oldpath := Assets().path
+	Assets().savePubkey()
 	dir1, err := ioutil.TempDir("/tmp/", "pubkey1")
 	if err != nil {
 		fmt.Println(err.Error())
@@ -157,5 +160,6 @@ func TestAssets_Pubkey(t *testing.T) {
 	os.Remove(path.Join(dir2, Assets().filenameStationPubkey))
 	os.Remove(dir1)
 	os.Remove(dir2)
+	Assets().SetAssetsDir(oldpath)
 	fmt.Println("TestAssets_Pubkey OK")
 }
