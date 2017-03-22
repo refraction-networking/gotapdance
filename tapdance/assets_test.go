@@ -12,6 +12,7 @@ import (
 )
 
 func TestAssets_Decoys(t *testing.T) {
+	Assets().saveDecoys()
 	dir1, err := ioutil.TempDir("/tmp/", "decoy1")
 	if err != nil {
 		fmt.Println(err.Error())
@@ -103,6 +104,7 @@ func TestAssets_Decoys(t *testing.T) {
 	os.Remove(path.Join(dir2, Assets().filenameDecoys))
 	os.Remove(dir1)
 	os.Remove(dir2)
+	Assets().SetAssetsDir("./assets/")
 	fmt.Println("TestAssets_Decoys OK")
 }
 
