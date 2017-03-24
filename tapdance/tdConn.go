@@ -19,56 +19,56 @@ import (
 )
 
 type tapdanceConn struct {
-	tcpConn      *net.TCPConn
-	tlsConn      *tls.Conn
-	customDialer func(string, string) (net.Conn, error)
+	tcpConn           *net.TCPConn
+	tlsConn           *tls.Conn
+	customDialer      func(string, string) (net.Conn, error)
 
-	id uint64
-	/* random per-connection (secret) id;
-	   this way, the underlying SSL connection can disconnect
-	   while the client's local conn and station's proxy conn
-	   can stay connected */
-	remoteConnId [16]byte
+	id                uint64
+				      /* random per-connection (secret) id;
+					 this way, the underlying SSL connection can disconnect
+					 while the client's local conn and station's proxy conn
+					 can stay connected */
+	remoteConnId      [16]byte
 
-	maxSend   uint64
-	sentTotal uint64
+	maxSend           uint64
+	sentTotal         uint64
 
-	decoyAddr string // ipv4_addr:port
-	decoySNI  string
+	decoyAddr         string      // ipv4_addr:port
+	decoySNI          string
 
-	_readBuffer  []byte
-	_writeBuffer []byte
+	_readBuffer       []byte
+	_writeBuffer      []byte
 
-	writeMsgSize  int
-	writeMsgIndex int
+	writeMsgSize      int
+	writeMsgIndex     int
 
-	stationPubkey *[32]byte
+	stationPubkey     *[32]byte
 
-	state int32
-	err   error      // closing error
-	errMu sync.Mutex // make it RWMutex and RLock on read?
+	state             int32
+	err               error       // closing error
+	errMu             sync.Mutex  // make it RWMutex and RLock on read?
 
-	readChannel  chan []byte // HAVE TO BE NON-BLOCKING
-	writeChannel chan []byte //
+	readChannel       chan []byte // HAVE TO BE NON-BLOCKING
+	writeChannel      chan []byte //
 
-	readerTimeout <-chan time.Time
-	writerTimeout <-chan time.Time
+	readerTimeout     <-chan time.Time
+	writerTimeout     <-chan time.Time
 
-	// used by 2 engines to communicate /w one another
-	// true is sent upon success
-	readerStopped chan bool
-	doneReconnect chan bool
-	stopped       chan bool
-	closeOnce     sync.Once
+				      // used by 2 engines to communicate /w one another
+				      // true is sent upon success
+	readerStopped     chan bool
+	doneReconnect     chan bool
+	stopped           chan bool
+	closeOnce         sync.Once
 
-	// read_data holds data between Read() calls when the
-	// caller's buffer is to small to receive all the data
-	// read in a message from the station.
-	read_data_buffer []byte
-	read_data_index  int
-	read_data_count  int
+				      // read_data holds data between Read() calls when the
+				      // caller's buffer is to small to receive all the data
+				      // read in a message from the station.
+	read_data_buffer  []byte
+	read_data_index   int
+	read_data_count   int
 
-	// for statistics
+				      // for statistics
 	writeReconnects   int
 	timeoutReconnects int
 }
@@ -79,8 +79,8 @@ Args:
 	customDialer  -- dial with customDialer, could be nil
 */
 func DialTapDance(
-	id uint64,
-	customDialer func(string, string) (net.Conn, error)) (tdConn *tapdanceConn, err error) {
+id uint64,
+customDialer func(string, string) (net.Conn, error)) (tdConn *tapdanceConn, err error) {
 
 	tdConn = new(tapdanceConn)
 
@@ -93,7 +93,7 @@ func DialTapDance(
 	rand.Read(tdConn.remoteConnId[:])
 
 	tdConn._readBuffer = make([]byte, 3) // Only read headers into it
-	tdConn._writeBuffer = make([]byte, 16*1024+20+20+12)
+	tdConn._writeBuffer = make([]byte, 16 * 1024 + 20 + 20 + 12)
 
 	tdConn.read_data_buffer = make([]byte, 2024)
 
@@ -153,7 +153,7 @@ func (tdConn *tapdanceConn) engineMain() {
 		case <-tdConn.stopped:
 			return
 		case <-tdConn.writerTimeout:
-			// TODO <low priority>: check if any data was sent or received
+		// TODO <low priority>: check if any data was sent or received
 			tdConn.timeoutReconnects++
 			tdConn.tryScheduleReconnect()
 			continue
@@ -222,13 +222,13 @@ func (tdConn *tapdanceConn) readSubEngine() {
 			tdConn.tryScheduleReconnect()
 			continue
 		default:
-			_, err = tdConn.read_msg(MSG_DATA)
+			_, err = tdConn.read_msg(S2C_Transition_S2C_NO_CHANGE)
 			if err != nil {
 				if err.Error() == "MSG_CLOSE" {
 					err = io.EOF
 					return
 				}
-				Logger.Debugln("[Flow "+tdConn.idStr()+"] read err", err)
+				Logger.Debugln("[Flow " + tdConn.idStr() + "] read err", err)
 				toReconnect = (err == io.EOF || err == io.ErrUnexpectedEOF)
 				if nErr, ok := err.(*net.OpError); ok {
 					if nErr.Err.Error() == "use of closed network connection" {
@@ -262,7 +262,7 @@ func (tdConn *tapdanceConn) connect() {
 			Logger.Debugf("[Flow " + tdConn.idStr() + "] connect success")
 			atomic.StoreInt32(&tdConn.state, TD_STATE_CONNECTED)
 		} else {
-			Logger.Debugf("[Flow "+tdConn.idStr()+"] connect fail", _err)
+			Logger.Debugf("[Flow " + tdConn.idStr() + "] connect fail", _err)
 			atomic.StoreInt32(&tdConn.state, TD_STATE_CLOSED)
 		}
 		if reconnect {
@@ -290,7 +290,7 @@ func (tdConn *tapdanceConn) connect() {
 			"but state is garbage: " + strconv.FormatUint(uint64(tdConn.state), 10))
 	}
 
-	var expectedMsg uint8
+	var expectedTransition S2C_Transition
 	var connection_attempts int
 
 	// Randomize tdConn.maxSend to avoid heuristics
@@ -298,12 +298,13 @@ func (tdConn *tapdanceConn) connect() {
 
 	if reconnect {
 		connection_attempts = 2
-		expectedMsg = MSG_RECONNECT
+		expectedTransition = S2C_Transition_S2C_CONFIRM_RECONNECT
 		awaitFINTimeout := time.After(waitForFINTimeout * time.Second)
 		readerStopped := false
 		for !readerStopped {
 			select {
-			case _ = <-tdConn.readerStopped: // wait for readEngine to stop
+			case _ = <-tdConn.readerStopped:
+			// wait for readEngine to stop
 				readerStopped = true
 				continue
 			case <-awaitFINTimeout:
@@ -316,7 +317,7 @@ func (tdConn *tapdanceConn) connect() {
 		tdConn.tlsConn.Close()
 	} else {
 		connection_attempts = 6
-		expectedMsg = MSG_INIT
+		expectedTransition = S2C_Transition_S2C_SESSION_INIT
 	}
 
 	for i := 0; i < connection_attempts; i++ {
@@ -383,7 +384,7 @@ func (tdConn *tapdanceConn) connect() {
 			continue
 		}
 
-		_, currErr = tdConn.read_msg(expectedMsg)
+		_, currErr = tdConn.read_msg(expectedTransition)
 		if currErr != nil {
 			str_err := currErr.Error()
 			if strings.Contains(str_err, ": i/o timeout") || // client timed out
@@ -442,7 +443,7 @@ func (tdConn *tapdanceConn) Read(b []byte) (n int, err error) {
 		if n > cap(b) {
 			n = cap(b)
 		}
-		n = copy(b, tdConn.read_data_buffer[tdConn.read_data_index:tdConn.read_data_index+n])
+		n = copy(b, tdConn.read_data_buffer[tdConn.read_data_index:tdConn.read_data_index + n])
 		b = b[:]
 		tdConn.read_data_index += n
 		tdConn.read_data_count -= n
@@ -453,46 +454,18 @@ func (tdConn *tapdanceConn) Read(b []byte) (n int, err error) {
 	return
 }
 
-func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
+func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, err error) {
 	// For each message we first read outer protocol header to see if it's protobuf or data
 
 	var readBytes int
-	var readBytesTotal uint16 // both header and body
-	headerSize := uint16(2)
+	var readBytesTotal uint32 // both header and body
+	headerSize := uint32(2)
 	totalBytesToRead := headerSize // first -- just header, then +body
-	defer func() { n = int(readBytesTotal) }()
+	defer func() {
+		n = int(readBytesTotal)
+	}()
 
-	var msgLen uint32
-	var msgType uint8
-
-	// This function checks if message type, given particular caller, is appropriate.
-	// In case it is appropriate - returns nil, otherwise - the error
-	checkMsgType := func(_actualMsg uint8, _expectedMsg uint8) error {
-		switch _actualMsg {
-		case MSG_RECONNECT:
-			if _expectedMsg == MSG_DATA {
-				return errors.New("Received unexpected RECONNECT message")
-			} else if _expectedMsg == MSG_INIT {
-				return errors.New("Received RECONNECT message instead of INIT")
-			}
-		case MSG_INIT:
-			if _expectedMsg == MSG_DATA {
-				return errors.New("Received INIT message in initialized connection")
-			}
-			if _expectedMsg == MSG_RECONNECT {
-				return errors.New("Received INIT message instead of RECONNECT")
-			}
-		case MSG_DATA:
-			if _expectedMsg == MSG_RECONNECT || _expectedMsg == MSG_INIT {
-				return errors.New("Received DATA message in uninitialized connection")
-			}
-		case MSG_CLOSE:
-		// always appropriate
-		default:
-			return errors.New("Unknown message #" + strconv.FormatUint(uint64(_actualMsg), 10))
-		}
-		return nil
-	}
+	var msgLen uint32 // just the body(e.g. raw data or protobuf)
 
 	/*
 	Each message is a 16-bit net-order int "TL" (type+len), followed by a data blob.
@@ -503,16 +476,16 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
             The blob is a protobuf.
 	*/
 	const (
-		raw_data = iota
-		protobuf
+		msg_raw_data = iota
+		msg_protobuf
 	)
 	var outerProtoMsgType uint8
 
-	//TODO: check FIN+last data
+	//TODO: check FIN+last data case
 	for readBytesTotal < headerSize {
 		readBytes, err = tdConn.tlsConn.Read(tdConn._readBuffer[readBytesTotal:headerSize])
 
-		readBytesTotal += uint16(readBytes)
+		readBytesTotal += uint32(readBytes)
 		if err == io.EOF && readBytesTotal == headerSize {
 			break
 		}
@@ -520,26 +493,31 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 			return
 		}
 	}
-	// Get TIL
-	var typeLen int16
-	err = binary.Read(tdConn._readBuffer[0:2], binary.BigEndian, typeLen)
-	if err != nil {
-		return
+
+	Uint16toInt16 := func(i uint16) int16 {
+		// get your shit together, Golang
+		u := int16(i >> 1)
+		if i & 1 != 0 {
+			u = ^u
+		}
+		return u
 	}
+	// Get TIL
+	typeLen := Uint16toInt16(binary.BigEndian.Uint16(tdConn._readBuffer[0:2]))
 	if typeLen < 0 {
-		outerProtoMsgType = raw_data
-		msgLen = -typeLen
+		outerProtoMsgType = msg_raw_data
+		msgLen = uint32(-typeLen)
 	} else if typeLen > 0 {
-		outerProtoMsgType = protobuf
-		msgLen = typeLen
+		outerProtoMsgType = msg_protobuf
+		msgLen = uint32(typeLen)
 	} else {
 		// protobuf with size over 32KB, not fitting into 2-byte TL
-		outerProtoMsgType = protobuf
+		outerProtoMsgType = msg_protobuf
 		headerSize += 4
 		for readBytesTotal < headerSize {
 			readBytes, err = tdConn.tlsConn.Read(tdConn._readBuffer[readBytesTotal:headerSize])
 
-			readBytesTotal += uint16(readBytes)
+			readBytesTotal += uint32(readBytes)
 			if err == io.EOF && readBytesTotal == headerSize {
 				break
 			}
@@ -549,14 +527,16 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 		}
 		msgLen = binary.BigEndian.Uint32(tdConn._readBuffer[2:6])
 	}
+	Logger.Debugln("[Flow " + tdConn.idStr() + "] typeLen:", typeLen)
+	Logger.Debugln("[Flow " + tdConn.idStr() + "] msgLen:", msgLen)
 
 	totalBytesToRead = headerSize + msgLen
 	read_buffer := make([]byte, msgLen)
 
-	// Get the rest of the message
+	// Get the message itself
 	for readBytesTotal < totalBytesToRead {
-		readBytes, err = tdConn.tlsConn.Read(read_buffer[readBytesTotal-headerSize:msgLen])
-		readBytesTotal += uint16(readBytes)
+		readBytes, err = tdConn.tlsConn.Read(read_buffer[readBytesTotal - headerSize:msgLen])
+		readBytesTotal += uint32(readBytes)
 		if err == io.EOF {
 			break
 		}
@@ -566,54 +546,70 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 	}
 
 	switch outerProtoMsgType {
-	case raw_data:
+	case msg_raw_data:
 		n = int(readBytesTotal - headerSize)
-		select {
-		case tdConn.readChannel <- read_buffer[:]:
-			Logger.Debugf("[Flow "+tdConn.idStr()+
-				"] Successfully read DATA msg from server", msgLen)
-		case <-tdConn.stopped:
-			return
-		}
-	case protobuf:
+			select {
+			case tdConn.readChannel <- read_buffer[:]:
+				Logger.Debugf("[Flow " + tdConn.idStr() +
+					"] Successfully read DATA msg from server", msgLen)
+			case <-tdConn.stopped:
+				return
+			}
+	case msg_protobuf:
 		msg := StationToClient{}
-		err = proto.Unmarshal(read_buffer[:], msg)
+		err = proto.Unmarshal(read_buffer[:], &msg)
 		if err != nil {
 			return
 		}
-		if msg.StateTransition
+
+		stateTransition := msg.GetStateTransition()
+		if expectedTransition != S2C_Transition_S2C_NO_CHANGE {
+			if expectedTransition != stateTransition {
+				err = errors.New("State Transition mismatch! Expected: " +
+					expectedTransition.String() +
+					", but received: " + stateTransition.String())
+				return
+			}
+		}
+		switch stateTransition {
+		case S2C_Transition_S2C_CONFIRM_RECONNECT:
+			fallthrough
+		case S2C_Transition_S2C_SESSION_INIT:
+			var magicVal, expectedMagicVal uint16
+			if len(read_buffer) < 2 {
+				err = errors.New("Message body too short!")
+				return
+			}
+			magicVal = binary.BigEndian.Uint16(read_buffer[:2])
+			expectedMagicVal = uint16(0x2a75)
+			if magicVal != expectedMagicVal {
+				err = errors.New("Magic value mismatch! Expected: " +
+					strconv.FormatUint(uint64(expectedMagicVal), 10) +
+					", but received: " + strconv.FormatUint(uint64(magicVal), 10))
+				return
+			}
+			Logger.Infof("[Flow " + tdConn.idStr() +
+				"] Successfully connected to Tapdance Station!")
+		case S2C_Transition_S2C_SESSION_CLOSE:
+			err = errors.New("MSG_CLOSE")
+			Logger.Infof("[Flow " + tdConn.idStr() +
+				"] received MSG_CLOSE")
+		}
+
+		if confInfo := msg.GetConfigInfo(); confInfo != nil {
+			if pubKey := confInfo.GetDecoyList().GetDefaultPubkey(); pubKey != nil {
+				pubKeyType := pubKey.GetType()
+				switch pubKeyType {
+				case KeyType_AES_GCM_128:
+				// TODO: check size and save it
+				default:
+					errStr := "Recieved PubKey with unsupported type: "
+					Logger.Warningln(errStr + pubKeyType.String())
+				}
+			}
+		}
 
 	default: panic("Corrupted outerProtoMsgType")
-	}
-
-	//	Logger.Debugln("[Flow " + tdConn.idStr() + "] read\n", hex.Dump(read_buffer[:totalBytesToRead]))
-
-	// Process actual message
-	switch msgType {
-	case MSG_RECONNECT:
-		fallthrough
-	case MSG_INIT:
-		var magicVal, expectedMagicVal uint16
-		if len(read_buffer) < 2 {
-			err = errors.New("Message body too short!")
-			return
-		}
-		magicVal = binary.BigEndian.Uint16(read_buffer[:2])
-		expectedMagicVal = uint16(0x2a75)
-		if magicVal != expectedMagicVal {
-			err = errors.New("Magic value mismatch! Expected: " +
-				strconv.FormatUint(uint64(expectedMagicVal), 10) +
-				", but received: " + strconv.FormatUint(uint64(magicVal), 10))
-			return
-		}
-		Logger.Infof("[Flow " + tdConn.idStr() +
-			"] Successfully connected to Tapdance Station!")
-	case MSG_DATA:
-
-	case MSG_CLOSE:
-		err = errors.New("MSG_CLOSE")
-		Logger.Infof("[Flow " + tdConn.idStr() +
-			"] received MSG_CLOSE")
 	}
 	return
 }
@@ -730,7 +726,7 @@ func (tdConn *tapdanceConn) establishTLStoDecoy() (err error) {
 		}
 	} else {
 		dialConn, err = net.DialTimeout("tcp", tdConn.decoyAddr,
-			deadlineTCPtoDecoy*time.Second)
+			deadlineTCPtoDecoy * time.Second)
 		if err != nil {
 			return err
 		}
@@ -797,7 +793,7 @@ func (tdConn *tapdanceConn) prepareTDRequest() (tdRequest string, err error) {
 	tdRequest += getRandPadding(0, 750, 10)
 
 	keystreamOffset := len(tdRequest)
-	keystreamSize := (len(tag)/3+1)*4 + keystreamOffset // we can't use first 2 bits of every byte
+	keystreamSize := (len(tag) / 3 + 1) * 4 + keystreamOffset // we can't use first 2 bits of every byte
 	whole_keystream, err := tdConn.getKeystream(keystreamSize)
 	if err != nil {
 		return
