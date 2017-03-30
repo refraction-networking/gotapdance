@@ -50,8 +50,8 @@ func (TDstate *TapDanceFlow) Redirect() (err error) {
 
 	forwardFromServerToClient := func() {
 		n, _err := io.Copy(TDstate.userConn, TDstate.servConn)
-		Logger.Debugf("[Flow " + strconv.FormatUint(uint64(TDstate.id), 10) +
-			"] forwardFromServerToClient returns, bytes sent: " +
+		Logger.Debugf(TDstate.servConn.idStr() +
+			" forwardFromServerToClient returns, bytes sent: " +
 			strconv.FormatUint(uint64(n), 10))
 		if _err == nil {
 			_err = errors.New("server returned without error")
@@ -62,8 +62,8 @@ func (TDstate *TapDanceFlow) Redirect() (err error) {
 
 	forwardFromClientToServer := func() {
 		n, _err := io.Copy(TDstate.servConn, TDstate.userConn)
-		Logger.Debugf("[Flow " + strconv.FormatUint(uint64(TDstate.id), 10) +
-			"] forwardFromClientToServer returns, bytes sent: " +
+		Logger.Debugf(TDstate.servConn.idStr() +
+			" forwardFromClientToServer returns, bytes sent: " +
 			strconv.FormatUint(uint64(n), 10))
 		if _err == nil {
 			_err = errors.New("StoppedByUser")
