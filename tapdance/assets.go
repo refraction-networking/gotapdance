@@ -76,8 +76,7 @@ func (a *assets) SetAssetsDir(path string) {
 }
 
 func (a *assets) readConfigs() {
-	readPubkey := func() error {
-		filename := path.Join(a.path, a.filenameStationPubkey)
+	readPubkey := func(filename string) error {
 		staionPubkey, err := ioutil.ReadFile(filename)
 		if err != nil {
 			return err
@@ -90,8 +89,7 @@ func (a *assets) readConfigs() {
 		return nil
 	}
 
-	readRoots := func() error {
-		filename := path.Join(a.path, a.filenameRoots)
+	readRoots := func(filename string) error {
 		rootCerts, err := ioutil.ReadFile(filename)
 		if err != nil {
 			return err
@@ -106,8 +104,7 @@ func (a *assets) readConfigs() {
 		return nil
 	}
 
-	readDecoys := func() error {
-		filename := path.Join(a.path, a.filenameDecoys)
+	readDecoys := func(filename string) error {
 		buf, err := ioutil.ReadFile(filename)
 		if err != nil {
 			return err
@@ -117,17 +114,30 @@ func (a *assets) readConfigs() {
 	}
 
 	var err error
-	err = readPubkey()
+	Logger.Infoln("Assets: reading from folder " + a.path)
+
+	pubkeyFilename := path.Join(a.path, a.filenameStationPubkey)
+	err = readPubkey(pubkeyFilename)
 	if err != nil {
 		Logger.Warningln("Failed to read keyfile: " + err.Error())
+	} else {
+		Logger.Infoln("Public key succesfully read from " + pubkeyFilename)
 	}
-	err = readRoots()
+
+	rootsFilename := path.Join(a.path, a.filenameRoots)
+	err = readRoots(rootsFilename)
 	if err != nil {
 		Logger.Warningln("Failed to read root ca file: " + err.Error())
+	} else {
+		Logger.Infoln("X.509 root CAs succesfully read from " + rootsFilename)
 	}
-	err = readDecoys()
+
+	decoyFilename := path.Join(a.path, a.filenameDecoys)
+	err = readDecoys(decoyFilename)
 	if err != nil {
 		Logger.Warningln("Failed to read decoy file: " + err.Error())
+	} else {
+		Logger.Infoln("Decoys successfully read from " + decoyFilename)
 	}
 }
 
