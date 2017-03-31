@@ -15,6 +15,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"encoding/hex"
 )
 
 type tapdanceConn struct {
@@ -341,7 +342,7 @@ func (tdConn *tapdanceConn) connect() {
 			}
 			tdConn.decoySNI, tdConn.decoyAddr = Assets().GetDecoyAddress()
 		}
-
+		Logger.Infoln(tdConn.idStr() + " Attempting to connect to decoy " + tdConn.decoySNI)
 		currErr = tdConn.establishTLStoDecoy()
 		if currErr != nil {
 			Logger.Errorf(tdConn.idStr() + " establishTLStoDecoy(" +
@@ -382,6 +383,8 @@ func (tdConn *tapdanceConn) connect() {
 			continue
 		}
 
+		Logger.Infoln(tdConn.idStr() + " Attempting to connect to TapDance Station" +
+			" with connection ID: " + hex.EncodeToString(tdConn.remoteConnId[:]))
 		tdConn.sentTotal = 0
 		_, currErr = tdConn.write_td([]byte(tdRequest), true)
 		if currErr != nil {
@@ -565,7 +568,7 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 				", but received: " + strconv.FormatUint(uint64(magicVal), 10))
 			return
 		}
-		Logger.Infof(tdConn.idStr() + " Successfully connected to Tapdance Station!")
+		Logger.Infof(tdConn.idStr() + " Successfully connected to TapDance Station!")
 	case MSG_DATA:
 		n = int(readBytesTotal - headerSize)
 			select {
