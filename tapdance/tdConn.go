@@ -51,6 +51,9 @@ type tapdanceConn struct {
 	readChannel       chan []byte // HAVE TO BE NON-BLOCKING
 	writeChannel      chan []byte //
 
+	statsUpload       chan int
+	statsDownload     chan int
+
 	readerTimeout     <-chan time.Time
 	writerTimeout     <-chan time.Time
 
@@ -104,17 +107,21 @@ customDialer func(string, string) (net.Conn, error)) (tdConn *tapdanceConn, err 
 	tdConn.writeChannel = make(chan []byte)
 	tdConn.readChannel = make(chan []byte, 1)
 
+	tdConn.statsUpload = make(chan int, 10)
+	tdConn.statsDownload = make(chan int, 10)
+
 	tdConn.state = TD_STATE_NEW
 	tdConn.connect()
 
 	err = tdConn.err
 	if err == nil {
-		/* If connection was successful, TapDance launches 2 goroutines:
+		/* If connection was successful, TapDance launches 3 goroutines:
 		first one handles sending of the data and does reconnection,
-		second goroutine handles reading.
+		second goroutine handles reading, last one prints bandwidth stats.
 		*/
 		go tdConn.readSubEngine()
 		go tdConn.engineMain()
+		go tdConn.loopPrintBandwidth()
 	}
 	return
 }
@@ -467,6 +474,7 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 	totalBytesToRead := headerSize
 	defer func() {
 		n = int(readBytesTotal)
+		tdConn.statsDownload <-n
 	}()
 
 	var msgLen uint16
@@ -599,6 +607,7 @@ func (tdConn *tapdanceConn) write_td(b []byte, connect bool) (n int, err error) 
 	Logger.Debugf(tdConn.idStr() +
 		" Already sent: " + strconv.FormatUint(tdConn.sentTotal, 10) +
 		". Requested to send: " + strconv.FormatUint(totalToSend, 10))
+	defer func() {tdConn.statsUpload <-n }()
 	if !connect {
 		defer func() {
 			tdConn.sentTotal += uint64(n)
@@ -789,6 +798,49 @@ func (tdConn *tapdanceConn) getError() (err error) {
 	tdConn.errMu.Lock()
 	defer tdConn.errMu.Unlock()
 	return tdConn.err
+}
+
+func (tdConn *tapdanceConn) loopPrintBandwidth() () {
+	getPrettyBandwidth := func(nBytes int) string {
+		var power, remainder int
+		for nBytes > 1024 {
+			remainder = (nBytes % 1024) * 10 / 1024 // single digit after dot
+			nBytes = nBytes / 1024
+			power += 1
+		}
+		str := strconv.Itoa(nBytes) + "." + strconv.Itoa(remainder) + " "
+		switch power {
+		case 0: str += "B/s"
+		case 1: str += "KB/s"
+		case 2: str += "MB/s"
+		case 3: str += "GB/s"
+		case 4: str += "TB/s"
+		default: panic("Unreliastic bandwidth")
+		}
+		return str
+	}
+
+	var totalBytesRead, bytesRead, totalBytesWritten, bytesWritten int
+	var printTimeout <-chan time.Time
+	for atomic.LoadInt32(&tdConn.state) != TD_STATE_CLOSED {
+		if totalBytesWritten == 0 && totalBytesRead == 0 {
+			printTimeout = time.After(1 * time.Second)
+		}
+		// TODO: it's imprecise, but totally good enough
+		select {
+		case bytesRead = <- tdConn.statsDownload:
+			totalBytesRead += bytesRead
+		case bytesWritten = <- tdConn.statsUpload:
+			totalBytesWritten += bytesWritten
+		case <- printTimeout:
+			Logger.Infoln(tdConn.idStr() +
+				" download: " + getPrettyBandwidth(totalBytesRead) +
+				", upload: " + getPrettyBandwidth(totalBytesWritten))
+			totalBytesWritten = 0
+			totalBytesRead = 0
+		}
+		// update ts1
+	}
 }
 
 func (tdConn *tapdanceConn) tryScheduleReconnect() {
