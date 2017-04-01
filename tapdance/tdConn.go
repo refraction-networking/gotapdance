@@ -495,12 +495,12 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 	}
 
 	Uint16toInt16 := func(i uint16) int16 {
-		// get your shit together, Golang
-		u := int16(i >> 1)
-		if i & 1 != 0 {
-			u = ^u
+		pos := int16(i & 32767)
+		neg := int16(0)
+		if i & 32768 != 0 {
+			neg = int16(-32768)
 		}
-		return u
+		return pos + neg
 	}
 	// Get TIL
 	typeLen := Uint16toInt16(binary.BigEndian.Uint16(tdConn._readBuffer[0:2]))
