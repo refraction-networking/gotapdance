@@ -157,6 +157,22 @@ func (a *assets) GetPubkey() *[32]byte {
 	return &(a.stationPubkey)
 }
 
+func (a *assets) getDecoyListGeneration() uint32 {
+	// TODO:
+	return 4
+}
+
+func (a *assets) SetDecoyList(decoyList []byte) (err error) {
+	a.Lock()
+	defer a.Unlock()
+
+	/*
+	a.decoyList = decoyList
+	a.saveDecoyList()
+	*/
+	return nil
+}
+
 // Set Public key in persistent way (e.g. store to disk)
 func (a *assets) SetPubkey(pubkey [32]byte) (err error) {
 	a.Lock()
@@ -175,6 +191,11 @@ func (a *assets) SetDecoys(decoys []decoyServer) (err error) {
 	a.decoys = decoys
 	err = a.saveDecoys()
 	return
+}
+
+func (a *assets) saveDecoyList() error {
+	// TODO
+	return nil
 }
 
 func (a *assets) saveDecoys() error {

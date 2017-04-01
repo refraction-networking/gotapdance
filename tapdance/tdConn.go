@@ -562,6 +562,7 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 			return
 		}
 
+		// handle state transitions
 		stateTransition := msg.GetStateTransition()
 		if expectedTransition != S2C_Transition_S2C_NO_CHANGE {
 			if expectedTransition != stateTransition {
@@ -596,17 +597,25 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 				"] received MSG_CLOSE")
 		}
 
+		// handle ConfigInfo
 		if confInfo := msg.GetConfigInfo(); confInfo != nil {
-			if pubKey := confInfo.GetDecoyList().GetDefaultPubkey(); pubKey != nil {
-				pubKeyType := pubKey.GetType()
-				switch pubKeyType {
-				case KeyType_AES_GCM_128:
-				// TODO: check size and save it
-				default:
-					errStr := "Recieved PubKey with unsupported type: "
-					Logger.Warningln(errStr + pubKeyType.String())
+			// handle DecoyList
+			// TODO: Debugln whole msg
+			if decoysUpd := confInfo.GetDecoyList(); decoysUpd != nil {
+				if decoysUpd.GetGeneration() >= Assets().getDecoyListGeneration() {
+					Assets().SetDecoyList(decoysUpd.GetTlsDecoys())
+					if pubKey := decoysUpd.GetDefaultPubkey(); pubKey != nil {
+						switch pubKey.GetType() {
+						case KeyType_AES_GCM_128:
+							Assets().SetPubkey(pubKey.Key)
+						default:
+							// TODO: print error
+						}
+					}
 				}
 			}
+
+			// handle some future config inside of ConfigInfo
 		}
 
 	default: panic("Corrupted outerProtoMsgType")
