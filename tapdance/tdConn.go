@@ -16,6 +16,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"encoding/hex"
 )
 
 type tapdanceConn struct {
@@ -23,8 +24,10 @@ type tapdanceConn struct {
 	tlsConn           *tls.Conn
 	customDialer      func(string, string) (net.Conn, error)
 
-	id                uint64
-				      /* random per-connection (secret) id;
+	sessionId         uint64      // for logging. Constant for tapdanceConn
+	flowId            int         // for logging. Increments with each attempt to reconnect
+
+					/* random per-connection (secret) id;
 					 this way, the underlying SSL connection can disconnect
 					 while the client's local conn and station's proxy conn
 					 can stay connected */
@@ -50,6 +53,9 @@ type tapdanceConn struct {
 
 	readChannel       chan []byte // HAVE TO BE NON-BLOCKING
 	writeChannel      chan []byte //
+
+	statsUpload       chan int
+	statsDownload     chan int
 
 	readerTimeout     <-chan time.Time
 	writerTimeout     <-chan time.Time
@@ -85,7 +91,8 @@ customDialer func(string, string) (net.Conn, error)) (tdConn *tapdanceConn, err 
 	tdConn = new(tapdanceConn)
 
 	tdConn.customDialer = customDialer
-	tdConn.id = id
+	tdConn.sessionId = id
+	tdConn.flowId = -1
 	tdConn.tlsConn = nil
 
 	tdConn.stationPubkey = Assets().GetPubkey()
@@ -103,17 +110,21 @@ customDialer func(string, string) (net.Conn, error)) (tdConn *tapdanceConn, err 
 	tdConn.writeChannel = make(chan []byte)
 	tdConn.readChannel = make(chan []byte, 1)
 
+	tdConn.statsUpload = make(chan int, 10)
+	tdConn.statsDownload = make(chan int, 10)
+
 	tdConn.state = TD_STATE_NEW
 	tdConn.connect()
 
 	err = tdConn.err
 	if err == nil {
-		/* If connection was successful, TapDance launches 2 goroutines:
+		/* If connection was successful, TapDance launches 3 goroutines:
 		first one handles sending of the data and does reconnection,
-		second goroutine handles reading.
+		second goroutine handles reading, last one prints bandwidth stats.
 		*/
 		go tdConn.readSubEngine()
 		go tdConn.engineMain()
+		go tdConn.loopPrintBandwidth()
 	}
 	return
 }
@@ -121,7 +132,7 @@ customDialer func(string, string) (net.Conn, error)) (tdConn *tapdanceConn, err 
 // Does writing to socket and reconnection
 func (tdConn *tapdanceConn) engineMain() {
 	defer func() {
-		Logger.Debugln("[Flow " + tdConn.idStr() + "] exit engineMain()")
+		Logger.Debugln(tdConn.idStr() + " exit engineMain()")
 		close(tdConn.doneReconnect)
 		tdConn.Close()
 	}()
@@ -130,8 +141,8 @@ func (tdConn *tapdanceConn) engineMain() {
 		switch atomic.LoadInt32(&tdConn.state) {
 		case TD_STATE_RECONNECT:
 			tdConn.tcpConn.CloseWrite()
-			Logger.Debugln("[Flow " + tdConn.idStr() + "] write closed")
-			Logger.Infoln("[Flow " + tdConn.idStr() + "] reconnecting!" +
+			Logger.Debugln(tdConn.idStr() + " write closed")
+			Logger.Infoln(tdConn.idStr() + " reconnecting!" +
 				" write_total: " + strconv.Itoa(tdConn.writeReconnects) +
 				" timeout_total: " + strconv.Itoa(tdConn.timeoutReconnects))
 			tdConn.connect()
@@ -161,7 +172,7 @@ func (tdConn *tapdanceConn) engineMain() {
 			tdConn.writeMsgSize = len(tdConn._writeBuffer)
 			_, err := tdConn.write_td(tdConn._writeBuffer[:tdConn.writeMsgSize], false)
 			if err != nil {
-				Logger.Debugln("[Flow " + tdConn.idStr() + "] write_td() " +
+				Logger.Debugln(tdConn.idStr() + " write_td() " +
 					"failed with " + err.Error())
 				tdConn.setError(err, false)
 				return
@@ -175,7 +186,7 @@ func (tdConn *tapdanceConn) readSubEngine() {
 	var err error
 	defer func() {
 		tdConn.setError(err, false)
-		Logger.Debugln("[Flow " + tdConn.idStr() + "] exit readSubEngine()")
+		Logger.Debugln(tdConn.idStr() + " exit readSubEngine()")
 		tdConn.Close()
 		close(tdConn.readerStopped)
 		close(tdConn.readChannel)
@@ -228,7 +239,7 @@ func (tdConn *tapdanceConn) readSubEngine() {
 					err = io.EOF
 					return
 				}
-				Logger.Debugln("[Flow " + tdConn.idStr() + "] read err", err)
+				Logger.Debugln(tdConn.idStr() + " read err", err)
 				toReconnect = (err == io.EOF || err == io.ErrUnexpectedEOF)
 				if nErr, ok := err.(*net.OpError); ok {
 					if nErr.Err.Error() == "use of closed network connection" {
@@ -239,7 +250,7 @@ func (tdConn *tapdanceConn) readSubEngine() {
 				if toReconnect {
 					continue
 				} else {
-					Logger.Debugln("[Flow " + tdConn.idStr() + "] read_msg() " +
+					Logger.Debugln(tdConn.idStr() + " read_msg() " +
 						"failed with " + err.Error())
 					return
 				}
@@ -259,10 +270,10 @@ func (tdConn *tapdanceConn) connect() {
 		_err := tdConn.getError()
 		connectOk := (_err == nil)
 		if connectOk {
-			Logger.Debugf("[Flow " + tdConn.idStr() + "] connect success")
+			Logger.Debugf(tdConn.idStr() + " connect success")
 			atomic.StoreInt32(&tdConn.state, TD_STATE_CONNECTED)
 		} else {
-			Logger.Debugf("[Flow " + tdConn.idStr() + "] connect fail", _err)
+			Logger.Debugf(tdConn.idStr() + " connect fail", _err)
 			atomic.StoreInt32(&tdConn.state, TD_STATE_CLOSED)
 		}
 		if reconnect {
@@ -280,13 +291,13 @@ func (tdConn *tapdanceConn) connect() {
 	case TD_STATE_NEW:
 		reconnect = false
 	case TD_STATE_CONNECTED:
-		Logger.Errorf("Flow " + tdConn.idStr() + "] called reconnect" +
+		Logger.Errorf(tdConn.idStr() + " called reconnect" +
 			", but state is TD_STATE_CONNECTED")
 	case TD_STATE_CLOSED:
-		Logger.Errorf("Flow " + tdConn.idStr() + "] called reconnect" +
+		Logger.Errorf(tdConn.idStr() + " called reconnect" +
 			"but state is TD_STATE_CLOSED")
 	default:
-		Logger.Errorf("Flow " + tdConn.idStr() + "] called reconnect" +
+		Logger.Errorf(tdConn.idStr() + " called reconnect" +
 			"but state is garbage: " + strconv.FormatUint(uint64(tdConn.state), 10))
 	}
 
@@ -308,7 +319,7 @@ func (tdConn *tapdanceConn) connect() {
 				readerStopped = true
 				continue
 			case <-awaitFINTimeout:
-				Logger.Errorf("[Flow " + tdConn.idStr() + "] FIN await timeout!")
+				Logger.Errorf(tdConn.idStr() + " FIN await timeout!")
 				tdConn.tlsConn.Close()
 			case <-tdConn.stopped:
 				return
@@ -321,6 +332,7 @@ func (tdConn *tapdanceConn) connect() {
 	}
 
 	for i := 0; i < connection_attempts; i++ {
+		tdConn.flowId ++
 		if !reconnect {
 			// sleep to prevent overwhelming decoy servers
 			if waitTime := sleepBeforeConnect(i); waitTime != nil {
@@ -332,16 +344,15 @@ func (tdConn *tapdanceConn) connect() {
 			}
 			tdConn.decoySNI, tdConn.decoyAddr = Assets().GetDecoyAddress()
 		}
-
+		Logger.Infoln(tdConn.idStr() + " Attempting to connect to decoy " + tdConn.decoySNI)
 		currErr = tdConn.establishTLStoDecoy()
 		if currErr != nil {
-			Logger.Errorf("[Flow " + tdConn.idStr() + "] establishTLStoDecoy(" +
+			Logger.Errorf(tdConn.idStr() + " establishTLStoDecoy(" +
 				tdConn.decoySNI + "," + tdConn.decoyAddr +
 				") failed with " + currErr.Error())
 			continue
 		} else {
-			Logger.Infof("[Flow " + tdConn.idStr() +
-				"] Connected to decoy " + tdConn.decoySNI)
+			Logger.Infof(tdConn.idStr() + " Connected to decoy " + tdConn.decoySNI)
 		}
 
 		// Check if cipher is supported
@@ -354,8 +365,8 @@ func (tdConn *tapdanceConn) connect() {
 			return false
 		}
 		if !cipherIsSupported(tdConn.tlsConn.ConnectionState().CipherSuite) {
-			Logger.Errorf("[Flow " + tdConn.idStr() +
-				"] decoy " + tdConn.decoySNI + ", offered unsupported cipher #" +
+			Logger.Errorf(tdConn.idStr() + " decoy " + tdConn.decoySNI +
+				", offered unsupported cipher #" +
 				strconv.FormatUint(uint64(tdConn.tlsConn.ConnectionState().CipherSuite), 10))
 			currErr = errors.New("Unsupported cipher.")
 			tdConn.tlsConn.Close()
@@ -366,20 +377,21 @@ func (tdConn *tapdanceConn) connect() {
 
 		var tdRequest string
 		tdRequest, currErr = tdConn.prepareTDRequest()
-		Logger.Debugf("[Flow " + tdConn.idStr() +
-			"] Prepared initial TD request:" + tdRequest)
+		Logger.Debugf(tdConn.idStr() + " Prepared initial TD request:" + tdRequest)
 		if currErr != nil {
-			Logger.Errorf("[Flow " + tdConn.idStr() +
-				"] Preparation of initial TD request failed with " + currErr.Error())
+			Logger.Errorf(tdConn.idStr() +
+				" Preparation of initial TD request failed with " + currErr.Error())
 			tdConn.tlsConn.Close()
 			continue
 		}
 
+		Logger.Infoln(tdConn.idStr() + " Attempting to connect to TapDance Station" +
+			" with connection ID: " + hex.EncodeToString(tdConn.remoteConnId[:]))
 		tdConn.sentTotal = 0
 		_, currErr = tdConn.write_td([]byte(tdRequest), true)
 		if currErr != nil {
-			Logger.Errorf("[Flow " + tdConn.idStr() +
-				"] Could not send initial TD request, error: " + currErr.Error())
+			Logger.Errorf(tdConn.idStr() +
+				" Could not send initial TD request, error: " + currErr.Error())
 			tdConn.tlsConn.Close()
 			continue
 		}
@@ -391,12 +403,11 @@ func (tdConn *tapdanceConn) connect() {
 				currErr.Error() == "EOF" {
 				// decoy timed out
 				currErr = errors.New("TapDance station didn't pick up the request: " + str_err)
-				Logger.Errorf("[Flow " + tdConn.idStr() +
-					"] " + currErr.Error())
+				Logger.Errorf(tdConn.idStr() + " " + currErr.Error())
 			} else {
 				// any other error will be fatal
-				Logger.Errorf("[Flow " + tdConn.idStr() +
-					"] fatal error reading from TapDance station: " +
+				Logger.Errorf(tdConn.idStr() +
+					" fatal error reading from TapDance station: " +
 					currErr.Error())
 				tdConn.setError(currErr, false)
 				return
@@ -644,9 +655,10 @@ func (tdConn *tapdanceConn) Write(b []byte) (n int, err error) {
 func (tdConn *tapdanceConn) write_td(b []byte, connect bool) (n int, err error) {
 	totalToSend := uint64(len(b))
 
-	Logger.Debugf("[Flow " + tdConn.idStr() +
-		"] Already sent: " + strconv.FormatUint(tdConn.sentTotal, 10) +
+	Logger.Debugf(tdConn.idStr() +
+		" Already sent: " + strconv.FormatUint(tdConn.sentTotal, 10) +
 		". Requested to send: " + strconv.FormatUint(totalToSend, 10))
+	defer func() {tdConn.statsUpload <-n }()
 	if !connect {
 		defer func() {
 			tdConn.sentTotal += uint64(n)
@@ -676,8 +688,7 @@ func (tdConn *tapdanceConn) write_td(b []byte, connect bool) (n int, err error) 
 		tdConn.tryScheduleReconnect()
 		if tdConn.sentTotal != 0 {
 			// reconnect right away
-			Logger.Infof("[Flow " + tdConn.idStr() +
-				"] triggered preemptive reconnect in Write()")
+			Logger.Infof(tdConn.idStr() + " triggered preemptive reconnect in Write()")
 			return
 		} else {
 			// split buffer in chunks and reconnect after
@@ -747,7 +758,7 @@ func (tdConn *tapdanceConn) establishTLStoDecoy() (err error) {
 			dialConn.Close()
 			return
 		}
-		Logger.Infoln("[Flow " + tdConn.idStr() + "]: SNI was nil. Setting it to" +
+		Logger.Infoln(tdConn.idStr() + ": SNI was nil. Setting it to" +
 			config.ServerName)
 	}
 	tdConn.tlsConn = tls.Client(dialConn, &config)
@@ -816,7 +827,8 @@ func (tdConn *tapdanceConn) prepareTDRequest() (tdRequest string, err error) {
 }
 
 func (tdConn *tapdanceConn) idStr() string {
-	return strconv.FormatUint(uint64(tdConn.id), 10)
+	return "[Session " + strconv.FormatUint(uint64(tdConn.sessionId), 10) + ", " +
+		"Flow " + strconv.Itoa(tdConn.flowId) + "]"
 }
 
 func (tdConn *tapdanceConn) setError(err error, overwrite bool) {
@@ -837,6 +849,49 @@ func (tdConn *tapdanceConn) getError() (err error) {
 	tdConn.errMu.Lock()
 	defer tdConn.errMu.Unlock()
 	return tdConn.err
+}
+
+func (tdConn *tapdanceConn) loopPrintBandwidth() () {
+	getPrettyBandwidth := func(nBytes int) string {
+		var power, remainder int
+		for nBytes > 1024 {
+			remainder = (nBytes % 1024) * 10 / 1024 // single digit after dot
+			nBytes = nBytes / 1024
+			power += 1
+		}
+		str := strconv.Itoa(nBytes) + "." + strconv.Itoa(remainder) + " "
+		switch power {
+		case 0: str += "B/s"
+		case 1: str += "KB/s"
+		case 2: str += "MB/s"
+		case 3: str += "GB/s"
+		case 4: str += "TB/s"
+		default: panic("Unreliastic bandwidth")
+		}
+		return str
+	}
+
+	var totalBytesRead, bytesRead, totalBytesWritten, bytesWritten int
+	var printTimeout <-chan time.Time
+	for atomic.LoadInt32(&tdConn.state) != TD_STATE_CLOSED {
+		if totalBytesWritten == 0 && totalBytesRead == 0 {
+			printTimeout = time.After(1 * time.Second)
+		}
+		// TODO: it's imprecise, but totally good enough
+		select {
+		case bytesRead = <- tdConn.statsDownload:
+			totalBytesRead += bytesRead
+		case bytesWritten = <- tdConn.statsUpload:
+			totalBytesWritten += bytesWritten
+		case <- printTimeout:
+			Logger.Infoln(tdConn.idStr() +
+				" download: " + getPrettyBandwidth(totalBytesRead) +
+				", upload: " + getPrettyBandwidth(totalBytesWritten))
+			totalBytesWritten = 0
+			totalBytesRead = 0
+		}
+		// update ts1
+	}
 }
 
 func (tdConn *tapdanceConn) tryScheduleReconnect() {

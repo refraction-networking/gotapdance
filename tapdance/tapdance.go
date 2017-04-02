@@ -133,17 +133,17 @@ func (proxy *TapdanceProxy) handleUserConn(userConn net.Conn) {
 	// Initial request is not lost, because we still haven't read anything from client socket
 	// So we just start Redirecting (client socket) <-> (server socket)
 	if err = tdState.Redirect(); err != nil {
-		Logger.Errorf("[Flow " + strconv.FormatUint(uint64(tdState.id), 10) +
+		Logger.Errorf("[Session " + strconv.FormatUint(uint64(tdState.id), 10) +
 			"] Shut down with error: " + err.Error())
 	} else {
-		Logger.Infof("[Flow " + strconv.FormatUint(uint64(tdState.id), 10) +
+		Logger.Infof("[Session " + strconv.FormatUint(uint64(tdState.id), 10) +
 			"] Closed gracefully.")
 	}
 	return
 }
 
 func (proxy *TapdanceProxy) GetStatistics() (statistics string) {
-	statistics = "Flows total: " +
+	statistics = "Sessions total: " +
 		strconv.FormatUint(uint64(proxy.countTunnels.get()), 10)
 	statistics += ". Not picked up: " +
 		strconv.FormatUint(uint64(proxy.notPickedUp.get()), 10)
