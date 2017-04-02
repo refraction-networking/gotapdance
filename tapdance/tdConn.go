@@ -431,11 +431,10 @@ func (tdConn *tapdanceConn) connect() {
 }
 
 // Read reads data from the connection.
-// Read can be made to time out and return a Error with Timeout() == true
+// TODO: Read can be made to time out and return a Error with Timeout() == true
 // after a fixed time limit; see SetDeadline and SetReadDeadline.
+// TODO: Ideally should support multiple readers
 func (tdConn *tapdanceConn) Read(b []byte) (n int, err error) {
-	// TODO: Doesn't support multiple readers
-
 	// If there's no ready data in buffer - get some
 	if tdConn.read_data_count == 0 {
 		var open bool
@@ -636,19 +635,37 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 }
 
 // Write writes data to the connection.
-// Write can be made to time out and return a Error with Timeout() == true
+// TODO: Write can be made to time out and return a Error with Timeout() == true
 // after a fixed time limit; see SetDeadline and SetWriteDeadline.
-func (tdConn *tapdanceConn) Write(b []byte) (n int, err error) {
-	// TODO: why does it break if I don't make a copy here?
-	bb := make([]byte, len(b))
-	copy(bb, b)
-	select {
-	case tdConn.writeChannel <- bb:
-		n = len(bb)
-	case <-tdConn.stopped:
+// TODO: Ideally should support multiple readers
+func (tdConn *tapdanceConn) Write(b []byte) (sentTotal int, err error) {
+	writeBuf := func(bChunk []byte) (n int, _err error) {
+		bufSend := new(bytes.Buffer) // final buffer with outer header that gets sent
+		bufSend.Grow(2 + len(bChunk)) // to avoid double allocation
+		// add outer protocol header (positive TypeLen for raw data
+		if _err = binary.Write(bufSend, binary.BigEndian, int16(len(bChunk))); _err != nil {
+			return
+		}
+		bufSend.Write(bChunk[:])
+		select {
+		case tdConn.writeChannel <- bufSend.Bytes():
+			n = bufSend.Len()
+		case <-tdConn.stopped:
+		}
+		if n == 0 {
+			_err = tdConn.getError()
+		}
+		return
 	}
-	if n == 0 {
-		err = tdConn.getError()
+	const maxInt16 = int16(^uint16(0) >> 1) // max msg size -> might have to chunk
+	totalToSend := len(b)
+
+	for sentCurr := 0; sentTotal < totalToSend; sentTotal += sentCurr {
+		if totalToSend - sentTotal < int(maxInt16) {
+			sentCurr, err = writeBuf(b[sentCurr:totalToSend])
+		} else {
+			sentCurr, err = writeBuf(b[sentCurr:sentCurr + int(maxInt16)])
+		}
 	}
 	return
 }
