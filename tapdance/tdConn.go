@@ -614,11 +614,12 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 			// TODO: Debugln whole msg
 			if decoysUpd := confInfo.GetDecoyList(); decoysUpd != nil {
 				if decoysUpd.GetGeneration() >= Assets().getDecoyListGeneration() {
-					Assets().SetDecoyList(decoysUpd.GetTlsDecoys())
+					// Assets().SetDecoyList(decoysUpd.GetTlsDecoys()) make decoyList type []TLSDecoySpec
 					if pubKey := decoysUpd.GetDefaultPubkey(); pubKey != nil {
 						switch pubKey.GetType() {
 						case KeyType_AES_GCM_128:
-							Assets().SetPubkey(pubKey.Key)
+							// TODO: make [32]byte from pubKey.GetKey()
+							// Assets().SetPubkey(pubKey.GetKey())
 						default:
 							// TODO: print error
 						}
