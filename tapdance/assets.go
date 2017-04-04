@@ -38,7 +38,8 @@ var assetsOnce sync.Once
 // 3) "roots" contains x509 roots
 func Assets() *assets {
 	initTLSDecoySpec := func(ip string, sni string) *TLSDecoySpec {
-		ipUint32 := binary.BigEndian.Uint32(net.ParseIP(ip))
+		ipUint32 := binary.BigEndian.Uint32(net.ParseIP(ip).To4())
+		Logger.Errorln("ipUint32", ipUint32)
 		tlsDecoy := TLSDecoySpec{Hostname: &sni,
 			Ipv4Addr: &ipUint32}
 		return &tlsDecoy
@@ -160,10 +161,10 @@ func (a *assets) GetDecoyAddress() (sni string, addr string) {
 	defer a.RUnlock()
 
 	decoyIndex := getRandInt(0, len(a.decoyUpd.TlsDecoys)-1)
-	ip := net.IP{}
+	ip := make(net.IP, 4)
 	binary.BigEndian.PutUint32(ip, a.decoyUpd.TlsDecoys[decoyIndex].GetIpv4Addr())
 	// TODO: what checks need to be done, and what's guaranteed?
-	addr = ip.String() + ":443"
+	addr = ip.To4().String() + ":443"
 	sni = a.decoyUpd.TlsDecoys[decoyIndex].GetHostname()
 	return
 }
