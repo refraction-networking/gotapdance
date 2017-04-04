@@ -140,6 +140,7 @@ func (tdConn *tapdanceConn) engineMain() {
 	for {
 		switch atomic.LoadInt32(&tdConn.state) {
 		case TD_STATE_RECONNECT:
+			tdConn.writeTransition(C2S_Transition_C2S_EXPECT_RECONNECT)
 			tdConn.tcpConn.CloseWrite()
 			Logger.Debugln(tdConn.idStr() + " write closed")
 			Logger.Infoln(tdConn.idStr() + " reconnecting!" +
@@ -154,7 +155,7 @@ func (tdConn *tapdanceConn) engineMain() {
 
 		// If just reconnected, but still have user outgoing user data - send it
 		if tdConn.writeMsgSize != 0 {
-			_, _ = tdConn.write_td(tdConn._writeBuffer[tdConn.writeMsgIndex:tdConn.writeMsgSize], false)
+			_, _ = tdConn.writeRaw(tdConn._writeBuffer[tdConn.writeMsgIndex:tdConn.writeMsgSize], false)
 			if atomic.LoadInt32(&tdConn.state) != TD_STATE_CONNECTED {
 				continue
 			}
@@ -170,7 +171,7 @@ func (tdConn *tapdanceConn) engineMain() {
 			continue
 		case tdConn._writeBuffer = <-tdConn.writeChannel:
 			tdConn.writeMsgSize = len(tdConn._writeBuffer)
-			_, err := tdConn.write_td(tdConn._writeBuffer[:tdConn.writeMsgSize], false)
+			_, err := tdConn.writeRaw(tdConn._writeBuffer[:tdConn.writeMsgSize], false)
 			if err != nil {
 				Logger.Debugln(tdConn.idStr() + " write_td() " +
 					"failed with " + err.Error())
@@ -388,7 +389,7 @@ func (tdConn *tapdanceConn) connect() {
 		Logger.Infoln(tdConn.idStr() + " Attempting to connect to TapDance Station" +
 			" with connection ID: " + hex.EncodeToString(tdConn.remoteConnId[:]))
 		tdConn.sentTotal = 0
-		_, currErr = tdConn.write_td([]byte(tdRequest), true)
+		_, currErr = tdConn.writeRaw([]byte(tdRequest), true)
 		if currErr != nil {
 			Logger.Errorf(tdConn.idStr() +
 				" Could not send initial TD request, error: " + currErr.Error())
@@ -537,8 +538,8 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 		}
 		msgLen = binary.BigEndian.Uint32(tdConn._readBuffer[2:6])
 	}
-	Logger.Debugln("[Flow " + tdConn.idStr() + "] typeLen:", typeLen)
-	Logger.Debugln("[Flow " + tdConn.idStr() + "] msgLen:", msgLen)
+	Logger.Debugln(tdConn.idStr() + " typeLen:", typeLen)
+	Logger.Debugln(tdConn.idStr() + " msgLen:", msgLen)
 
 	totalBytesToRead = headerSize + msgLen
 	read_buffer := make([]byte, msgLen)
@@ -560,8 +561,8 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 		n = int(readBytesTotal - headerSize)
 			select {
 			case tdConn.readChannel <- read_buffer[:]:
-				Logger.Debugf("[Flow " + tdConn.idStr() +
-					"] Successfully read DATA msg from server", msgLen)
+				Logger.Debugf(tdConn.idStr() +
+					" Successfully read DATA msg from server", msgLen)
 			case <-tdConn.stopped:
 				return
 			}
@@ -599,12 +600,28 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 					", but received: " + strconv.FormatUint(uint64(magicVal), 10))
 				return
 			}
-			Logger.Infof("[Flow " + tdConn.idStr() +
-				"] Successfully connected to Tapdance Station!")
+			Logger.Infof(tdConn.idStr() +
+				" Successfully connected to TapDance Station!")
 		case S2C_Transition_S2C_SESSION_CLOSE:
 			err = errors.New("MSG_CLOSE")
-			Logger.Infof("[Flow " + tdConn.idStr() +
-				"] received MSG_CLOSE")
+			Logger.Infof(tdConn.idStr() + " received MSG_CLOSE")
+		}
+
+		// Helper functions
+		handlePubKeyUpdate := func(pKey *PubKey) {
+			keyType := pKey.GetType()
+			switch keyType {
+			case KeyType_AES_GCM_128:
+				var newPubKey [32]byte
+				copy(newPubKey[:], pKey.Key)
+				Assets().SetPubkey(newPubKey)
+			default:
+				Logger.Errorln(tdConn.idStr() +
+					" received pubkey update with unsupported key type: " +
+					keyType.String())
+			}
+		}
+		handleDecoysUpdate := func(decoys []*TLSDecoySpec) {
 		}
 
 		// handle ConfigInfo
@@ -615,13 +632,10 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 				if decoysUpd.GetGeneration() >= Assets().getDecoyListGeneration() {
 					// Assets().SetDecoyList(decoysUpd.GetTlsDecoys()) make decoyList type []TLSDecoySpec
 					if pubKey := decoysUpd.GetDefaultPubkey(); pubKey != nil {
-						switch pubKey.GetType() {
-						case KeyType_AES_GCM_128:
-							// TODO: make [32]byte from pubKey.GetKey()
-							// Assets().SetPubkey(pubKey.GetKey())
-						default:
-							// TODO: print error
-						}
+						handlePubKeyUpdate(pubKey)
+					}
+					if decoys := decoysUpd.GetTlsDecoys(); decoys != nil {
+						handleDecoysUpdate(decoys)
 					}
 				}
 			}
@@ -642,8 +656,8 @@ func (tdConn *tapdanceConn) Write(b []byte) (sentTotal int, err error) {
 	writeBuf := func(bChunk []byte) (n int, _err error) {
 		bufSend := new(bytes.Buffer) // final buffer with outer header that gets sent
 		bufSend.Grow(2 + len(bChunk)) // to avoid double allocation
-		// add outer protocol header (positive TypeLen for raw data
-		if _err = binary.Write(bufSend, binary.BigEndian, int16(len(bChunk))); _err != nil {
+		// add outer protocol header (positive TypeLen for raw data)
+		if _err = binary.Write(bufSend, binary.BigEndian, int16(-len(bChunk))); _err != nil {
 			return
 		}
 		bufSend.Write(bChunk[:])
@@ -657,7 +671,6 @@ func (tdConn *tapdanceConn) Write(b []byte) (sentTotal int, err error) {
 		}
 		return
 	}
-	const maxInt16 = int16(^uint16(0) >> 1) // max msg size -> might have to chunk
 	totalToSend := len(b)
 
 	for sentCurr := 0; sentTotal < totalToSend; sentTotal += sentCurr {
@@ -670,7 +683,7 @@ func (tdConn *tapdanceConn) Write(b []byte) (sentTotal int, err error) {
 	return
 }
 
-func (tdConn *tapdanceConn) write_td(b []byte, connect bool) (n int, err error) {
+func (tdConn *tapdanceConn) writeRaw(b []byte, connect bool) (n int, err error) {
 	totalToSend := uint64(len(b))
 
 	Logger.Debugf(tdConn.idStr() +
@@ -729,29 +742,42 @@ func (tdConn *tapdanceConn) write_td(b []byte, connect bool) (n int, err error) 
 	return
 }
 
-// List of actually supported ciphers(not a list of offered ciphers!)
-// Essentially all AES GCM ciphers, except for ANON and PSK
-// ANON are too dangerous in our setting
-// PSK might actually work, but are out of scope
-// Maybe also get rid of DSS?
-var TDSupportedCiphers = []uint16{
-	tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-	tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-	tls.TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256,
-	tls.TLS_ECDH_ECDSA_WITH_AES_256_GCM_SHA384,
-	tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-	tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-	tls.TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256,
-	tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
-	tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
-	tls.TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
-	tls.TLS_DHE_RSA_WITH_AES_256_GCM_SHA384,
-	tls.TLS_DH_RSA_WITH_AES_128_GCM_SHA256,
-	tls.TLS_DH_RSA_WITH_AES_256_GCM_SHA384,
-	tls.TLS_DHE_DSS_WITH_AES_128_GCM_SHA256,
-	tls.TLS_DHE_DSS_WITH_AES_256_GCM_SHA384,
-	tls.TLS_DH_DSS_WITH_AES_128_GCM_SHA256,
-	tls.TLS_DH_DSS_WITH_AES_256_GCM_SHA384,
+func (tdConn *tapdanceConn) writeTransition(transition C2S_Transition) (err error) {
+	msg := ClientToStation{StateTransition: &transition}
+	return tdConn.writeProto(msg)
+}
+
+func (tdConn *tapdanceConn) writeProto(msg ClientToStation) (err error) {
+	msgBytes, err := proto.Marshal(&msg)
+	if err != nil {
+		return
+	}
+
+	bufSend := new(bytes.Buffer) // final buffer with outer header that gets sent
+	/*
+	Each message is a 16-bit net-order int "TL" (type+len), followed by a data blob.
+	If TL is negative, the blob is pure app data, with length abs(TL).
+	If TL is positive, the blob is a protobuf, with length TL.
+	If TL is 0, then read the following 4 bytes. Those 4 bytes are a net-order u32.
+            This u32 is the length of the blob, which begins after this u32.
+            The blob is a protobuf.
+	*/
+
+	if len(msgBytes) <= int(maxInt16) {
+		bufSend.Grow(2 + len(msgBytes)) // to avoid double allocation
+		if err = binary.Write(bufSend, binary.BigEndian, int16(len(msgBytes))); err != nil {
+			return
+		}
+	} else {
+		bufSend.Grow(2 + 4 + len(msgBytes)) // to avoid double allocation
+		bufSend.Write([]byte{0, 0})
+		if err = binary.Write(bufSend, binary.BigEndian, int32(len(msgBytes))); err != nil {
+			return
+		}
+	}
+	bufSend.Write(msgBytes)
+	_, err = tdConn.tlsConn.Write(bufSend.Bytes())
+	return
 }
 
 func (tdConn *tapdanceConn) establishTLStoDecoy() (err error) {
@@ -908,7 +934,6 @@ func (tdConn *tapdanceConn) loopPrintBandwidth() () {
 			totalBytesWritten = 0
 			totalBytesRead = 0
 		}
-		// update ts1
 	}
 }
 
@@ -935,6 +960,7 @@ func (tdConn *tapdanceConn) serverRandom() []byte {
 // Close closes the connection.
 // Any blocked Read or Write operations will be unblocked and return errors.
 func (tdConn *tapdanceConn) Close() (err error) {
+	tdConn.writeTransition(C2S_Transition_C2S_SESSION_CLOSE)
 	tdConn.setError(errors.New("Forced shutdown by user"), false)
 	tdConn.closeOnce.Do(func() {
 		close(tdConn.stopped)

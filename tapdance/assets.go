@@ -1,7 +1,6 @@
 package tapdance
 
 import (
-	"encoding/json"
 	"github.com/pkg/errors"
 	"github.com/zmap/zcrypto/x509"
 	"io/ioutil"
@@ -9,25 +8,18 @@ import (
 	"path"
 	"strconv"
 	"sync"
+	"net"
+	"encoding/binary"
+	"github.com/golang/protobuf/proto"
 )
-
-type decoyServer struct {
-	IP  string `json:"IP"`
-	SNI string `json:"SNI"`
-}
-
-var defaultDecoys = []decoyServer{
-	{IP: "192.122.190.104", SNI: "tapdance1.freeaeskey.xyz"},
-	{IP: "192.122.190.105", SNI: "tapdance2.freeaeskey.xyz"},
-}
 
 type assets struct {
 	sync.RWMutex
 	once   sync.Once
 	path   string
-	decoys []decoyServer
 
-	stationPubkey [32]byte
+	decoyUpd DecoysUpdate
+
 	roots         *x509.CertPool
 
 	filenameStationPubkey string
@@ -45,13 +37,32 @@ var assetsOnce sync.Once
 // 2) "station_pubkey" contains TapDance station Public Key
 // 3) "roots" contains x509 roots
 func Assets() *assets {
+	initTLSDecoySpec := func(ip string, sni string) *TLSDecoySpec {
+		ipUint32 := binary.BigEndian.Uint32(net.ParseIP(ip))
+		tlsDecoy := TLSDecoySpec{Hostname: &sni,
+			Ipv4Addr: &ipUint32}
+		return &tlsDecoy
+	}
+
+	var defaultDecoys = []*TLSDecoySpec{
+		initTLSDecoySpec("192.122.190.104", "tapdance1.freeaeskey.xyz"),
+		initTLSDecoySpec("192.122.190.105", "tapdance2.freeaeskey.xyz"),
+	}
+	aes_gcm_128 := KeyType_AES_GCM_128
+	defaultPubkey := PubKey{Key: []byte{211, 127, 10, 139, 150, 180, 97,
+		15, 56, 188, 7, 155, 7, 102, 41, 34, 70, 194, 210, 170, 50,
+		53, 234, 49, 42, 240, 41, 27, 91, 38, 247, 67},
+		Type: &aes_gcm_128}
+	defaultGeneration := uint32(0)
+
+	defaultDecoyUpd := DecoysUpdate{TlsDecoys: defaultDecoys,
+		DefaultPubkey: &defaultPubkey,
+		Generation: &defaultGeneration}
+
 	assetsOnce.Do(func() {
 		assetsInstance = &assets{
 			path:   "./assets/",
-			decoys: defaultDecoys,
-			stationPubkey: [32]byte{211, 127, 10, 139, 150, 180, 97, 15, 56, 188, 7,
-				155, 7, 102, 41, 34, 70, 194, 210, 170, 50, 53, 234, 49, 42, 240,
-				41, 27, 91, 38, 247, 67},
+			decoyUpd: defaultDecoyUpd,
 			filenameRoots:         "roots",
 			filenameDecoys:        "decoys",
 			filenameStationPubkey: "station_pubkey",
@@ -76,6 +87,7 @@ func (a *assets) SetAssetsDir(path string) {
 }
 
 func (a *assets) readConfigs() {
+
 	readPubkey := func(filename string) error {
 		staionPubkey, err := ioutil.ReadFile(filename)
 		if err != nil {
@@ -85,7 +97,7 @@ func (a *assets) readConfigs() {
 			return errors.New("Unexpected keyfile length! Expected: 32. Got: " +
 				strconv.Itoa(len(staionPubkey)))
 		}
-		copy(a.stationPubkey[:], staionPubkey[0:32])
+		copy(a.decoyUpd.DefaultPubkey.Key, staionPubkey[0:32])
 		return nil
 	}
 
@@ -109,7 +121,7 @@ func (a *assets) readConfigs() {
 		if err != nil {
 			return err
 		}
-		err = json.Unmarshal(buf, &a.decoys)
+		err = proto.Unmarshal(buf, &a.decoyUpd)
 		return err
 	}
 
@@ -147,9 +159,12 @@ func (a *assets) GetDecoyAddress() (sni string, addr string) {
 	a.RLock()
 	defer a.RUnlock()
 
-	decoyIndex := getRandInt(0, len(a.decoys)-1)
-	addr = a.decoys[decoyIndex].IP + ":443"
-	sni = a.decoys[decoyIndex].SNI
+	decoyIndex := getRandInt(0, len(a.decoyUpd.TlsDecoys)-1)
+	ip := net.IP{}
+	binary.BigEndian.PutUint32(ip, a.decoyUpd.TlsDecoys[decoyIndex].GetIpv4Addr())
+	// TODO: what checks need to be done, and what's guaranteed?
+	addr = ip.String() + ":443"
+	sni = a.decoyUpd.TlsDecoys[decoyIndex].GetHostname()
 	return
 }
 
@@ -164,58 +179,46 @@ func (a *assets) GetPubkey() *[32]byte {
 	a.RLock()
 	defer a.RUnlock()
 
-	return &(a.stationPubkey)
+	var pKey [32]byte
+	copy(pKey[:], a.decoyUpd.DefaultPubkey.Key)
+	return &pKey
 }
 
 func (a *assets) getDecoyListGeneration() uint32 {
-	// TODO:
-	return 4
+	a.RLock()
+	defer a.RUnlock()
+
+	return a.decoyUpd.GetGeneration()
 }
 
-func (a *assets) SetDecoyList(decoyList []byte) (err error) {
-	a.Lock()
-	defer a.Unlock()
-
-	/*
-	a.decoyList = decoyList
-	a.saveDecoyList()
-	*/
-	return nil
-}
 
 // Set Public key in persistent way (e.g. store to disk)
 func (a *assets) SetPubkey(pubkey [32]byte) (err error) {
 	a.Lock()
 	defer a.Unlock()
 
-	a.stationPubkey = pubkey
+	a.decoyUpd.DefaultPubkey.Key = pubkey[:]
 	err = a.savePubkey()
 	return
 }
 
 // Set decoys in persistent way (e.g. store to disk)
-func (a *assets) SetDecoys(decoys []decoyServer) (err error) {
+func (a *assets) SetDecoys(decoys []*TLSDecoySpec) (err error) {
 	a.Lock()
 	defer a.Unlock()
 
-	a.decoys = decoys
+	a.decoyUpd.TlsDecoys = decoys
 	err = a.saveDecoys()
 	return
 }
 
-func (a *assets) saveDecoyList() error {
-	// TODO
-	return nil
-}
-
 func (a *assets) saveDecoys() error {
-	// TODO: switch from JSON to protobuf
-	buf, err := json.Marshal(a.decoys)
+	buf, err := proto.Marshal(&a.decoyUpd)
 	if err != nil {
 		return err
 	}
 	filename := path.Join(a.path, a.filenameDecoys)
-	tmpFilename := path.Join(a.path, "."+a.filenameDecoys+".tmp")
+	tmpFilename := path.Join(a.path, "." + a.filenameDecoys+".tmp")
 	err = ioutil.WriteFile(tmpFilename, buf[:], 0644)
 	if err != nil {
 		return err
@@ -226,8 +229,8 @@ func (a *assets) saveDecoys() error {
 
 func (a *assets) savePubkey() error {
 	filename := path.Join(a.path, a.filenameStationPubkey)
-	tmpFilename := path.Join(a.path, "."+a.filenameStationPubkey+".tmp")
-	err := ioutil.WriteFile(tmpFilename, a.stationPubkey[:], 0644)
+	tmpFilename := path.Join(a.path, "." + a.filenameStationPubkey+".tmp")
+	err := ioutil.WriteFile(tmpFilename, a.decoyUpd.DefaultPubkey.Key[:], 0644)
 	if err != nil {
 		return err
 	}
