@@ -835,7 +835,9 @@ func (tdConn *tapdanceConn) prepareTDRequest() (tdRequest string, err error) {
 	master_key := tdConn.tlsConn.GetHandshakeLog().KeyMaterial.MasterSecret.Value
 
 	// write flags
-	if err = binary.Write(buf, binary.BigEndian, uint8(0)); err != nil {
+	if err = binary.Write(buf, binary.BigEndian, uint8(1)); err != nil {
+		// tentatively last 4 bytes are for version the of outer proto
+		// 1 signals current outer proto, which is TypeLen
 		return
 	}
 	buf.Write(master_key[:])
