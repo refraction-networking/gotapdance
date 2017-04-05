@@ -474,6 +474,7 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 	totalBytesToRead := headerSize // first -- just header, then +body
 	defer func() {
 		n = int(readBytesTotal)
+		tdConn.statsDownload <-n
 	}()
 
 	var msgLen uint32 // just the body(e.g. raw data or protobuf)
@@ -538,8 +539,6 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 		}
 		msgLen = binary.BigEndian.Uint32(tdConn._readBuffer[2:6])
 	}
-	Logger.Debugln(tdConn.idStr() + " typeLen:", typeLen)
-	Logger.Debugln(tdConn.idStr() + " msgLen:", msgLen)
 
 	totalBytesToRead = headerSize + msgLen
 	read_buffer := make([]byte, msgLen)
@@ -572,6 +571,8 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 		if err != nil {
 			return
 		}
+		Logger.Infoln(tdConn.idStr() + " received protobuf: " +
+			msg.String()) // TODO: change level to Debugln
 
 		// handle state transitions
 		stateTransition := msg.GetStateTransition()
@@ -587,19 +588,6 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 		case S2C_Transition_S2C_CONFIRM_RECONNECT:
 			fallthrough
 		case S2C_Transition_S2C_SESSION_INIT:
-			var magicVal, expectedMagicVal uint16
-			if len(read_buffer) < 2 {
-				err = errors.New("Message body too short!")
-				return
-			}
-			magicVal = binary.BigEndian.Uint16(read_buffer[:2])
-			expectedMagicVal = uint16(0x2a75)
-			if magicVal != expectedMagicVal {
-				err = errors.New("Magic value mismatch! Expected: " +
-					strconv.FormatUint(uint64(expectedMagicVal), 10) +
-					", but received: " + strconv.FormatUint(uint64(magicVal), 10))
-				return
-			}
 			Logger.Infof(tdConn.idStr() +
 				" Successfully connected to TapDance Station!")
 		case S2C_Transition_S2C_SESSION_CLOSE:
@@ -608,41 +596,44 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 		}
 
 		// Helper functions
-		handlePubKeyUpdate := func(pKey *PubKey) {
-			keyType := pKey.GetType()
-			switch keyType {
-			case KeyType_AES_GCM_128:
-				var newPubKey [32]byte
-				copy(newPubKey[:], pKey.Key)
-				Assets().SetPubkey(newPubKey)
-			default:
-				Logger.Errorln(tdConn.idStr() +
-					" received pubkey update with unsupported key type: " +
-					keyType.String())
+		handleConfigInfo := func(conf *ClientConf) {
+			currGen := Assets().GetGeneration()
+			if conf.GetGeneration() < currGen {
+				Logger.Infoln(tdConn.idStr() + " not appliying new config due to " +
+				"lower generation: ", conf.GetGeneration(), " " +
+					"(have:", currGen, ")")
+				return
+			} else if conf.GetGeneration() < currGen {
+				Logger.Infoln(tdConn.idStr() + " not appliying new config due to " +
+					" currently having same generation: ", currGen)
+				return
 			}
-		}
-		handleDecoysUpdate := func(decoys []*TLSDecoySpec) {
-		}
 
-		// handle ConfigInfo
-		if confInfo := msg.GetConfigInfo(); confInfo != nil {
 			// handle DecoyList
-			// TODO: Debugln whole msg
-			if decoysUpd := confInfo.GetDecoyList(); decoysUpd != nil {
-				if decoysUpd.GetGeneration() >= Assets().getDecoyListGeneration() {
-					// Assets().SetDecoyList(decoysUpd.GetTlsDecoys()) make decoyList type []TLSDecoySpec
-					if pubKey := decoysUpd.GetDefaultPubkey(); pubKey != nil {
-						handlePubKeyUpdate(pubKey)
-					}
-					if decoys := decoysUpd.GetTlsDecoys(); decoys != nil {
-						handleDecoysUpdate(decoys)
-					}
+			if decoyList := conf.DecoyList; decoyList != nil {
+				if decoys := decoyList.GetTlsDecoys(); decoys != nil {
+					Assets().SetDecoys(decoys)
 				}
 			}
 
-			// handle some future config inside of ConfigInfo
+			// handle key
+			if pKey := conf.DefaultPubkey; pKey != nil {
+				keyType := pKey.GetType()
+				switch keyType {
+				case KeyType_AES_GCM_128:
+					Assets().SetPubkey(*pKey)
+				default:
+					Logger.Errorln(tdConn.idStr() +
+						" received pubkey update with unsupported key type: " +
+						keyType.String())
+				}
+			}
 		}
 
+		// handle ConfigInfo
+		if confInfo := msg.ConfigInfo; confInfo != nil {
+			handleConfigInfo(confInfo)
+		}
 	default: panic("Corrupted outerProtoMsgType")
 	}
 	return
@@ -653,9 +644,10 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 // after a fixed time limit; see SetDeadline and SetWriteDeadline.
 // TODO: Ideally should support multiple readers
 func (tdConn *tapdanceConn) Write(b []byte) (sentTotal int, err error) {
+	outerHeaderSize := 2
 	writeBuf := func(bChunk []byte) (n int, _err error) {
 		bufSend := new(bytes.Buffer) // final buffer with outer header that gets sent
-		bufSend.Grow(2 + len(bChunk)) // to avoid double allocation
+		bufSend.Grow(outerHeaderSize + len(bChunk)) // to avoid double allocation
 		// add outer protocol header (positive TypeLen for raw data)
 		if _err = binary.Write(bufSend, binary.BigEndian, int16(-len(bChunk))); _err != nil {
 			return
@@ -680,11 +672,15 @@ func (tdConn *tapdanceConn) Write(b []byte) (sentTotal int, err error) {
 			sentCurr, err = writeBuf(b[sentCurr:sentCurr + int(maxInt16)])
 		}
 	}
+	if sentTotal > 0 {
+		sentTotal -= outerHeaderSize
+	}
 	return
 }
 
 func (tdConn *tapdanceConn) writeRaw(b []byte, connect bool) (n int, err error) {
 	totalToSend := uint64(len(b))
+	Logger.Debugln(tdConn.idStr() + " writing:\n", hex.Dump(b))
 
 	Logger.Debugf(tdConn.idStr() +
 		" Already sent: " + strconv.FormatUint(tdConn.sentTotal, 10) +

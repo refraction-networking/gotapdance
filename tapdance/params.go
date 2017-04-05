@@ -20,13 +20,6 @@ const maxInt16 = int16(^uint16(0) >> 1) // max msg size -> might have to chunk
 const minInt16 = - maxInt16 - 1
 
 const (
-	MSG_DATA = iota // iota auto increments
-	MSG_INIT
-	MSG_RECONNECT
-	MSG_CLOSE
-)
-
-const (
 	TD_STATE_NEW = iota
 	TD_STATE_CONNECTED
 	TD_STATE_RECONNECT
