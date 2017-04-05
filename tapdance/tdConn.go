@@ -311,17 +311,20 @@ func (tdConn *tapdanceConn) connect() {
 	if reconnect {
 		connection_attempts = 2
 		expectedTransition = S2C_Transition_S2C_CONFIRM_RECONNECT
-		awaitFINTimeout := time.After(waitForFINTimeout * time.Second)
+		awaitFINSendRST := time.After(waitForFINSendRST * time.Second)
+		awaitFINDie := time.After(waitForFINDie * time.Second)
 		readerStopped := false
 		for !readerStopped {
 			select {
 			case _ = <-tdConn.readerStopped:
 				// wait for readEngine to stop
 				readerStopped = true
-				continue
-			case <-awaitFINTimeout:
-				Logger.Errorf(tdConn.idStr() + " FIN await timeout!")
+			case <-awaitFINSendRST:
+				Logger.Errorf(tdConn.idStr() + " FIN await timeout: sending RST")
 				tdConn.tlsConn.Close()
+			case <-awaitFINDie:
+				Logger.Errorf(tdConn.idStr() + " FIN await timeout: dying!")
+				return
 			case <-tdConn.stopped:
 				return
 			}
