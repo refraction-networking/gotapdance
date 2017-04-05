@@ -1,9 +1,9 @@
 package tapdance
 
 import (
+	"github.com/zmap/zcrypto/tls"
 	"math"
 	"time"
-	"github.com/zmap/zcrypto/tls"
 )
 
 const timeoutMax = 30
@@ -17,7 +17,7 @@ const deadlineTCPtoDecoy = 10       // deadline to establish TCP connection to d
 const waitForFINTimeout = 18        // time to wait for FIN to come back after socket shutdown
 
 const maxInt16 = int16(^uint16(0) >> 1) // max msg size -> might have to chunk
-const minInt16 = - maxInt16 - 1
+const minInt16 = -maxInt16 - 1
 
 const (
 	TD_STATE_NEW = iota
@@ -50,7 +50,6 @@ var TDSupportedCiphers = []uint16{
 	tls.TLS_DH_DSS_WITH_AES_128_GCM_SHA256,
 	tls.TLS_DH_DSS_WITH_AES_256_GCM_SHA384,
 }
-
 
 // How much time to sleep on trying to connect to decoys to prevent overwhelming them
 func sleepBeforeConnect(attempt int) (waitTime <-chan time.Time) {

@@ -1,26 +1,26 @@
 package tapdance
 
 import (
+	"encoding/binary"
+	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/zmap/zcrypto/x509"
 	"io/ioutil"
+	"net"
 	"os"
 	"path"
-	"sync"
-	"net"
-	"encoding/binary"
-	"github.com/golang/protobuf/proto"
 	"strconv"
+	"sync"
 )
 
 type assets struct {
 	sync.RWMutex
-	once   sync.Once
-	path   string
+	once sync.Once
+	path string
 
 	config ClientConf
 
-	roots         *x509.CertPool
+	roots *x509.CertPool
 
 	filenameStationPubkey string
 	filenameRoots         string
@@ -57,12 +57,12 @@ func Assets() *assets {
 	defaultDecoyList := DecoyList{TlsDecoys: defaultDecoys}
 	defaultClientConf := ClientConf{DecoyList: &defaultDecoyList,
 		DefaultPubkey: &defaultPubKey,
-		Generation: &defaultGeneration}
+		Generation:    &defaultGeneration}
 
 	assetsOnce.Do(func() {
 		assetsInstance = &assets{
-			path:   "./assets/",
-			config: defaultClientConf,
+			path:                  "./assets/",
+			config:                defaultClientConf,
 			filenameRoots:         "roots",
 			filenameDecoys:        "decoys",
 			filenameStationPubkey: "station_pubkey",
@@ -101,21 +101,21 @@ func (a *assets) readConfigs() {
 		}
 		return nil
 	}
-/*
-	readClientConf := func(filename string) error {
-		buf, err := ioutil.ReadFile(filename)
-		if err != nil {
-			return err
+	/*
+		readClientConf := func(filename string) error {
+			buf, err := ioutil.ReadFile(filename)
+			if err != nil {
+				return err
+			}
+			clientConf := ClientConf{}
+			err = proto.Unmarshal(buf, &clientConf)
+			if err != nil {
+				return err
+			}
+			a.config = clientConf
+			return nil
 		}
-		clientConf := ClientConf{}
-		err = proto.Unmarshal(buf, &clientConf)
-		if err != nil {
-			return err
-		}
-		a.config = clientConf
-		return nil
-	}
-*/
+	*/
 	readPubkey := func(filename string) error {
 		staionPubkey, err := ioutil.ReadFile(filename)
 		if err != nil {
@@ -198,7 +198,6 @@ func (a *assets) SetGeneration(gen uint32) (err error) {
 	return
 }
 
-
 // Set Public key in persistent way (e.g. store to disk)
 func (a *assets) SetPubkey(pubkey PubKey) (err error) {
 	a.Lock()
@@ -229,7 +228,7 @@ func (a *assets) saveClientConf() error {
 		return err
 	}
 	filename := path.Join(a.path, a.filenameDecoys)
-	tmpFilename := path.Join(a.path, "." + a.filenameDecoys+".tmp")
+	tmpFilename := path.Join(a.path, "."+a.filenameDecoys+".tmp")
 	err = ioutil.WriteFile(tmpFilename, buf[:], 0644)
 	if err != nil {
 		return err
