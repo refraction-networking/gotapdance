@@ -206,19 +206,18 @@ func (tdConn *tapdanceConn) readSubEngine() {
 				case <-tdConn.stopped:
 					return
 				case tdConn.readerStopped <- true:
-				}
-
-				select {
-				case <-tdConn.stopped:
-					return
-				case okReconnect := <-tdConn.doneReconnect:
-					if !okReconnect {
+					select {
+					case <-tdConn.stopped:
 						return
+					case okReconnect := <-tdConn.doneReconnect:
+						if !okReconnect {
+							return
+						}
 					}
+					err = nil
+					toReconnect = false
+					continue
 				}
-				err = nil
-				toReconnect = false
-				continue
 			}
 		default:
 			return
@@ -571,14 +570,28 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 		Logger.Infof(tdConn.idStr() + " Successfully connected to TapDance Station!")
 	case MSG_DATA:
 		n = int(readBytesTotal - headerSize)
+		for {
 			select {
 			case tdConn.readChannel <- read_buffer[:]:
 				Logger.Debugf(tdConn.idStr() +
 					" Successfully read DATA msg from server, size:", msgLen)
+				return
 			case <-tdConn.stopped:
 				return
-			// TODO: add reconnect here?
+			case tdConn.readerStopped <- true:
+				Logger.Infof(tdConn.idStr() + " entered reconnect in read_msg:" +
+					"HERE BE DRAGONS")
+				select {
+				case <-tdConn.stopped:
+					return
+				case okReconnect := <-tdConn.doneReconnect:
+					if !okReconnect {
+						return
+					}
+				}
+				err = nil
 			}
+		}
 	case MSG_CLOSE:
 		err = errors.New("MSG_CLOSE")
 		Logger.Infof(tdConn.idStr() + " received MSG_CLOSE")
