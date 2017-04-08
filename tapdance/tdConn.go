@@ -72,6 +72,9 @@ type tapdanceConn struct {
 	read_data_index  int
 	read_data_count  int
 
+	receive_buffer     []byte
+	receive_buffer_idx int
+
 	// for statistics
 	writeReconnects   int
 	timeoutReconnects int
@@ -99,14 +102,13 @@ func DialTapDance(
 
 	tdConn._readBuffer = make([]byte, 3) // Only read headers into it
 	tdConn._writeBuffer = make([]byte, 16*1024+20+20+12)
-
-	tdConn.read_data_buffer = make([]byte, 2024)
+	//tdConn.receive_buffer = make([]byte, 0)
 
 	tdConn.stopped = make(chan bool)
 	tdConn.readerStopped = make(chan bool)
 	tdConn.doneReconnect = make(chan bool)
 	tdConn.writeChannel = make(chan []byte)
-	tdConn.readChannel = make(chan []byte, 1)
+	tdConn.readChannel = make(chan []byte)
 
 	tdConn.statsUpload = make(chan int, 10)
 	tdConn.statsDownload = make(chan int, 10)
@@ -221,6 +223,15 @@ func (tdConn *tapdanceConn) readSubEngine() {
 			}
 		default:
 			return
+		}
+
+		if tdConn.receive_buffer_idx != 0 {
+			select {
+			case tdConn.readChannel <- tdConn.receive_buffer[:tdConn.receive_buffer_idx]:
+				tdConn.receive_buffer_idx = 0
+				tdConn.receive_buffer = make([]byte, 0)
+			default:
+			}
 		}
 
 		select {
@@ -547,8 +558,6 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 		}
 	}
 
-	//	Logger.Debugln(tdConn.idStr() + " read\n", hex.Dump(read_buffer[:totalBytesToRead]))
-
 	// Process actual message
 	switch msgType {
 	case MSG_RECONNECT:
@@ -569,29 +578,10 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 		}
 		Logger.Infof(tdConn.idStr() + " Successfully connected to TapDance Station!")
 	case MSG_DATA:
-		n = int(readBytesTotal - headerSize)
-		for {
-			select {
-			case tdConn.readChannel <- read_buffer[:]:
-				Logger.Debugf(tdConn.idStr()+
-					" Successfully read DATA msg from server, size:", msgLen)
-				return
-			case <-tdConn.stopped:
-				return
-			case tdConn.readerStopped <- true:
-				Logger.Infof(tdConn.idStr() + " entered reconnect in read_msg:" +
-					"HERE BE DRAGONS")
-				select {
-				case <-tdConn.stopped:
-					return
-				case okReconnect := <-tdConn.doneReconnect:
-					if !okReconnect {
-						return
-					}
-				}
-				err = nil
-			}
-		}
+		tdConn.receive_buffer = append(tdConn.receive_buffer[:],
+			read_buffer...)
+		n = int(msgLen)
+		tdConn.receive_buffer_idx += n
 	case MSG_CLOSE:
 		err = errors.New("MSG_CLOSE")
 		Logger.Infof(tdConn.idStr() + " received MSG_CLOSE")
