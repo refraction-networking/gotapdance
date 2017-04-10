@@ -193,6 +193,9 @@ func (tdConn *tapdanceConn) readSubEngine() {
 		Logger.Debugln(tdConn.idStr() + " exit readSubEngine()")
 		tdConn.Close()
 		close(tdConn.readerStopped)
+		if tdConn.receive_buffer_idx != 0 {
+			tdConn.readChannel <- tdConn.receive_buffer[:tdConn.receive_buffer_idx]
+		}
 		close(tdConn.readChannel)
 	}()
 
