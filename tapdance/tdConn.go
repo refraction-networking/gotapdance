@@ -26,7 +26,6 @@ type tapdanceConn struct {
 
 	sessionId uint64 // for logging. Constant for tapdanceConn
 	flowId    int    // for logging. Increments with each attempt to reconnect
-
 	/* random per-connection (secret) id;
 	this way, the underlying SSL connection can disconnect
 	while the client's local conn and station's proxy conn
@@ -74,6 +73,9 @@ type tapdanceConn struct {
 	read_data_index  int
 	read_data_count  int
 
+	receive_buffer     []byte
+	receive_buffer_idx int
+
 	// for statistics
 	writeReconnects   int
 	timeoutReconnects int
@@ -102,13 +104,11 @@ func DialTapDance(
 	tdConn._readBuffer = make([]byte, 3) // Only read headers into it
 	tdConn._writeBuffer = make([]byte, 16*1024+20+20+12)
 
-	tdConn.read_data_buffer = make([]byte, 2024)
-
 	tdConn.stopped = make(chan bool)
 	tdConn.readerStopped = make(chan bool)
 	tdConn.doneReconnect = make(chan bool)
 	tdConn.writeChannel = make(chan []byte)
-	tdConn.readChannel = make(chan []byte, 1)
+	tdConn.readChannel = make(chan []byte)
 
 	tdConn.statsUpload = make(chan int, 32)
 	tdConn.statsDownload = make(chan int, 32)
@@ -209,22 +209,30 @@ func (tdConn *tapdanceConn) readSubEngine() {
 				case <-tdConn.stopped:
 					return
 				case tdConn.readerStopped <- true:
-				}
-
-				select {
-				case <-tdConn.stopped:
-					return
-				case okReconnect := <-tdConn.doneReconnect:
-					if !okReconnect {
+					select {
+					case <-tdConn.stopped:
 						return
+					case okReconnect := <-tdConn.doneReconnect:
+						if !okReconnect {
+							return
+						}
 					}
+					err = nil
+					toReconnect = false
+					continue
 				}
-				err = nil
-				toReconnect = false
-				continue
 			}
 		default:
 			return
+		}
+
+		if tdConn.receive_buffer_idx != 0 {
+			select {
+			case tdConn.readChannel <- tdConn.receive_buffer[:tdConn.receive_buffer_idx]:
+				tdConn.receive_buffer_idx = 0
+				tdConn.receive_buffer = make([]byte, 0)
+			default:
+			}
 		}
 
 		select {
