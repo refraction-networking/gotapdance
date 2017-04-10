@@ -62,6 +62,7 @@ type tapdanceConn struct {
 	// used by 2 engines to communicate /w one another
 	// true is sent upon success
 	readerStopped chan bool
+	writerStopped chan bool
 	doneReconnect chan bool
 	stopped       chan bool
 	closeOnce     sync.Once
@@ -106,6 +107,7 @@ func DialTapDance(
 
 	tdConn.stopped = make(chan bool)
 	tdConn.readerStopped = make(chan bool)
+	tdConn.writerStopped = make(chan bool)
 	tdConn.doneReconnect = make(chan bool)
 	tdConn.writeChannel = make(chan []byte)
 	tdConn.readChannel = make(chan []byte)
@@ -134,7 +136,7 @@ func (tdConn *tapdanceConn) engineMain() {
 	defer func() {
 		Logger.Debugln(tdConn.idStr() + " exit engineMain()")
 		close(tdConn.doneReconnect)
-		tdConn.writeTransition(C2S_Transition_C2S_SESSION_CLOSE)
+		close(tdConn.writerStopped)
 		tdConn.Close()
 	}()
 
@@ -979,6 +981,14 @@ func (tdConn *tapdanceConn) Close() (err error) {
 	tdConn.closeOnce.Do(func() {
 		close(tdConn.stopped)
 		atomic.StoreInt32(&tdConn.state, TD_STATE_CLOSED)
+		waitForWriterToDie := time.After(2 * time.Second)
+		select {
+		case _ = <-tdConn.writerStopped:
+			tdConn.writeTransition(C2S_Transition_C2S_SESSION_CLOSE)
+			Logger.Infoln("Sent SESSION_CLOSE")
+		case <-waitForWriterToDie:
+			Logger.Infoln("Timed out. Not sending SESSION_CLOSE")
+		}
 		if tdConn.tlsConn != nil {
 			err = tdConn.tlsConn.Close()
 		}
