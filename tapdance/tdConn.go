@@ -134,6 +134,7 @@ func (tdConn *tapdanceConn) engineMain() {
 	defer func() {
 		Logger.Debugln(tdConn.idStr() + " exit engineMain()")
 		close(tdConn.doneReconnect)
+		tdConn.writeTransition(C2S_Transition_C2S_SESSION_CLOSE)
 		tdConn.Close()
 	}()
 
@@ -978,7 +979,6 @@ func (tdConn *tapdanceConn) serverRandom() []byte {
 // Close closes the connection.
 // Any blocked Read or Write operations will be unblocked and return errors.
 func (tdConn *tapdanceConn) Close() (err error) {
-	tdConn.writeTransition(C2S_Transition_C2S_SESSION_CLOSE)
 	tdConn.setError(errors.New("Forced shutdown by user"), false)
 	tdConn.closeOnce.Do(func() {
 		close(tdConn.stopped)
