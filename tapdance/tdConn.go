@@ -569,14 +569,10 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 
 	switch outerProtoMsgType {
 	case msg_raw_data:
-		n = int(readBytesTotal - headerSize)
-		select {
-		case tdConn.readChannel <- read_buffer[:]:
-			Logger.Debugf(tdConn.idStr()+
-				" Successfully read DATA msg from server", msgLen)
-		case <-tdConn.stopped:
-			return
-		}
+		tdConn.receive_buffer = append(tdConn.receive_buffer[:],
+			read_buffer...)
+		n = int(msgLen)
+		tdConn.receive_buffer_idx += n
 	case msg_protobuf:
 		msg := StationToClient{}
 		err = proto.Unmarshal(read_buffer[:], &msg)
