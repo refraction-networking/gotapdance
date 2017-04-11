@@ -110,7 +110,7 @@ func DialTapDance(
 	tdConn.writerStopped = make(chan bool)
 	tdConn.doneReconnect = make(chan bool)
 	tdConn.writeChannel = make(chan []byte)
-	tdConn.readChannel = make(chan []byte)
+	tdConn.readChannel = make(chan []byte, 1)
 
 	tdConn.statsUpload = make(chan int, 32)
 	tdConn.statsDownload = make(chan int, 32)
