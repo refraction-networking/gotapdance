@@ -736,7 +736,9 @@ func (tdConn *tapdanceConn) writeRaw(b []byte, connect bool) (n int, err error) 
 }
 
 func (tdConn *tapdanceConn) writeTransition(transition C2S_Transition) (err error) {
-	msg := ClientToStation{StateTransition: &transition}
+	gen := Assets().GetGeneration()
+	msg := ClientToStation{StateTransition: &transition,
+		DecoyListGeneration: &gen}
 	return tdConn.writeProto(msg)
 }
 
