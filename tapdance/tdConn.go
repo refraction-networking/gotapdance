@@ -287,16 +287,15 @@ func (tdConn *tapdanceConn) connect() {
 		if connectOk {
 			Logger.Debugf(tdConn.idStr() + " connect success")
 			atomic.StoreInt32(&tdConn.state, TD_STATE_CONNECTED)
+			if reconnect {
+				select {
+				case tdConn.doneReconnect <- connectOk:
+				case <-tdConn.stopped:
+				}
+			}
 		} else {
 			Logger.Debugf(tdConn.idStr()+" connect fail", _err)
 			atomic.StoreInt32(&tdConn.state, TD_STATE_CLOSED)
-		}
-		if reconnect {
-			select {
-			case tdConn.doneReconnect <- connectOk:
-			case <-tdConn.stopped:
-			}
-
 		}
 	}()
 
@@ -338,6 +337,8 @@ func (tdConn *tapdanceConn) connect() {
 				tdConn.tlsConn.Close()
 			case <-awaitFINDie:
 				Logger.Errorf(tdConn.idStr() + " FIN await timeout: dying!")
+				currErr = errors.New("FIN await timeout")
+				tdConn.setError(currErr, false)
 				return
 			case <-tdConn.stopped:
 				return
