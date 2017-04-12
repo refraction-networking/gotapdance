@@ -24,7 +24,7 @@ type assets struct {
 
 	filenameStationPubkey string
 	filenameRoots         string
-	filenameDecoys        string
+	filenameClientConf    string
 }
 
 var assetsInstance *assets
@@ -46,7 +46,6 @@ func Assets() *assets {
 
 	var defaultDecoys = []*TLSDecoySpec{
 		initTLSDecoySpec("192.122.190.104", "tapdance1.freeaeskey.xyz"),
-		//initTLSDecoySpec("192.122.190.105", "tapdance2.freeaeskey.xyz"),
 	}
 	defaultKey := []byte{211, 127, 10, 139, 150, 180, 97,
 		15, 56, 188, 7, 155, 7, 102, 41, 34, 70, 194, 210, 170, 50,
@@ -64,7 +63,7 @@ func Assets() *assets {
 			path:                  "./assets/",
 			config:                defaultClientConf,
 			filenameRoots:         "roots",
-			filenameDecoys:        "decoys",
+			filenameClientConf:    "ClientConf",
 			filenameStationPubkey: "station_pubkey",
 		}
 		assetsInstance.readConfigs()
@@ -101,21 +100,21 @@ func (a *assets) readConfigs() {
 		}
 		return nil
 	}
-	/*
-		readClientConf := func(filename string) error {
-			buf, err := ioutil.ReadFile(filename)
-			if err != nil {
-				return err
-			}
-			clientConf := ClientConf{}
-			err = proto.Unmarshal(buf, &clientConf)
-			if err != nil {
-				return err
-			}
-			a.config = clientConf
-			return nil
+
+	readClientConf := func(filename string) error {
+		buf, err := ioutil.ReadFile(filename)
+		if err != nil {
+			return err
 		}
-	*/
+		clientConf := ClientConf{}
+		err = proto.Unmarshal(buf, &clientConf)
+		if err != nil {
+			return err
+		}
+		a.config = clientConf
+		return nil
+	}
+
 	readPubkey := func(filename string) error {
 		staionPubkey, err := ioutil.ReadFile(filename)
 		if err != nil {
@@ -132,20 +131,28 @@ func (a *assets) readConfigs() {
 	var err error
 	Logger.Infoln("Assets: reading from folder " + a.path)
 
-	pubkeyFilename := path.Join(a.path, a.filenameStationPubkey)
-	err = readPubkey(pubkeyFilename)
-	if err != nil {
-		Logger.Warningln("Failed to read client config file: " + err.Error())
-	} else {
-		Logger.Infoln("Client config succesfully read from " + pubkeyFilename)
-	}
-
 	rootsFilename := path.Join(a.path, a.filenameRoots)
 	err = readRoots(rootsFilename)
 	if err != nil {
 		Logger.Warningln("Failed to read root ca file: " + err.Error())
 	} else {
 		Logger.Infoln("X.509 root CAs succesfully read from " + rootsFilename)
+	}
+
+	clientConfFilename := path.Join(a.path, a.filenameClientConf)
+	err = readClientConf(clientConfFilename)
+	if err != nil {
+		Logger.Warningln("Failed to read ClientConf file: " + err.Error())
+	} else {
+		Logger.Infoln("Client config succesfully read from " + clientConfFilename)
+	}
+
+	pubkeyFilename := path.Join(a.path, a.filenameStationPubkey)
+	err = readPubkey(pubkeyFilename)
+	if err != nil {
+		Logger.Warningln("Failed to read pubkey file: " + err.Error())
+	} else {
+		Logger.Infoln("Pubkey succesfully read from " + pubkeyFilename)
 	}
 }
 
@@ -209,6 +216,15 @@ func (a *assets) SetPubkey(pubkey PubKey) (err error) {
 	return
 }
 
+func (a *assets) SetClientConf(conf *ClientConf) (err error) {
+	a.Lock()
+	defer a.Unlock()
+
+	a.config = *conf
+	err = a.saveClientConf()
+	return
+}
+
 // Set decoys in persistent way (e.g. store to disk)
 func (a *assets) SetDecoys(decoys []*TLSDecoySpec) (err error) {
 	a.Lock()
@@ -220,19 +236,16 @@ func (a *assets) SetDecoys(decoys []*TLSDecoySpec) (err error) {
 }
 
 func (a *assets) saveClientConf() error {
-	a.Lock()
-	defer a.Unlock()
-
 	buf, err := proto.Marshal(&a.config)
 	if err != nil {
 		return err
 	}
-	filename := path.Join(a.path, a.filenameDecoys)
-	tmpFilename := path.Join(a.path, "."+a.filenameDecoys+".tmp")
+	filename := path.Join(a.path, a.filenameClientConf)
+	tmpFilename := path.Join(a.path, "." + a.filenameClientConf + ".tmp")
 	err = ioutil.WriteFile(tmpFilename, buf[:], 0644)
 	if err != nil {
 		return err
 	}
-	os.Rename(tmpFilename, filename)
-	return nil
+
+	return os.Rename(tmpFilename, filename)
 }

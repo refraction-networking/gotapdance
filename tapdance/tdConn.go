@@ -622,25 +622,7 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 				return
 			}
 
-			// handle DecoyList
-			if decoyList := conf.DecoyList; decoyList != nil {
-				if decoys := decoyList.GetTlsDecoys(); decoys != nil {
-					Assets().SetDecoys(decoys)
-				}
-			}
-
-			// handle key
-			if pKey := conf.DefaultPubkey; pKey != nil {
-				keyType := pKey.GetType()
-				switch keyType {
-				case KeyType_AES_GCM_128:
-					Assets().SetPubkey(*pKey)
-				default:
-					Logger.Errorln(tdConn.idStr() +
-						" received pubkey update with unsupported key type: " +
-						keyType.String())
-				}
-			}
+			Assets().SetClientConf(conf)
 		}
 
 		// handle ConfigInfo
