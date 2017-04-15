@@ -974,9 +974,9 @@ func (tdConn *tapdanceConn) Close() (err error) {
 		select {
 		case _ = <-tdConn.writerStopped:
 			tdConn.writeTransition(C2S_Transition_C2S_SESSION_CLOSE)
-			Logger.Infoln("Sent SESSION_CLOSE")
+			Logger.Infoln(tdConn.idStr() + " sent SESSION_CLOSE")
 		case <-waitForWriterToDie:
-			Logger.Infoln("Timed out. Not sending SESSION_CLOSE")
+			Logger.Infoln(tdConn.idStr() + " timed out. Not sending SESSION_CLOSE")
 		}
 		if tdConn.tlsConn != nil {
 			err = tdConn.tlsConn.Close()
