@@ -102,7 +102,7 @@ func DialTapDance(
 
 	rand.Read(tdConn.remoteConnId[:])
 
-	tdConn._readBuffer = make([]byte, 3) // Only read headers into it
+	tdConn._readBuffer = make([]byte, 6) // Only read headers into it
 	tdConn._writeBuffer = make([]byte, 16*1024+20+20+12)
 
 	tdConn.stopped = make(chan bool)
