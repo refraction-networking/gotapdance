@@ -143,7 +143,13 @@ func (tdConn *tapdanceConn) engineMain() {
 	for {
 		switch atomic.LoadInt32(&tdConn.state) {
 		case TD_STATE_RECONNECT:
-			tdConn.writeTransition(C2S_Transition_C2S_EXPECT_RECONNECT)
+			err := tdConn.writeTransition(C2S_Transition_C2S_EXPECT_RECONNECT)
+			if err != nil {
+				Logger.Infoln(tdConn.idStr() + " writeTransition(RECONNECT) " +
+					"failed with " + err.Error())
+				tdConn.setError(err, false)
+				return
+			}
 			tdConn.tcpConn.CloseWrite()
 			Logger.Debugln(tdConn.idStr() + " write closed")
 			Logger.Infoln(tdConn.idStr() + " reconnecting!" +
@@ -158,7 +164,13 @@ func (tdConn *tapdanceConn) engineMain() {
 
 		// If just reconnected, but still have user outgoing user data - send it
 		if tdConn.writeMsgSize != 0 {
-			_, _ = tdConn.writeRaw(tdConn._writeBuffer[tdConn.writeMsgIndex:tdConn.writeMsgSize], false)
+			_, err := tdConn.writeRaw(tdConn._writeBuffer[tdConn.writeMsgIndex:tdConn.writeMsgSize], false)
+			if err != nil {
+				Logger.Infoln(tdConn.idStr() + " re writeRaw() " +
+					"failed with " + err.Error())
+				tdConn.setError(err, false)
+				return
+			}
 			if atomic.LoadInt32(&tdConn.state) != TD_STATE_CONNECTED {
 				continue
 			}
@@ -176,7 +188,7 @@ func (tdConn *tapdanceConn) engineMain() {
 			tdConn.writeMsgSize = len(tdConn._writeBuffer)
 			_, err := tdConn.writeRaw(tdConn._writeBuffer[:tdConn.writeMsgSize], false)
 			if err != nil {
-				Logger.Debugln(tdConn.idStr() + " write_td() " +
+				Logger.Infoln(tdConn.idStr() + " writeRaw() " +
 					"failed with " + err.Error())
 				tdConn.setError(err, false)
 				return
@@ -265,7 +277,7 @@ func (tdConn *tapdanceConn) readSubEngine() {
 				if toReconnect {
 					continue
 				} else {
-					Logger.Debugln(tdConn.idStr() + " read_msg() " +
+					Logger.Infoln(tdConn.idStr() + " read_msg() " +
 						"failed with " + err.Error())
 					return
 				}
@@ -729,9 +741,6 @@ func (tdConn *tapdanceConn) writeRaw(b []byte, connect bool) (n int, err error) 
 		tdConn.writeMsgIndex += n
 	}
 
-	if err != nil {
-		atomic.StoreInt32(&tdConn.state, TD_STATE_CLOSED)
-	}
 	return
 }
 
@@ -740,13 +749,14 @@ func (tdConn *tapdanceConn) writeTransition(transition C2S_Transition) (err erro
 	msg := ClientToStation{StateTransition: &transition,
 		DecoyListGeneration: &gen,
 	Padding: []byte(getRandPadding(150, 950, 10))}
-	return tdConn.writeProto(msg)
+	err = tdConn.writeProto(msg)
+	return
 }
 
-func (tdConn *tapdanceConn) writeProto(msg ClientToStation) (err error) {
+func (tdConn *tapdanceConn) writeProto(msg ClientToStation) (error) {
 	msgBytes, err := proto.Marshal(&msg)
 	if err != nil {
-		return
+		return err
 	}
 
 	bufSend := new(bytes.Buffer) // final buffer with outer header that gets sent
@@ -762,18 +772,20 @@ func (tdConn *tapdanceConn) writeProto(msg ClientToStation) (err error) {
 	if len(msgBytes) <= int(maxInt16) {
 		bufSend.Grow(2 + len(msgBytes)) // to avoid double allocation
 		if err = binary.Write(bufSend, binary.BigEndian, int16(len(msgBytes))); err != nil {
-			return
+			return err
 		}
 	} else {
 		bufSend.Grow(2 + 4 + len(msgBytes)) // to avoid double allocation
 		bufSend.Write([]byte{0, 0})
 		if err = binary.Write(bufSend, binary.BigEndian, int32(len(msgBytes))); err != nil {
-			return
+			return err
 		}
 	}
 	bufSend.Write(msgBytes)
-	_, err = tdConn.tlsConn.Write(bufSend.Bytes())
-	return
+	tdConn._writeBuffer = bufSend.Bytes()
+	tdConn.writeMsgSize = bufSend.Len()
+	_, err = tdConn.writeRaw(tdConn._writeBuffer, false)
+	return err
 }
 
 func (tdConn *tapdanceConn) establishTLStoDecoy() (err error) {
