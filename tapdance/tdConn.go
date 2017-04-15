@@ -1032,6 +1032,8 @@ func (tdConn *tapdanceConn) Close() (err error) {
 		close(tdConn.stopped)
 		atomic.StoreInt32(&tdConn.state, TD_STATE_CLOSED)
 		waitForWriterToDie := time.After(2 * time.Second)
+		// TODO: stop sending SESSION_CLOSE if tdConn.tlsConn is closed
+		// but there is no check =(
 		select {
 		case _ = <-tdConn.writerStopped:
 			tdConn.writeTransition(C2S_Transition_C2S_SESSION_CLOSE)
