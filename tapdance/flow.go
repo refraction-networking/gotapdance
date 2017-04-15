@@ -61,12 +61,21 @@ func (TDstate *TapDanceFlow) Redirect() (err error) {
 	}
 
 	forwardFromClientToServer := func() {
-		n, _err := io.Copy(TDstate.servConn, TDstate.userConn)
+		var n int64
+		var _err error
+		for {
+			n, _err = io.Copy(TDstate.servConn, TDstate.userConn)
+			if _err == nil || _err.Error() != "short write" {
+				break
+			}
+		}
 		Logger.Debugf(TDstate.servConn.idStr() +
 			" forwardFromClientToServer returns, bytes sent: " +
 			strconv.FormatUint(uint64(n), 10))
 		if _err == nil {
 			_err = errors.New("StoppedByUser")
+		} else {
+			Logger.Infof(TDstate.servConn.idStr() + " got err in io.Copy: " + _err.Error())
 		}
 		errChan <- _err
 		return
