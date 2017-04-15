@@ -738,7 +738,8 @@ func (tdConn *tapdanceConn) writeRaw(b []byte, connect bool) (n int, err error) 
 func (tdConn *tapdanceConn) writeTransition(transition C2S_Transition) (err error) {
 	gen := Assets().GetGeneration()
 	msg := ClientToStation{StateTransition: &transition,
-		DecoyListGeneration: &gen}
+		DecoyListGeneration: &gen,
+	Padding: []byte(getRandPadding(150, 950, 10))}
 	return tdConn.writeProto(msg)
 }
 
