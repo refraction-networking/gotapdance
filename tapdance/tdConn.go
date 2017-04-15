@@ -32,8 +32,8 @@ type tapdanceConn struct {
 	can stay connected */
 	remoteConnId [16]byte
 
-	maxSend   uint64
-	sentTotal uint64
+	maxSend   int
+	sentTotal int
 
 	decoyAddr string // ipv4_addr:port
 	decoySNI  string
@@ -342,8 +342,9 @@ func (tdConn *tapdanceConn) connect() {
 	transitionMsgSize := tdConn.preGenenerateTransition()
 
 	// Randomize tdConn.maxSend to avoid heuristics
-	tdConn.maxSend = uint64(getRandInt(sendLimitMin, sendLimitMax))
-	tdConn.maxSend -= uint64(transitionMsgSize) - 6 // 6 bytes reserved for header
+	tdConn.maxSend = getRandInt(sendLimitMin, sendLimitMax)
+	tdConn.maxSend -= transitionMsgSize // reserve space for transition msg
+	tdConn.maxSend -= 2 // reserve 2 bytes for transition msg header
 
 	if reconnect {
 		connection_attempts = 2
