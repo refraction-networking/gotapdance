@@ -43,6 +43,7 @@ type tapdanceConn struct {
 
 	writeMsgSize  int
 	writeMsgIndex int
+	writeBufType  int // appdata or protobug
 
 	stationPubkey *[32]byte
 
@@ -166,7 +167,7 @@ func (tdConn *tapdanceConn) engineMain() {
 
 		// If just reconnected, but still have user outgoing user data - send it
 		if tdConn.writeMsgSize != 0 {
-			_, err := tdConn.writeRaw(tdConn._writeBuffer[tdConn.writeMsgIndex:tdConn.writeMsgSize], false)
+			_, err := tdConn.writeBufferedData()
 			if err != nil {
 				Logger.Infoln(tdConn.idStr() + " re writeRaw() " +
 					"failed with " + err.Error())
@@ -188,7 +189,8 @@ func (tdConn *tapdanceConn) engineMain() {
 			continue
 		case tdConn._writeBuffer = <-tdConn.writeChannel:
 			tdConn.writeMsgSize = len(tdConn._writeBuffer)
-			_, err := tdConn.writeRaw(tdConn._writeBuffer[:tdConn.writeMsgSize], false)
+			tdConn.writeBufType = msg_raw_data
+			_, err := tdConn.writeBufferedData()
 			if err != nil {
 				Logger.Infoln(tdConn.idStr() + " writeRaw() " +
 					"failed with " + err.Error())
@@ -432,7 +434,7 @@ func (tdConn *tapdanceConn) connect() {
 		Logger.Infoln(tdConn.idStr() + " Attempting to connect to TapDance Station" +
 			" with connection ID: " + hex.EncodeToString(tdConn.remoteConnId[:]))
 		tdConn.sentTotal = 0
-		_, currErr = tdConn.writeRaw([]byte(tdRequest), true)
+		_, currErr = tdConn.tlsConn.Write([]byte(tdRequest))
 		if currErr != nil {
 			Logger.Errorf(tdConn.idStr() +
 				" Could not send initial TD request, error: " + currErr.Error())
@@ -665,58 +667,44 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 // after a fixed time limit; see SetDeadline and SetWriteDeadline.
 // TODO: Ideally should support multiple readers
 func (tdConn *tapdanceConn) Write(b []byte) (sentTotal int, err error) {
-	outerHeaderSize := 2
-	writeBuf := func(bChunk []byte) (n int, _err error) {
-		bufSend := new(bytes.Buffer)                // final buffer with outer header that gets sent
-		bufSend.Grow(outerHeaderSize + len(bChunk)) // to avoid double allocation
-		// add outer protocol header (positive TypeLen for raw data)
-		if _err = binary.Write(bufSend, binary.BigEndian, int16(-len(bChunk))); _err != nil {
-			return
-		}
-		bufSend.Write(bChunk[:])
-		select {
-		case tdConn.writeChannel <- bufSend.Bytes():
-			n = len(bChunk)
-		case <-tdConn.stopped:
-		}
-		if n == 0 {
-			_err = tdConn.getError()
-		}
-		return
+	bb := make([]byte, len(b))
+	copy(bb, b)
+	select {
+	case tdConn.writeChannel <- bb:
+		sentTotal = len(bb)
+	case <-tdConn.stopped:
 	}
-	totalToSend := len(b)
-
-	for sentCurr := 0; sentTotal < totalToSend; sentTotal += sentCurr {
-		if totalToSend - sentTotal < int(maxInt16) {
-			sentCurr, err = writeBuf(b[sentTotal:totalToSend])
-		} else {
-			sentCurr, err = writeBuf(b[sentTotal : sentTotal+int(maxInt16)])
-		}
+	if sentTotal == 0 {
+		err = tdConn.getError()
 	}
 	return
 }
 
-func (tdConn *tapdanceConn) writeRaw(b []byte, connect bool) (n int, err error) {
-	totalToSend := uint64(len(b))
-	Logger.Debugln(tdConn.idStr()+" writing:\n", hex.Dump(b))
+func (tdConn *tapdanceConn) writeBufferedData() (n int, err error) {
+	couldSend := tdConn.maxSend - tdConn.sentTotal
+	totalToSendLeft := tdConn.writeMsgSize - tdConn.writeMsgIndex
+	toSend := totalToSendLeft
+	var b []byte
 
 	Logger.Debugf(tdConn.idStr() +
-		" Already sent: " + strconv.FormatUint(tdConn.sentTotal, 10) +
-		". Requested to send: " + strconv.FormatUint(totalToSend, 10))
+		" Already sent: " + strconv.Itoa(tdConn.sentTotal) +
+		". Requested to send: " + strconv.Itoa(totalToSendLeft))
 	defer func() { tdConn.statsUpload <- n }()
-	if !connect {
-		defer func() {
-			tdConn.sentTotal += uint64(n)
-			if tdConn.writeMsgIndex >= tdConn.writeMsgSize {
-				tdConn.writeMsgIndex = 0
-				tdConn.writeMsgSize = 0
-			}
-		}()
-	}
 
-	couldSend := tdConn.maxSend - tdConn.sentTotal
-	toSend := uint64(0) // to send on this iteration
-	/*
+	switch tdConn.writeBufType {
+	case msg_protobuf:
+		b = getMsgWithHeader(msg_protobuf, tdConn._writeBuffer[:tdConn.writeMsgSize])
+		if len(b) > couldSend {
+			Logger.Errorln("Could not send protobuf due to upload limit!")
+			return 0, io.ErrShortWrite
+		}
+	case msg_raw_data:
+		headerSize := 2
+		maxChunkSize := getRandInt(32767, 32767)
+		if couldSend > maxChunkSize {
+			couldSend = maxChunkSize
+		}
+		/*
 		/ Check if we are able to send the whole buffer or not(due to 16kB upload limit).
 		/ We may want to split buffer into 2 or more chunks and send them chunk by chunk
 		/ after reconnect(s). Unfortunately, we can't just always split it, as some
@@ -726,30 +714,33 @@ func (tdConn *tapdanceConn) writeRaw(b []byte, connect bool) (n int, err error) 
 		/ Extra-Jumbo-Frame-Over-16kB-style.
 		/ That's why we will only fragment, if 0 bytes were sent in this connection, but
 		/ data still doesn't fit. This way we will accommodate all.
-	*/
-	needReconnect := (couldSend < totalToSend)
-	if needReconnect {
-		tdConn.writeReconnects++
-		tdConn.tryScheduleReconnect()
-		if tdConn.sentTotal != 0 {
-			// reconnect right away
-			Logger.Infof(tdConn.idStr() + " triggered preemptive reconnect in Write()")
-			return
-		} else {
-			// split buffer in chunks and reconnect after
-			toSend = couldSend
+		*/
+		needReconnect := (couldSend < totalToSendLeft + headerSize)
+		if needReconnect {
+			tdConn.writeReconnects++
+			tdConn.tryScheduleReconnect()
+			if tdConn.sentTotal != 0 {
+				// reconnect right away
+				Logger.Infof(tdConn.idStr() + " triggered preemptive reconnect in Write()")
+				return
+			} else {
+				// split buffer in chunks and reconnect after
+				toSend = couldSend
+			}
 		}
-	} else {
-		// can send everything
-		toSend = totalToSend
+		b = getMsgWithHeader(msg_raw_data,
+			tdConn._writeBuffer[tdConn.writeMsgIndex:tdConn.writeMsgIndex + toSend])
+	default:
+		panic("writeBufferedData() writeBufType: " + strconv.Itoa(tdConn.writeBufType))
 	}
 
-	n, err = tdConn.tlsConn.Write(b[:toSend])
-
-	if !connect {
-		tdConn.writeMsgIndex += n
+	n, err = tdConn.tlsConn.Write(b[:])
+	tdConn.writeMsgIndex += toSend
+	tdConn.sentTotal += n
+	if tdConn.writeMsgIndex >= tdConn.writeMsgSize {
+		tdConn.writeMsgIndex = 0
+		tdConn.writeMsgSize = 0
 	}
-
 	return
 }
 
@@ -769,11 +760,48 @@ func (tdConn *tapdanceConn) writeTransition(transition C2S_Transition) (err erro
 	tdConn.transitionMsg.DecoyListGeneration = &currGen
 	tdConn.transitionMsg.StateTransition = &transition
 	Logger.Debugln("tdConn.maxSend", tdConn.maxSend)
-	tdConn.maxSend += uint64(proto.Size(&tdConn.transitionMsg) + 6) // 6 bytes for header
+	tdConn.maxSend += (proto.Size(&tdConn.transitionMsg) + 2) // 6 bytes for header
 	Logger.Debugln("tdConn.maxSend", tdConn.maxSend)
 
 	err = tdConn.writeProto(tdConn.transitionMsg)
 	return
+}
+
+/*
+	Each message is a 16-bit net-order int "TL" (type+len), followed by a data blob.
+	If TL is negative, the blob is pure app data, with length abs(TL).
+	If TL is positive, the blob is a protobuf, with length TL.
+	If TL is 0, then read the following 4 bytes. Those 4 bytes are a net-order u32.
+	    This u32 is the length of the blob, which begins after this u32.
+	    The blob is a protobuf.
+*/
+func getMsgWithHeader(msgType int, msgBytes []byte) []byte {
+	bufSend := new(bytes.Buffer)
+	var err error
+	switch msgType {
+	case msg_protobuf:
+		if len(msgBytes) <= int(maxInt16) {
+			bufSend.Grow(2 + len(msgBytes)) // to avoid double allocation
+			err = binary.Write(bufSend, binary.BigEndian, int16(len(msgBytes)))
+
+		} else {
+			bufSend.Grow(2 + 4 + len(msgBytes)) // to avoid double allocation
+			bufSend.Write([]byte{0, 0})
+			err = binary.Write(bufSend, binary.BigEndian, int32(len(msgBytes)))
+		}
+	case msg_raw_data:
+		err = binary.Write(bufSend, binary.BigEndian, int16(-len(msgBytes)))
+	default:
+		panic("getMsgWithHeader() called with msgType: " + strconv.Itoa(msgType))
+	}
+	if err != nil {
+		// shouldn't ever happen
+		Logger.Errorln("getMsgWithHeader() failed with error: ", err)
+		Logger.Errorln("msgType ", msgType)
+		Logger.Errorln("msgBytes ", msgBytes)
+	}
+	bufSend.Write(msgBytes)
+	return bufSend.Bytes()
 }
 
 func (tdConn *tapdanceConn) writeProto(msg ClientToStation) (error) {
@@ -782,32 +810,30 @@ func (tdConn *tapdanceConn) writeProto(msg ClientToStation) (error) {
 		return err
 	}
 
-	bufSend := new(bytes.Buffer) // final buffer with outer header that gets sent
-	/*
-		Each message is a 16-bit net-order int "TL" (type+len), followed by a data blob.
-		If TL is negative, the blob is pure app data, with length abs(TL).
-		If TL is positive, the blob is a protobuf, with length TL.
-		If TL is 0, then read the following 4 bytes. Those 4 bytes are a net-order u32.
-	            This u32 is the length of the blob, which begins after this u32.
-	            The blob is a protobuf.
-	*/
-
-	if len(msgBytes) <= int(maxInt16) {
-		bufSend.Grow(2 + len(msgBytes)) // to avoid double allocation
-		if err = binary.Write(bufSend, binary.BigEndian, int16(len(msgBytes))); err != nil {
-			return err
-		}
+	// don't ever chunk protobufs
+	couldSend := tdConn.maxSend - tdConn.sentTotal
+	if couldSend < len(msgBytes) {
+		// if we can't send it due to upload limit:
+		//    buffer it, reconnect, and try again
+		tdConn._writeBuffer = msgBytes
+		tdConn.writeMsgSize = len(msgBytes)
+		tdConn.writeMsgIndex = 0
+		tdConn.writeBufType = msg_protobuf
+		tdConn.writeReconnects++
+		tdConn.tryScheduleReconnect()
+		// reconnect right away
+		Logger.Infoln(tdConn.idStr() + " triggered reconnect in writeProto()")
+		Logger.Infoln(tdConn.idStr() + " protobuf was: ", msg.String())
+		// switch ^ to Debugln when/if non-StateTransition protobufs are sent regularly
+		return nil
 	} else {
-		bufSend.Grow(2 + 4 + len(msgBytes)) // to avoid double allocation
-		bufSend.Write([]byte{0, 0})
-		if err = binary.Write(bufSend, binary.BigEndian, int32(len(msgBytes))); err != nil {
-			return err
-		}
+		Logger.Debugln(tdConn.idStr() + " sending protobuf: ", msg.String())
+		// if upload doesn't prevent us from sending it - just do it
+		// note that we always can send StateTransition, as space was reserved for it
+		b := getMsgWithHeader(msg_protobuf, msgBytes)
+		_, err = tdConn.tlsConn.Write(b)
+		tdConn.sentTotal += len(b)
 	}
-	bufSend.Write(msgBytes)
-	tdConn._writeBuffer = bufSend.Bytes()
-	tdConn.writeMsgSize = bufSend.Len()
-	_, err = tdConn.writeRaw(tdConn._writeBuffer, false)
 	return err
 }
 
