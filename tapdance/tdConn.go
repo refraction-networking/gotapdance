@@ -690,10 +690,10 @@ func (tdConn *tapdanceConn) Write(b []byte) (sentTotal int, err error) {
 	totalToSend := len(b)
 
 	for sentCurr := 0; sentTotal < totalToSend; sentTotal += sentCurr {
-		if totalToSend-sentTotal < int(maxInt16) {
-			sentCurr, err = writeBuf(b[sentCurr:totalToSend])
+		if totalToSend - sentTotal < int(maxInt16) {
+			sentCurr, err = writeBuf(b[sentTotal:totalToSend])
 		} else {
-			sentCurr, err = writeBuf(b[sentCurr : sentCurr+int(maxInt16)])
+			sentCurr, err = writeBuf(b[sentTotal : sentTotal+int(maxInt16)])
 		}
 	}
 	return
