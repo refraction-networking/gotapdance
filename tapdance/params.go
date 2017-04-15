@@ -29,6 +29,11 @@ const (
 	TD_STATE_CLOSED
 )
 
+const (
+	msg_raw_data = iota
+	msg_protobuf
+)
+
 // List of actually supported ciphers(not a list of offered ciphers!)
 // Essentially all AES GCM ciphers, except for ANON and PSK
 // ANON are too dangerous in our setting

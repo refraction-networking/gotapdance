@@ -529,10 +529,6 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 	            This u32 is the length of the blob, which begins after this u32.
 	            The blob is a protobuf.
 	*/
-	const (
-		msg_raw_data = iota
-		msg_protobuf
-	)
 	var outerProtoMsgType uint8
 
 	//TODO: check FIN+last data case
