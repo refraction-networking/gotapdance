@@ -306,7 +306,7 @@ func (tdConn *tapdanceConn) connect() {
 				}
 			}
 		} else {
-			Logger.Debugf(tdConn.idStr()+" connect fail", _err)
+			Logger.Debugf(tdConn.idStr() + " connect fail", _err)
 			atomic.StoreInt32(&tdConn.state, TD_STATE_CLOSED)
 		}
 	}()
@@ -317,14 +317,20 @@ func (tdConn *tapdanceConn) connect() {
 	case TD_STATE_NEW:
 		reconnect = false
 	case TD_STATE_CONNECTED:
-		Logger.Errorf(tdConn.idStr() + " called reconnect" +
+		currErr = errors.New(tdConn.idStr() + " called reconnect " +
 			", but state is TD_STATE_CONNECTED")
+		tdConn.setError(currErr, false)
+		return
 	case TD_STATE_CLOSED:
-		Logger.Errorf(tdConn.idStr() + " called reconnect" +
+		currErr = errors.New(tdConn.idStr() + " called reconnect " +
 			"but state is TD_STATE_CLOSED")
+		tdConn.setError(currErr, false)
+		return
 	default:
-		Logger.Errorf(tdConn.idStr() + " called reconnect" +
+		currErr = errors.New(tdConn.idStr() + " called reconnect " +
 			"but state is garbage: " + strconv.FormatUint(uint64(tdConn.state), 10))
+		tdConn.setError(currErr, false)
+		return
 	}
 
 	var expectedTransition S2C_Transition
