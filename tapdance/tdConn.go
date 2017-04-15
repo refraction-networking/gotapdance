@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"github.com/golang/protobuf/proto"
 	"github.com/zmap/zcrypto/tls"
 	"io"
@@ -161,11 +162,13 @@ func (tdConn *tapdanceConn) engineMain() {
 			continue
 		case TD_STATE_CONNECTED:
 		default:
+			Logger.Debugln(tdConn.idStr() + " unexpected tdConnstate: " + fmt.Sprintf("%d", tdConn.state))
 			return
 		}
 
 		// If just reconnected, but still have user outgoing user data - send it
 		if tdConn.writeMsgSize != 0 {
+			Logger.Infoln(tdConn.idStr() + fmt.Sprintf(" writing from %d:%d after reconnect", tdConn.writeMsgIndex, tdConn.writeMsgSize))
 			_, err := tdConn.writeRaw(tdConn._writeBuffer[tdConn.writeMsgIndex:tdConn.writeMsgSize], false)
 			if err != nil {
 				Logger.Infoln(tdConn.idStr() + " re writeRaw() " +
@@ -188,6 +191,7 @@ func (tdConn *tapdanceConn) engineMain() {
 			continue
 		case tdConn._writeBuffer = <-tdConn.writeChannel:
 			tdConn.writeMsgSize = len(tdConn._writeBuffer)
+			Logger.Infoln(tdConn.idStr() + " writeChannel: " + hex.EncodeToString(tdConn._writeBuffer))
 			_, err := tdConn.writeRaw(tdConn._writeBuffer[:tdConn.writeMsgSize], false)
 			if err != nil {
 				Logger.Infoln(tdConn.idStr() + " writeRaw() " +
@@ -308,7 +312,7 @@ func (tdConn *tapdanceConn) connect() {
 				}
 			}
 		} else {
-			Logger.Debugf(tdConn.idStr() + " connect fail", _err)
+			Logger.Debugf(tdConn.idStr()+" connect fail", _err)
 			atomic.StoreInt32(&tdConn.state, TD_STATE_CLOSED)
 		}
 	}()
@@ -522,12 +526,12 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 	var msgLen uint32 // just the body(e.g. raw data or protobuf)
 
 	/*
-		Each message is a 16-bit net-order int "TL" (type+len), followed by a data blob.
-		If TL is negative, the blob is pure app data, with length abs(TL).
-		If TL is positive, the blob is a protobuf, with length TL.
-		If TL is 0, then read the following 4 bytes. Those 4 bytes are a net-order u32.
-	            This u32 is the length of the blob, which begins after this u32.
-	            The blob is a protobuf.
+			Each message is a 16-bit net-order int "TL" (type+len), followed by a data blob.
+			If TL is negative, the blob is pure app data, with length abs(TL).
+			If TL is positive, the blob is a protobuf, with length TL.
+			If TL is 0, then read the following 4 bytes. Those 4 bytes are a net-order u32.
+		            This u32 is the length of the blob, which begins after this u32.
+		            The blob is a protobuf.
 	*/
 	const (
 		msg_raw_data = iota
@@ -556,6 +560,9 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 		}
 		return pos + neg
 	}
+	Logger.Infoln(tdConn.idStr() + " read data: " + fmt.Sprintf("(%d bytes): ", len(tdConn._readBuffer)) +
+		hex.EncodeToString(tdConn._readBuffer[0:readBytesTotal]))
+
 	// Get TIL
 	typeLen := Uint16toInt16(binary.BigEndian.Uint16(tdConn._readBuffer[0:2]))
 	if typeLen < 0 {
@@ -585,6 +592,7 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 	totalBytesToRead = headerSize + msgLen
 	read_buffer := make([]byte, msgLen)
 
+	Logger.Infoln(fmt.Sprintf("%s read %d bytes so far, need %d", tdConn.idStr(), readBytesTotal, totalBytesToRead))
 	// Get the message itself
 	for readBytesTotal < totalBytesToRead {
 		readBytes, err = tdConn.tlsConn.Read(read_buffer[readBytesTotal-headerSize : msgLen])
@@ -596,6 +604,8 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 			return
 		}
 	}
+	Logger.Infoln(tdConn.idStr() + " read data: " +
+		hex.EncodeToString(read_buffer[headerSize:msgLen]))
 
 	switch outerProtoMsgType {
 	case msg_raw_data:
@@ -668,6 +678,8 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 // after a fixed time limit; see SetDeadline and SetWriteDeadline.
 // TODO: Ideally should support multiple readers
 func (tdConn *tapdanceConn) Write(b []byte) (sentTotal int, err error) {
+	Logger.Infoln(tdConn.idStr() + " going to write: " +
+		hex.EncodeToString(b))
 	outerHeaderSize := 2
 	writeBuf := func(bChunk []byte) (n int, _err error) {
 		bufSend := new(bytes.Buffer)                // final buffer with outer header that gets sent
@@ -677,23 +689,30 @@ func (tdConn *tapdanceConn) Write(b []byte) (sentTotal int, err error) {
 			return
 		}
 		bufSend.Write(bChunk[:])
+		Logger.Debugln(tdConn.idStr() + " writing chunk: " +
+			hex.EncodeToString(bChunk))
 		select {
 		case tdConn.writeChannel <- bufSend.Bytes():
 			n = len(bChunk)
 		case <-tdConn.stopped:
 		}
 		if n == 0 {
+			Logger.Errorf(tdConn.idStr() + " stopped writing")
 			_err = tdConn.getError()
 		}
 		return
 	}
 	totalToSend := len(b)
 
-	for sentCurr := 0; sentTotal < totalToSend; sentTotal += sentCurr {
-		if totalToSend - sentTotal < int(maxInt16) {
+	max_send := 8192
+	sentCurr := 0
+	for sentTotal := 0; sentTotal < totalToSend; sentTotal += sentCurr {
+		if totalToSend-sentTotal < max_send {
+			Logger.Debugln(tdConn.idStr() + " write chunk (remaining) " + fmt.Sprintf("[%d:%d]", sentTotal, totalToSend))
 			sentCurr, err = writeBuf(b[sentTotal:totalToSend])
 		} else {
-			sentCurr, err = writeBuf(b[sentTotal : sentTotal+int(maxInt16)])
+			Logger.Debugln(tdConn.idStr() + " write chunk " + fmt.Sprintf("[%d:%d]", sentTotal, sentTotal+max_send))
+			sentCurr, err = writeBuf(b[sentTotal : sentTotal+max_send])
 		}
 	}
 	return
@@ -740,6 +759,7 @@ func (tdConn *tapdanceConn) writeRaw(b []byte, connect bool) (n int, err error) 
 			return
 		} else {
 			// split buffer in chunks and reconnect after
+			Logger.Infof(tdConn.idStr() + fmt.Sprintf(" reconnect in Write(), but still sending %d bytes", couldSend))
 			toSend = couldSend
 		}
 	} else {
@@ -751,6 +771,11 @@ func (tdConn *tapdanceConn) writeRaw(b []byte, connect bool) (n int, err error) 
 
 	if !connect {
 		tdConn.writeMsgIndex += n
+		Logger.Infof(tdConn.idStr() + fmt.Sprintf(" updated writeMsgIndex to %d after %d byte write", tdConn.writeMsgIndex, n))
+	}
+
+	if err != nil {
+		Logger.Infof(tdConn.idStr() + " got an err in writeRaw...:" + err.Error())
 	}
 
 	return
@@ -763,7 +788,7 @@ func (tdConn *tapdanceConn) preGenenerateTransition() int {
 	dummyTransition := C2S_Transition_C2S_NO_CHANGE
 	tdConn.transitionMsg = ClientToStation{StateTransition: &dummyTransition,
 		DecoyListGeneration: &dummyGen,
-		Padding: []byte(getRandPadding(150, 950, 10))}
+		Padding:             []byte(getRandPadding(150, 950, 10))}
 	return proto.Size(&tdConn.transitionMsg)
 }
 
@@ -779,7 +804,7 @@ func (tdConn *tapdanceConn) writeTransition(transition C2S_Transition) (err erro
 	return
 }
 
-func (tdConn *tapdanceConn) writeProto(msg ClientToStation) (error) {
+func (tdConn *tapdanceConn) writeProto(msg ClientToStation) error {
 	msgBytes, err := proto.Marshal(&msg)
 	if err != nil {
 		return err
@@ -787,12 +812,12 @@ func (tdConn *tapdanceConn) writeProto(msg ClientToStation) (error) {
 
 	bufSend := new(bytes.Buffer) // final buffer with outer header that gets sent
 	/*
-		Each message is a 16-bit net-order int "TL" (type+len), followed by a data blob.
-		If TL is negative, the blob is pure app data, with length abs(TL).
-		If TL is positive, the blob is a protobuf, with length TL.
-		If TL is 0, then read the following 4 bytes. Those 4 bytes are a net-order u32.
-	            This u32 is the length of the blob, which begins after this u32.
-	            The blob is a protobuf.
+			Each message is a 16-bit net-order int "TL" (type+len), followed by a data blob.
+			If TL is negative, the blob is pure app data, with length abs(TL).
+			If TL is positive, the blob is a protobuf, with length TL.
+			If TL is 0, then read the following 4 bytes. Those 4 bytes are a net-order u32.
+		            This u32 is the length of the blob, which begins after this u32.
+		            The blob is a protobuf.
 	*/
 
 	if len(msgBytes) <= int(maxInt16) {
@@ -1015,6 +1040,7 @@ func (tdConn *tapdanceConn) Close() (err error) {
 	tdConn.setError(errors.New("Forced shutdown by user"), false)
 	tdConn.closeOnce.Do(func() {
 		close(tdConn.stopped)
+		Logger.Debugf(tdConn.idStr() + " Close()")
 		atomic.StoreInt32(&tdConn.state, TD_STATE_CLOSED)
 		waitForWriterToDie := time.After(2 * time.Second)
 		select {
