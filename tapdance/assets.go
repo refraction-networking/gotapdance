@@ -241,7 +241,7 @@ func (a *assets) saveClientConf() error {
 		return err
 	}
 	filename := path.Join(a.path, a.filenameClientConf)
-	tmpFilename := path.Join(a.path, "." + a.filenameClientConf + ".tmp")
+	tmpFilename := path.Join(a.path, "."+a.filenameClientConf+".tmp")
 	err = ioutil.WriteFile(tmpFilename, buf[:], 0644)
 	if err != nil {
 		return err

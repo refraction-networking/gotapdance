@@ -310,7 +310,7 @@ func (tdConn *tapdanceConn) connect() {
 				}
 			}
 		} else {
-			Logger.Debugf(tdConn.idStr() + " connect fail", _err)
+			Logger.Debugf(tdConn.idStr()+" connect fail", _err)
 			atomic.StoreInt32(&tdConn.state, TD_STATE_CLOSED)
 		}
 	}()
@@ -346,7 +346,7 @@ func (tdConn *tapdanceConn) connect() {
 	// Randomize tdConn.maxSend to avoid heuristics
 	tdConn.maxSend = getRandInt(sendLimitMin, sendLimitMax)
 	tdConn.maxSend -= transitionMsgSize // reserve space for transition msg
-	tdConn.maxSend -= 2 // reserve 2 bytes for transition msg header
+	tdConn.maxSend -= 2                 // reserve 2 bytes for transition msg header
 
 	if reconnect {
 		connection_attempts = 2
@@ -525,12 +525,12 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 	var msgLen uint32 // just the body(e.g. raw data or protobuf)
 
 	/*
-		Each message is a 16-bit net-order int "TL" (type+len), followed by a data blob.
-		If TL is negative, the blob is pure app data, with length abs(TL).
-		If TL is positive, the blob is a protobuf, with length TL.
-		If TL is 0, then read the following 4 bytes. Those 4 bytes are a net-order u32.
-	            This u32 is the length of the blob, which begins after this u32.
-	            The blob is a protobuf.
+			Each message is a 16-bit net-order int "TL" (type+len), followed by a data blob.
+			If TL is negative, the blob is pure app data, with length abs(TL).
+			If TL is positive, the blob is a protobuf, with length TL.
+			If TL is 0, then read the following 4 bytes. Those 4 bytes are a net-order u32.
+		            This u32 is the length of the blob, which begins after this u32.
+		            The blob is a protobuf.
 	*/
 	var outerProtoMsgType uint8
 
@@ -705,17 +705,16 @@ func (tdConn *tapdanceConn) writeBufferedData() (n int, err error) {
 			couldSend = maxChunkSize
 		}
 		/*
-		/ Check if we are able to send the whole buffer or not(due to 16kB upload limit).
-		/ We may want to split buffer into 2 or more chunks and send them chunk by chunk
-		/ after reconnect(s). Unfortunately, we can't just always split it, as some
-		/ protocols don't allow fragmentation, e.g. ssh: it sets goddamn IPv4
-		/ 'Don't Fragment' flag and will break, if you force fragmentation.
-		/ And we don't really know which application is using TapDance: ssh-style or
-		/ Extra-Jumbo-Frame-Over-16kB-style.
-		/ That's why we will only fragment, if 0 bytes were sent in this connection, but
-		/ data still doesn't fit. This way we will accommodate all.
+			/ Check if we are able to send the whole buffer or not(due to upload limit).
+			/ We may want to split buffer into 2 or more chunks and send them chunk by chunk
+			/ after reconnect(s). Unfortunately, we can't just always split it, as some
+			/ protocols don't allow fragmentation, e.g. ssh will break, if you fragment pkts.
+			/ And we don't really know which application is using TapDance: ssh-style or
+			/ Extra-Jumbo-Frame-Over-16kB-style.
+			/ That's why we will only fragment, if 0 bytes were sent in this connection, but
+			/ data still doesn't fit. This way we will accommodate all.
 		*/
-		needReconnect := (couldSend < totalToSendLeft + headerSize)
+		needReconnect := (couldSend < totalToSendLeft+headerSize)
 		if needReconnect {
 			tdConn.writeReconnects++
 			tdConn.tryScheduleReconnect()
@@ -729,7 +728,7 @@ func (tdConn *tapdanceConn) writeBufferedData() (n int, err error) {
 			}
 		}
 		b = getMsgWithHeader(msg_raw_data,
-			tdConn._writeBuffer[tdConn.writeMsgIndex:tdConn.writeMsgIndex + toSend])
+			tdConn._writeBuffer[tdConn.writeMsgIndex:tdConn.writeMsgIndex+toSend])
 	default:
 		panic("writeBufferedData() writeBufType: " + strconv.Itoa(tdConn.writeBufType))
 	}
@@ -744,14 +743,15 @@ func (tdConn *tapdanceConn) writeBufferedData() (n int, err error) {
 	return
 }
 
-// generates transition msg sent before each reconnect and saves it to tdConn.transitionMsg
-// returns size of tdConn.transitionMsg
+// generates transition msg, which is sent before reconnects
+// msg is saved to tdConn.transitionMsg
+// returns size of serialized tdConn.transitionMsg
 func (tdConn *tapdanceConn) preGenenerateTransition() int {
 	dummyGen := uint32(0)
 	dummyTransition := C2S_Transition_C2S_NO_CHANGE
 	tdConn.transitionMsg = ClientToStation{StateTransition: &dummyTransition,
 		DecoyListGeneration: &dummyGen,
-		Padding: []byte(getRandPadding(150, 950, 10))}
+		Padding:             []byte(getRandPadding(150, 950, 10))}
 	return proto.Size(&tdConn.transitionMsg)
 }
 
@@ -760,7 +760,7 @@ func (tdConn *tapdanceConn) writeTransition(transition C2S_Transition) (err erro
 	tdConn.transitionMsg.DecoyListGeneration = &currGen
 	tdConn.transitionMsg.StateTransition = &transition
 	Logger.Debugln("tdConn.maxSend", tdConn.maxSend)
-	tdConn.maxSend += (proto.Size(&tdConn.transitionMsg) + 2) // 6 bytes for header
+	tdConn.maxSend += (proto.Size(&tdConn.transitionMsg) + 2) // 2 bytes for header
 	Logger.Debugln("tdConn.maxSend", tdConn.maxSend)
 
 	err = tdConn.writeProto(tdConn.transitionMsg)
@@ -804,7 +804,7 @@ func getMsgWithHeader(msgType int, msgBytes []byte) []byte {
 	return bufSend.Bytes()
 }
 
-func (tdConn *tapdanceConn) writeProto(msg ClientToStation) (error) {
+func (tdConn *tapdanceConn) writeProto(msg ClientToStation) error {
 	msgBytes, err := proto.Marshal(&msg)
 	if err != nil {
 		return err
@@ -823,11 +823,11 @@ func (tdConn *tapdanceConn) writeProto(msg ClientToStation) (error) {
 		tdConn.tryScheduleReconnect()
 		// reconnect right away
 		Logger.Infoln(tdConn.idStr() + " triggered reconnect in writeProto()")
-		Logger.Infoln(tdConn.idStr() + " protobuf was: ", msg.String())
+		Logger.Infoln(tdConn.idStr()+" protobuf was: ", msg.String())
 		// switch ^ to Debugln when/if non-StateTransition protobufs are sent regularly
 		return nil
 	} else {
-		Logger.Debugln(tdConn.idStr() + " sending protobuf: ", msg.String())
+		Logger.Debugln(tdConn.idStr()+" sending protobuf: ", msg.String())
 		// if upload doesn't prevent us from sending it - just do it
 		// note that we always can send StateTransition, as space was reserved for it
 		b := getMsgWithHeader(msg_protobuf, msgBytes)
