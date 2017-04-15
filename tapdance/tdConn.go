@@ -608,8 +608,8 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 		if err != nil {
 			return
 		}
-		Logger.Infoln(tdConn.idStr() + " received protobuf: " +
-			msg.String()) // TODO: change level to Debugln
+		Logger.Debugln(tdConn.idStr() + " received protobuf: " +
+			msg.String())
 
 		// handle state transitions
 		stateTransition := msg.GetStateTransition()
