@@ -731,7 +731,7 @@ func (tdConn *tapdanceConn) writeRaw(b []byte, connect bool) (n int, err error) 
 		/ data still doesn't fit. This way we will accommodate all.
 	*/
 	needReconnect := (couldSend < totalToSend)
-	if needReconnect {
+	if needReconnect && !connect {
 		tdConn.writeReconnects++
 		tdConn.tryScheduleReconnect()
 		if tdConn.sentTotal != 0 {
@@ -808,9 +808,17 @@ func (tdConn *tapdanceConn) writeProto(msg ClientToStation) (error) {
 		}
 	}
 	bufSend.Write(msgBytes)
-	tdConn._writeBuffer = bufSend.Bytes()
-	tdConn.writeMsgSize = bufSend.Len()
-	_, err = tdConn.writeRaw(tdConn._writeBuffer, false)
+
+	// If it's a reconnect message, force it to go through (no buffering)
+	force_connect := (*msg.StateTransition == C2S_Transition_C2S_EXPECT_RECONNECT)
+	if !force_connect {
+		tdConn._writeBuffer = bufSend.Bytes()
+		tdConn.writeMsgSize = bufSend.Len()
+		_, err = tdConn.writeRaw(tdConn._writeBuffer, false)
+	} else {
+		// This is a reconnect or something else urgent jumping the queue
+		_, err = tdConn.writeRaw(bufSend.Bytes(), true)
+	}
 	return err
 }
 
