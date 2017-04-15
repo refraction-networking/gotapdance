@@ -80,6 +80,8 @@ type tapdanceConn struct {
 	// for statistics
 	writeReconnects   int
 	timeoutReconnects int
+
+	transitionMsg ClientToStation
 }
 
 /* Create new TapDance connection
@@ -336,8 +338,12 @@ func (tdConn *tapdanceConn) connect() {
 	var expectedTransition S2C_Transition
 	var connection_attempts int
 
+	// pregenerate transition protobuf, which is always sent before close and reconnect
+	transitionMsgSize := tdConn.preGenenerateTransition()
+
 	// Randomize tdConn.maxSend to avoid heuristics
 	tdConn.maxSend = uint64(getRandInt(sendLimitMin, sendLimitMax))
+	tdConn.maxSend -= uint64(transitionMsgSize) - 6 // 6 bytes reserved for header
 
 	if reconnect {
 		connection_attempts = 2
@@ -625,6 +631,9 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 		case S2C_Transition_S2C_SESSION_CLOSE:
 			err = errors.New("MSG_CLOSE")
 			Logger.Infof(tdConn.idStr() + " received MSG_CLOSE")
+		case S2C_Transition_S2C_ERROR:
+			err = errors.New("Received MSG_ERROR from station")
+			return
 		}
 
 		// Helper functions
@@ -670,7 +679,7 @@ func (tdConn *tapdanceConn) Write(b []byte) (sentTotal int, err error) {
 		bufSend.Write(bChunk[:])
 		select {
 		case tdConn.writeChannel <- bufSend.Bytes():
-			n = bufSend.Len()
+			n = len(bChunk)
 		case <-tdConn.stopped:
 		}
 		if n == 0 {
@@ -686,9 +695,6 @@ func (tdConn *tapdanceConn) Write(b []byte) (sentTotal int, err error) {
 		} else {
 			sentCurr, err = writeBuf(b[sentCurr : sentCurr+int(maxInt16)])
 		}
-	}
-	if sentTotal > 0 {
-		sentTotal -= outerHeaderSize
 	}
 	return
 }
@@ -750,12 +756,26 @@ func (tdConn *tapdanceConn) writeRaw(b []byte, connect bool) (n int, err error) 
 	return
 }
 
+// generates transition msg sent before each reconnect and saves it to tdConn.transitionMsg
+// returns size of tdConn.transitionMsg
+func (tdConn *tapdanceConn) preGenenerateTransition() int {
+	dummyGen := uint32(0)
+	dummyTransition := C2S_Transition_C2S_NO_CHANGE
+	tdConn.transitionMsg = ClientToStation{StateTransition: &dummyTransition,
+		DecoyListGeneration: &dummyGen,
+		Padding: []byte(getRandPadding(150, 950, 10))}
+	return proto.Size(&tdConn.transitionMsg)
+}
+
 func (tdConn *tapdanceConn) writeTransition(transition C2S_Transition) (err error) {
-	gen := Assets().GetGeneration()
-	msg := ClientToStation{StateTransition: &transition,
-		DecoyListGeneration: &gen,
-	Padding: []byte(getRandPadding(150, 950, 10))}
-	err = tdConn.writeProto(msg)
+	currGen := Assets().GetGeneration()
+	tdConn.transitionMsg.DecoyListGeneration = &currGen
+	tdConn.transitionMsg.StateTransition = &transition
+	Logger.Debugln("tdConn.maxSend", tdConn.maxSend)
+	tdConn.maxSend += uint64(proto.Size(&tdConn.transitionMsg) + 6) // 6 bytes for header
+	Logger.Debugln("tdConn.maxSend", tdConn.maxSend)
+
+	err = tdConn.writeProto(tdConn.transitionMsg)
 	return
 }
 
