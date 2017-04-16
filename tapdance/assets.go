@@ -47,9 +47,10 @@ func Assets() *assets {
 	var defaultDecoys = []*TLSDecoySpec{
 		initTLSDecoySpec("192.122.190.104", "tapdance1.freeaeskey.xyz"),
 	}
-	defaultKey := []byte{211, 127, 10, 139, 150, 180, 97,
-		15, 56, 188, 7, 155, 7, 102, 41, 34, 70, 194, 210, 170, 50,
-		53, 234, 49, 42, 240, 41, 27, 91, 38, 247, 67}
+
+	defaultKey := []byte{189, 193, 226, 121, 87, 194, 76, 106, 81, 218,
+		245, 186, 4, 222, 249, 237, 96, 101, 77, 161, 183, 123, 63,
+		216, 18, 104, 111, 181, 75, 208, 232, 12}
 	defualtKeyType := KeyType_AES_GCM_128
 	defaultPubKey := PubKey{Key: defaultKey, Type: &defualtKeyType}
 	defaultGeneration := uint32(0)
