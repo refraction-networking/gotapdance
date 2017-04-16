@@ -9,11 +9,19 @@ import (
 	"path"
 	"reflect"
 	"testing"
+	"encoding/binary"
 )
+
+func initTLSDecoySpec(ip string, sni string) *TLSDecoySpec {
+	ipUint32 := binary.BigEndian.Uint32(net.ParseIP(ip).To4())
+	tlsDecoy := TLSDecoySpec{Hostname: &sni,
+		Ipv4Addr: &ipUint32}
+	return &tlsDecoy
+}
 
 func TestAssets_Decoys(t *testing.T) {
 	oldpath := Assets().path
-	Assets().saveDecoys()
+	Assets().saveClientConf()
 	dir1, err := ioutil.TempDir("/tmp/", "decoy1")
 	if err != nil {
 		fmt.Println(err.Error())
@@ -25,15 +33,17 @@ func TestAssets_Decoys(t *testing.T) {
 		t.Fail()
 	}
 
-	var testDecoys1 = []decoyServer{
-		{IP: "4.8.15.16", SNI: "ericw.us"},
-		{IP: "19.21.23.42", SNI: "sergeyfrolov.github.io"},
+
+	var testDecoys1 = []*TLSDecoySpec{
+		initTLSDecoySpec("4.8.15.16", "ericw.us"),
+		initTLSDecoySpec("19.21.23.42", "sergeyfrolov.github.io"),
 	}
-	var testDecoys2 = []decoyServer{
-		{IP: "0.1.2.3", SNI: "whatever.cn"},
-		{IP: "255.254.253.252", SNI: "particular.ir"},
-		{IP: "11.22.33.44", SNI: "what.is.up"},
-		{IP: "8.255.255.8", SNI: "heh.meh"},
+
+	var testDecoys2 = []*TLSDecoySpec{
+		initTLSDecoySpec("0.1.2.3", "whatever.cn"),
+		initTLSDecoySpec("255.254.253.252", "particular.ir"),
+		initTLSDecoySpec("11.22.33.44", "what.is.up"),
+		initTLSDecoySpec("8.255.255.8", "heh.meh"),
 	}
 
 	Assets().SetAssetsDir(dir1)
@@ -48,16 +58,16 @@ func TestAssets_Decoys(t *testing.T) {
 		fmt.Println(err.Error())
 		t.Fail()
 	}
-	if !reflect.DeepEqual(Assets().decoys, testDecoys2) {
+	if !reflect.DeepEqual(Assets().config.DecoyList.TlsDecoys, testDecoys2) {
 		fmt.Println("Assets are not equal!")
-		fmt.Println("Assets().decoys:", Assets().decoys)
+		fmt.Println("Assets().decoys:", Assets().config.DecoyList.TlsDecoys)
 		fmt.Println("testDecoys2:", testDecoys2)
 		t.Fail()
 	}
 
-	decoyInList := func(d decoyServer, decoyList []decoyServer) bool {
+	decoyInList := func(d *TLSDecoySpec, decoyList []*TLSDecoySpec) bool {
 		for _, elem := range decoyList {
-			if elem == d {
+			if reflect.DeepEqual(elem, d) {
 				return true
 			}
 		}
@@ -71,18 +81,18 @@ func TestAssets_Decoys(t *testing.T) {
 			fmt.Println("Corrupted addr:", addr, ". Error:", err.Error())
 			t.Fail()
 		}
-		decoyServ := decoyServer{SNI: _sni, IP: host_addr}
-		if !decoyInList(decoyServ, Assets().decoys) {
+		decoyServ := initTLSDecoySpec(host_addr, _sni)
+		if !decoyInList(decoyServ, Assets().config.DecoyList.TlsDecoys) {
 			fmt.Println("decoyServ not in List!")
 			fmt.Println("decoyServ:", decoyServ)
-			fmt.Println("Assets().decoys:", Assets().decoys)
+			fmt.Println("Assets().decoys:", Assets().config.DecoyList.TlsDecoys)
 			t.Fail()
 		}
 	}
 	Assets().SetAssetsDir(dir1)
-	if !reflect.DeepEqual(Assets().decoys, testDecoys1) {
+	if !reflect.DeepEqual(Assets().config.DecoyList.TlsDecoys, testDecoys1) {
 		fmt.Println("Assets are not equal!")
-		fmt.Println("Assets().decoys:", Assets().decoys)
+		fmt.Println("Assets().decoys:", Assets().config.DecoyList.TlsDecoys)
 		fmt.Println("testDecoys1:", testDecoys1)
 		t.Fail()
 	}
@@ -93,16 +103,16 @@ func TestAssets_Decoys(t *testing.T) {
 			fmt.Println("Corrupted addr:", addr, ". Error:", err.Error())
 			t.Fail()
 		}
-		decoyServ := decoyServer{SNI: _sni, IP: host_addr}
-		if !decoyInList(decoyServ, Assets().decoys) {
+		decoyServ := initTLSDecoySpec(host_addr, _sni)
+		if !decoyInList(decoyServ, Assets().config.DecoyList.TlsDecoys) {
 			fmt.Println("decoyServ not in List!")
 			fmt.Println("decoyServ:", decoyServ)
-			fmt.Println("Assets().decoys:", Assets().decoys)
+			fmt.Println("Assets().decoys:", Assets().config.DecoyList.TlsDecoys)
 			t.Fail()
 		}
 	}
-	os.Remove(path.Join(dir1, Assets().filenameDecoys))
-	os.Remove(path.Join(dir2, Assets().filenameDecoys))
+	os.Remove(path.Join(dir1, Assets().filenameClientConf))
+	os.Remove(path.Join(dir2, Assets().filenameClientConf))
 	os.Remove(dir1)
 	os.Remove(dir2)
 	Assets().SetAssetsDir(oldpath)
@@ -110,8 +120,13 @@ func TestAssets_Decoys(t *testing.T) {
 }
 
 func TestAssets_Pubkey(t *testing.T) {
+	initPubKey := func(defaultKey []byte) PubKey {
+		defualtKeyType := KeyType_AES_GCM_128
+		return PubKey{Key: defaultKey, Type: &defualtKeyType}
+	}
+
 	oldpath := Assets().path
-	Assets().savePubkey()
+	Assets().saveClientConf()
 	dir1, err := ioutil.TempDir("/tmp/", "pubkey1")
 	if err != nil {
 		fmt.Println(err.Error())
@@ -123,12 +138,12 @@ func TestAssets_Pubkey(t *testing.T) {
 		t.Fail()
 	}
 
-	var pubkey1 = [32]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+	var pubkey1 = initPubKey([]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
 		12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
-		27, 28, 29, 30, 31}
-	var pubkey2 = [32]byte{200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211,
+		27, 28, 29, 30, 31})
+	var pubkey2 = initPubKey([]byte{200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211,
 		212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226,
-		227, 228, 229, 230, 231}
+		227, 228, 229, 230, 231})
 
 	Assets().SetAssetsDir(dir1)
 	err = Assets().SetPubkey(pubkey1)
@@ -142,17 +157,17 @@ func TestAssets_Pubkey(t *testing.T) {
 		fmt.Println(err.Error())
 		t.Fail()
 	}
-	if !bytes.Equal(Assets().stationPubkey[:], pubkey2[:]) {
+	if !bytes.Equal(Assets().config.DefaultPubkey.Key[:], pubkey2.Key[:]) {
 		fmt.Println("Pubkeys are not equal!")
-		fmt.Println("Assets().stationPubkey:", Assets().stationPubkey)
+		fmt.Println("Assets().stationPubkey:", Assets().config.DefaultPubkey.Key[:])
 		fmt.Println("pubkey2:", pubkey2)
 		t.Fail()
 	}
 
 	Assets().SetAssetsDir(dir1)
-	if !bytes.Equal(Assets().stationPubkey[:], pubkey1[:]) {
+	if !bytes.Equal(Assets().config.DefaultPubkey.Key[:], pubkey1.Key[:]) {
 		fmt.Println("Pubkeys are not equal!")
-		fmt.Println("Assets().stationPubkey:", Assets().stationPubkey)
+		fmt.Println("Assets().stationPubkey:", Assets().config.DefaultPubkey.Key[:])
 		fmt.Println("pubkey1:", pubkey1)
 		t.Fail()
 	}
