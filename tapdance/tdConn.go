@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"github.com/golang/protobuf/proto"
 	"github.com/zmap/zcrypto/tls"
 	"io"
 	"net"
@@ -31,8 +32,8 @@ type tapdanceConn struct {
 	can stay connected */
 	remoteConnId [16]byte
 
-	maxSend   uint64
-	sentTotal uint64
+	maxSend   int
+	sentTotal int
 
 	decoyAddr string // ipv4_addr:port
 	decoySNI  string
@@ -42,6 +43,7 @@ type tapdanceConn struct {
 
 	writeMsgSize  int
 	writeMsgIndex int
+	writeBufType  int // appdata or protobug
 
 	stationPubkey *[32]byte
 
@@ -61,6 +63,7 @@ type tapdanceConn struct {
 	// used by 2 engines to communicate /w one another
 	// true is sent upon success
 	readerStopped chan bool
+	writerStopped chan bool
 	doneReconnect chan bool
 	stopped       chan bool
 	closeOnce     sync.Once
@@ -78,6 +81,8 @@ type tapdanceConn struct {
 	// for statistics
 	writeReconnects   int
 	timeoutReconnects int
+
+	transitionMsg ClientToStation
 }
 
 /* Create new TapDance connection
@@ -100,18 +105,18 @@ func DialTapDance(
 
 	rand.Read(tdConn.remoteConnId[:])
 
-	tdConn._readBuffer = make([]byte, 3) // Only read headers into it
+	tdConn._readBuffer = make([]byte, 6) // Only read headers into it
 	tdConn._writeBuffer = make([]byte, 16*1024+20+20+12)
-	//tdConn.receive_buffer = make([]byte, 0)
 
 	tdConn.stopped = make(chan bool)
 	tdConn.readerStopped = make(chan bool)
+	tdConn.writerStopped = make(chan bool)
 	tdConn.doneReconnect = make(chan bool)
 	tdConn.writeChannel = make(chan []byte)
-	tdConn.readChannel = make(chan []byte)
+	tdConn.readChannel = make(chan []byte, 1)
 
-	tdConn.statsUpload = make(chan int, 10)
-	tdConn.statsDownload = make(chan int, 10)
+	tdConn.statsUpload = make(chan int, 32)
+	tdConn.statsDownload = make(chan int, 32)
 
 	tdConn.state = TD_STATE_NEW
 	tdConn.connect()
@@ -134,12 +139,20 @@ func (tdConn *tapdanceConn) engineMain() {
 	defer func() {
 		Logger.Debugln(tdConn.idStr() + " exit engineMain()")
 		close(tdConn.doneReconnect)
+		close(tdConn.writerStopped)
 		tdConn.Close()
 	}()
 
 	for {
 		switch atomic.LoadInt32(&tdConn.state) {
 		case TD_STATE_RECONNECT:
+			err := tdConn.writeTransition(C2S_Transition_C2S_EXPECT_RECONNECT)
+			if err != nil {
+				Logger.Infoln(tdConn.idStr() + " writeTransition(RECONNECT) " +
+					"failed with " + err.Error())
+				tdConn.setError(err, false)
+				return
+			}
 			tdConn.tcpConn.CloseWrite()
 			Logger.Debugln(tdConn.idStr() + " write closed")
 			Logger.Infoln(tdConn.idStr() + " reconnecting!" +
@@ -154,7 +167,13 @@ func (tdConn *tapdanceConn) engineMain() {
 
 		// If just reconnected, but still have user outgoing user data - send it
 		if tdConn.writeMsgSize != 0 {
-			_, _ = tdConn.write_td(tdConn._writeBuffer[tdConn.writeMsgIndex:tdConn.writeMsgSize], false)
+			_, err := tdConn.writeBufferedData()
+			if err != nil {
+				Logger.Infoln(tdConn.idStr() + " re writeRaw() " +
+					"failed with " + err.Error())
+				tdConn.setError(err, false)
+				return
+			}
 			if atomic.LoadInt32(&tdConn.state) != TD_STATE_CONNECTED {
 				continue
 			}
@@ -170,9 +189,10 @@ func (tdConn *tapdanceConn) engineMain() {
 			continue
 		case tdConn._writeBuffer = <-tdConn.writeChannel:
 			tdConn.writeMsgSize = len(tdConn._writeBuffer)
-			_, err := tdConn.write_td(tdConn._writeBuffer[:tdConn.writeMsgSize], false)
+			tdConn.writeBufType = msg_raw_data
+			_, err := tdConn.writeBufferedData()
 			if err != nil {
-				Logger.Debugln(tdConn.idStr() + " write_td() " +
+				Logger.Infoln(tdConn.idStr() + " writeRaw() " +
 					"failed with " + err.Error())
 				tdConn.setError(err, false)
 				return
@@ -244,7 +264,7 @@ func (tdConn *tapdanceConn) readSubEngine() {
 			tdConn.tryScheduleReconnect()
 			continue
 		default:
-			_, err = tdConn.read_msg(MSG_DATA)
+			_, err = tdConn.read_msg(S2C_Transition_S2C_NO_CHANGE)
 			if err != nil {
 				if err.Error() == "MSG_CLOSE" {
 					err = io.EOF
@@ -261,7 +281,7 @@ func (tdConn *tapdanceConn) readSubEngine() {
 				if toReconnect {
 					continue
 				} else {
-					Logger.Debugln(tdConn.idStr() + " read_msg() " +
+					Logger.Infoln(tdConn.idStr() + " read_msg() " +
 						"failed with " + err.Error())
 					return
 				}
@@ -283,16 +303,15 @@ func (tdConn *tapdanceConn) connect() {
 		if connectOk {
 			Logger.Debugf(tdConn.idStr() + " connect success")
 			atomic.StoreInt32(&tdConn.state, TD_STATE_CONNECTED)
+			if reconnect {
+				select {
+				case tdConn.doneReconnect <- connectOk:
+				case <-tdConn.stopped:
+				}
+			}
 		} else {
 			Logger.Debugf(tdConn.idStr()+" connect fail", _err)
 			atomic.StoreInt32(&tdConn.state, TD_STATE_CLOSED)
-		}
-		if reconnect {
-			select {
-			case tdConn.doneReconnect <- connectOk:
-			case <-tdConn.stopped:
-			}
-
 		}
 	}()
 
@@ -302,36 +321,52 @@ func (tdConn *tapdanceConn) connect() {
 	case TD_STATE_NEW:
 		reconnect = false
 	case TD_STATE_CONNECTED:
-		Logger.Errorf(tdConn.idStr() + " called reconnect" +
+		currErr = errors.New(tdConn.idStr() + " called reconnect " +
 			", but state is TD_STATE_CONNECTED")
+		tdConn.setError(currErr, false)
+		return
 	case TD_STATE_CLOSED:
-		Logger.Errorf(tdConn.idStr() + " called reconnect" +
+		currErr = errors.New(tdConn.idStr() + " called reconnect " +
 			"but state is TD_STATE_CLOSED")
+		tdConn.setError(currErr, false)
+		return
 	default:
-		Logger.Errorf(tdConn.idStr() + " called reconnect" +
+		currErr = errors.New(tdConn.idStr() + " called reconnect " +
 			"but state is garbage: " + strconv.FormatUint(uint64(tdConn.state), 10))
+		tdConn.setError(currErr, false)
+		return
 	}
 
-	var expectedMsg uint8
+	var expectedTransition S2C_Transition
 	var connection_attempts int
 
+	// pregenerate transition protobuf, which is always sent before close and reconnect
+	transitionMsgSize := tdConn.preGenenerateTransition()
+
 	// Randomize tdConn.maxSend to avoid heuristics
-	tdConn.maxSend = uint64(getRandInt(sendLimitMin, sendLimitMax))
+	tdConn.maxSend = getRandInt(sendLimitMin, sendLimitMax)
+	tdConn.maxSend -= transitionMsgSize // reserve space for transition msg
+	tdConn.maxSend -= 2                 // reserve 2 bytes for transition msg header
 
 	if reconnect {
 		connection_attempts = 2
-		expectedMsg = MSG_RECONNECT
-		awaitFINTimeout := time.After(waitForFINTimeout * time.Second)
+		expectedTransition = S2C_Transition_S2C_CONFIRM_RECONNECT
+		awaitFINSendRST := time.After(waitForFINSendRST * time.Second)
+		awaitFINDie := time.After(waitForFINDie * time.Second)
 		readerStopped := false
 		for !readerStopped {
 			select {
 			case _ = <-tdConn.readerStopped:
 				// wait for readEngine to stop
 				readerStopped = true
-				continue
-			case <-awaitFINTimeout:
-				Logger.Errorf(tdConn.idStr() + " FIN await timeout!")
+			case <-awaitFINSendRST:
+				Logger.Errorf(tdConn.idStr() + " FIN await timeout: sending RST")
 				tdConn.tlsConn.Close()
+			case <-awaitFINDie:
+				Logger.Errorf(tdConn.idStr() + " FIN await timeout: dying!")
+				currErr = errors.New("FIN await timeout")
+				tdConn.setError(currErr, false)
+				return
 			case <-tdConn.stopped:
 				return
 			}
@@ -339,7 +374,7 @@ func (tdConn *tapdanceConn) connect() {
 		tdConn.tlsConn.Close()
 	} else {
 		connection_attempts = 6
-		expectedMsg = MSG_INIT
+		expectedTransition = S2C_Transition_S2C_SESSION_INIT
 	}
 
 	for i := 0; i < connection_attempts; i++ {
@@ -399,7 +434,7 @@ func (tdConn *tapdanceConn) connect() {
 		Logger.Infoln(tdConn.idStr() + " Attempting to connect to TapDance Station" +
 			" with connection ID: " + hex.EncodeToString(tdConn.remoteConnId[:]))
 		tdConn.sentTotal = 0
-		_, currErr = tdConn.write_td([]byte(tdRequest), true)
+		_, currErr = tdConn.tlsConn.Write([]byte(tdRequest))
 		if currErr != nil {
 			Logger.Errorf(tdConn.idStr() +
 				" Could not send initial TD request, error: " + currErr.Error())
@@ -407,7 +442,7 @@ func (tdConn *tapdanceConn) connect() {
 			continue
 		}
 
-		_, currErr = tdConn.read_msg(expectedMsg)
+		_, currErr = tdConn.read_msg(expectedTransition)
 		if currErr != nil {
 			str_err := currErr.Error()
 			if strings.Contains(str_err, ": i/o timeout") || // client timed out
@@ -442,11 +477,10 @@ func (tdConn *tapdanceConn) connect() {
 }
 
 // Read reads data from the connection.
-// Read can be made to time out and return a Error with Timeout() == true
+// TODO: Read can be made to time out and return a Error with Timeout() == true
 // after a fixed time limit; see SetDeadline and SetReadDeadline.
+// TODO: Ideally should support multiple readers
 func (tdConn *tapdanceConn) Read(b []byte) (n int, err error) {
-	// TODO: Doesn't support multiple readers
-
 	// If there's no ready data in buffer - get some
 	if tdConn.read_data_count == 0 {
 		var open bool
@@ -476,60 +510,36 @@ func (tdConn *tapdanceConn) Read(b []byte) (n int, err error) {
 	return
 }
 
-func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
-	// 1 byte of each message is MSG_TYPE
-	// 2-3: length of message
-	// if MSG_TYPE == INIT or RECONNECT:
-	//   4-5: magic_val
-	// if MSG_TYPE == DATA:
-	//    4-length: DATA
+func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, err error) {
+	// For each message we first read outer protocol header to see if it's protobuf or data
 
 	var readBytes int
-	var readBytesTotal uint16
-	headerSize := uint16(3)
-	totalBytesToRead := headerSize
+	var readBytesTotal uint32 // both header and body
+	headerSize := uint32(2)
+	totalBytesToRead := headerSize // first -- just header, then +body
 	defer func() {
 		n = int(readBytesTotal)
 		tdConn.statsDownload <- n
 	}()
 
-	var msgLen uint16
-	var msgType uint8
+	var msgLen uint32 // just the body(e.g. raw data or protobuf)
 
-	// This function checks if message type, given particular caller, is appropriate.
-	// In case it is appropriate - returns nil, otherwise - the error
-	checkMsgType := func(_actualMsg uint8, _expectedMsg uint8) error {
-		switch _actualMsg {
-		case MSG_RECONNECT:
-			if _expectedMsg == MSG_DATA {
-				return errors.New("Received unexpected RECONNECT message")
-			} else if _expectedMsg == MSG_INIT {
-				return errors.New("Received RECONNECT message instead of INIT")
-			}
-		case MSG_INIT:
-			if _expectedMsg == MSG_DATA {
-				return errors.New("Received INIT message in initialized connection")
-			}
-			if _expectedMsg == MSG_RECONNECT {
-				return errors.New("Received INIT message instead of RECONNECT")
-			}
-		case MSG_DATA:
-			if _expectedMsg == MSG_RECONNECT || _expectedMsg == MSG_INIT {
-				return errors.New("Received DATA message in uninitialized connection")
-			}
-		case MSG_CLOSE:
-		// always appropriate
-		default:
-			return errors.New("Unknown message #" + strconv.FormatUint(uint64(_actualMsg), 10))
-		}
-		return nil
-	}
+	/*
+			Each message is a 16-bit net-order int "TL" (type+len), followed by a data blob.
+			If TL is negative, the blob is pure app data, with length abs(TL).
+			If TL is positive, the blob is a protobuf, with length TL.
+			If TL is 0, then read the following 4 bytes. Those 4 bytes are a net-order u32.
+		            This u32 is the length of the blob, which begins after this u32.
+		            The blob is a protobuf.
+	*/
+	var outerProtoMsgType uint8
 
-	for readBytesTotal < totalBytesToRead {
+	//TODO: check FIN+last data case
+	for readBytesTotal < headerSize {
 		readBytes, err = tdConn.tlsConn.Read(tdConn._readBuffer[readBytesTotal:headerSize])
 
-		readBytesTotal += uint16(readBytes)
-		if err == io.EOF && readBytesTotal != 0 {
+		readBytesTotal += uint32(readBytes)
+		if err == io.EOF && readBytesTotal == headerSize {
 			break
 		}
 		if err != nil {
@@ -537,22 +547,47 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 		}
 	}
 
-	// Check if the message type is appropriate
-	msgType = tdConn._readBuffer[0]
-	err = checkMsgType(msgType, expectedMsg)
-	if err != nil {
-		return
+	Uint16toInt16 := func(i uint16) int16 {
+		pos := int16(i & 32767)
+		neg := int16(0)
+		if i&32768 != 0 {
+			neg = int16(-32768)
+		}
+		return pos + neg
+	}
+	// Get TIL
+	typeLen := Uint16toInt16(binary.BigEndian.Uint16(tdConn._readBuffer[0:2]))
+	if typeLen < 0 {
+		outerProtoMsgType = msg_raw_data
+		msgLen = uint32(-typeLen)
+	} else if typeLen > 0 {
+		outerProtoMsgType = msg_protobuf
+		msgLen = uint32(typeLen)
+	} else {
+		// protobuf with size over 32KB, not fitting into 2-byte TL
+		outerProtoMsgType = msg_protobuf
+		headerSize += 4
+		for readBytesTotal < headerSize {
+			readBytes, err = tdConn.tlsConn.Read(tdConn._readBuffer[readBytesTotal:headerSize])
+
+			readBytesTotal += uint32(readBytes)
+			if err == io.EOF && readBytesTotal == headerSize {
+				break
+			}
+			if err != nil {
+				return
+			}
+		}
+		msgLen = binary.BigEndian.Uint32(tdConn._readBuffer[2:6])
 	}
 
-	// Add msgLen to totalBytesToRead
-	msgLen = binary.BigEndian.Uint16(tdConn._readBuffer[1:3])
 	totalBytesToRead = headerSize + msgLen
 	read_buffer := make([]byte, msgLen)
 
-	// Get the rest of the message
+	// Get the message itself
 	for readBytesTotal < totalBytesToRead {
 		readBytes, err = tdConn.tlsConn.Read(read_buffer[readBytesTotal-headerSize : msgLen])
-		readBytesTotal += uint16(readBytes)
+		readBytesTotal += uint32(readBytes)
 		if err == io.EOF {
 			break
 		}
@@ -561,137 +596,246 @@ func (tdConn *tapdanceConn) read_msg(expectedMsg uint8) (n int, err error) {
 		}
 	}
 
-	// Process actual message
-	switch msgType {
-	case MSG_RECONNECT:
-		fallthrough
-	case MSG_INIT:
-		var magicVal, expectedMagicVal uint16
-		if len(read_buffer) < 2 {
-			err = errors.New("Message body too short!")
-			return
-		}
-		magicVal = binary.BigEndian.Uint16(read_buffer[:2])
-		expectedMagicVal = uint16(0x2a75)
-		if magicVal != expectedMagicVal {
-			err = errors.New("Magic value mismatch! Expected: " +
-				strconv.FormatUint(uint64(expectedMagicVal), 10) +
-				", but received: " + strconv.FormatUint(uint64(magicVal), 10))
-			return
-		}
-		Logger.Infof(tdConn.idStr() + " Successfully connected to TapDance Station!")
-	case MSG_DATA:
+	switch outerProtoMsgType {
+	case msg_raw_data:
 		tdConn.receive_buffer = append(tdConn.receive_buffer[:],
 			read_buffer...)
 		n = int(msgLen)
 		tdConn.receive_buffer_idx += n
-	case MSG_CLOSE:
-		err = errors.New("MSG_CLOSE")
-		Logger.Infof(tdConn.idStr() + " received MSG_CLOSE")
+	case msg_protobuf:
+		msg := StationToClient{}
+		err = proto.Unmarshal(read_buffer[:], &msg)
+		if err != nil {
+			return
+		}
+		Logger.Debugln(tdConn.idStr() + " received protobuf: " +
+			msg.String())
+
+		// Helper functions
+		handleConfigInfo := func(conf *ClientConf) {
+			currGen := Assets().GetGeneration()
+			if conf.GetGeneration() < currGen {
+				Logger.Infoln(tdConn.idStr()+" not appliying new config due to "+
+					"lower generation: ", conf.GetGeneration(), " "+
+					"(have:", currGen, ")")
+				return
+			} else if conf.GetGeneration() < currGen {
+				Logger.Infoln(tdConn.idStr()+" not appliying new config due to "+
+					" currently having same generation: ", currGen)
+				return
+			}
+
+			Assets().SetClientConf(conf)
+		}
+
+		// handle ConfigInfo
+		if confInfo := msg.ConfigInfo; confInfo != nil {
+			handleConfigInfo(confInfo)
+		}
+
+		// handle state transitions
+		stateTransition := msg.GetStateTransition()
+		if expectedTransition != S2C_Transition_S2C_NO_CHANGE {
+			if expectedTransition != stateTransition {
+				err = errors.New("State Transition mismatch! Expected: " +
+					expectedTransition.String() +
+					", but received: " + stateTransition.String())
+				return
+			}
+		}
+
+		switch stateTransition {
+		case S2C_Transition_S2C_CONFIRM_RECONNECT:
+			fallthrough
+		case S2C_Transition_S2C_SESSION_INIT:
+			Logger.Infof(tdConn.idStr() +
+				" Successfully connected to TapDance Station!")
+		case S2C_Transition_S2C_SESSION_CLOSE:
+			err = errors.New("MSG_CLOSE")
+			Logger.Infof(tdConn.idStr() + " received MSG_CLOSE")
+		case S2C_Transition_S2C_ERROR:
+			err = errors.New("Received MSG_ERROR from station")
+			return
+		}
+	default:
+		panic("Corrupted outerProtoMsgType")
 	}
 	return
 }
 
 // Write writes data to the connection.
-// Write can be made to time out and return a Error with Timeout() == true
+// TODO: Write can be made to time out and return a Error with Timeout() == true
 // after a fixed time limit; see SetDeadline and SetWriteDeadline.
-func (tdConn *tapdanceConn) Write(b []byte) (n int, err error) {
-	// TODO: why does it break if I don't make a copy here?
+// TODO: Ideally should support multiple readers
+func (tdConn *tapdanceConn) Write(b []byte) (sentTotal int, err error) {
 	bb := make([]byte, len(b))
 	copy(bb, b)
 	select {
 	case tdConn.writeChannel <- bb:
-		n = len(bb)
+		sentTotal = len(bb)
 	case <-tdConn.stopped:
 	}
-	if n == 0 {
+	if sentTotal == 0 {
 		err = tdConn.getError()
 	}
 	return
 }
 
-func (tdConn *tapdanceConn) write_td(b []byte, connect bool) (n int, err error) {
-	totalToSend := uint64(len(b))
+func (tdConn *tapdanceConn) writeBufferedData() (n int, err error) {
+	couldSend := tdConn.maxSend - tdConn.sentTotal
+	totalToSendLeft := tdConn.writeMsgSize - tdConn.writeMsgIndex
+	toSend := totalToSendLeft
+	var b []byte
 
 	Logger.Debugf(tdConn.idStr() +
-		" Already sent: " + strconv.FormatUint(tdConn.sentTotal, 10) +
-		". Requested to send: " + strconv.FormatUint(totalToSend, 10))
+		" Already sent: " + strconv.Itoa(tdConn.sentTotal) +
+		". Requested to send: " + strconv.Itoa(totalToSendLeft))
 	defer func() { tdConn.statsUpload <- n }()
-	if !connect {
-		defer func() {
-			tdConn.sentTotal += uint64(n)
-			if tdConn.writeMsgIndex >= tdConn.writeMsgSize {
-				tdConn.writeMsgIndex = 0
-				tdConn.writeMsgSize = 0
-			}
-		}()
-	}
 
-	couldSend := tdConn.maxSend - tdConn.sentTotal
-	toSend := uint64(0) // to send on this iteration
-	/*
-		/ Check if we are able to send the whole buffer or not(due to 16kB upload limit).
-		/ We may want to split buffer into 2 or more chunks and send them chunk by chunk
-		/ after reconnect(s). Unfortunately, we can't just always split it, as some
-		/ protocols don't allow fragmentation, e.g. ssh: it sets goddamn IPv4
-		/ 'Don't Fragment' flag and will break, if you force fragmentation.
-		/ And we don't really know which application is using TapDance: ssh-style or
-		/ Extra-Jumbo-Frame-Over-16kB-style.
-		/ That's why we will only fragment, if 0 bytes were sent in this connection, but
-		/ data still doesn't fit. This way we will accommodate all.
-	*/
-	needReconnect := (couldSend < totalToSend)
-	if needReconnect {
-		tdConn.writeReconnects++
-		tdConn.tryScheduleReconnect()
-		if tdConn.sentTotal != 0 {
-			// reconnect right away
-			Logger.Infof(tdConn.idStr() + " triggered preemptive reconnect in Write()")
-			return
-		} else {
-			// split buffer in chunks and reconnect after
-			toSend = couldSend
+	switch tdConn.writeBufType {
+	case msg_protobuf:
+		b = getMsgWithHeader(msg_protobuf, tdConn._writeBuffer[:tdConn.writeMsgSize])
+		if len(b) > couldSend {
+			Logger.Errorln("Could not send protobuf due to upload limit!")
+			return 0, io.ErrShortWrite
 		}
-	} else {
-		// can send everything
-		toSend = totalToSend
+	case msg_raw_data:
+		headerSize := 2
+		maxChunkSize := getRandInt(32767, 32767)
+		if couldSend > maxChunkSize {
+			couldSend = maxChunkSize
+		}
+		/*
+			/ Check if we are able to send the whole buffer or not(due to upload limit).
+			/ We may want to split buffer into 2 or more chunks and send them chunk by chunk
+			/ after reconnect(s). Unfortunately, we can't just always split it, as some
+			/ protocols don't allow fragmentation, e.g. ssh will break, if you fragment pkts.
+			/ And we don't really know which application is using TapDance: ssh-style or
+			/ Extra-Jumbo-Frame-Over-16kB-style.
+			/ That's why we will only fragment, if 0 bytes were sent in this connection, but
+			/ data still doesn't fit. This way we will accommodate all.
+		*/
+		needReconnect := (couldSend < totalToSendLeft+headerSize)
+		if needReconnect {
+			tdConn.writeReconnects++
+			tdConn.tryScheduleReconnect()
+			if tdConn.sentTotal != 0 {
+				// reconnect right away
+				Logger.Infof(tdConn.idStr() + " triggered preemptive reconnect in Write()")
+				return
+			} else {
+				// split buffer in chunks and reconnect after
+				toSend = couldSend
+			}
+		}
+		b = getMsgWithHeader(msg_raw_data,
+			tdConn._writeBuffer[tdConn.writeMsgIndex:tdConn.writeMsgIndex+toSend])
+	default:
+		panic("writeBufferedData() writeBufType: " + strconv.Itoa(tdConn.writeBufType))
 	}
 
-	n, err = tdConn.tlsConn.Write(b[:toSend])
-
-	if !connect {
-		tdConn.writeMsgIndex += n
-	}
-
-	if err != nil {
-		atomic.StoreInt32(&tdConn.state, TD_STATE_CLOSED)
+	n, err = tdConn.tlsConn.Write(b[:])
+	tdConn.writeMsgIndex += toSend
+	tdConn.sentTotal += n
+	if tdConn.writeMsgIndex >= tdConn.writeMsgSize {
+		tdConn.writeMsgIndex = 0
+		tdConn.writeMsgSize = 0
 	}
 	return
 }
 
-// List of actually supported ciphers(not a list of offered ciphers!)
-// Essentially all AES GCM ciphers, except for ANON and PSK
-// ANON are too dangerous in our setting
-// PSK might actually work, but are out of scope
-// Maybe also get rid of DSS?
-var TDSupportedCiphers = []uint16{
-	tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-	tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-	tls.TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256,
-	tls.TLS_ECDH_ECDSA_WITH_AES_256_GCM_SHA384,
-	tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-	tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-	tls.TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256,
-	tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
-	tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
-	tls.TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
-	tls.TLS_DHE_RSA_WITH_AES_256_GCM_SHA384,
-	tls.TLS_DH_RSA_WITH_AES_128_GCM_SHA256,
-	tls.TLS_DH_RSA_WITH_AES_256_GCM_SHA384,
-	tls.TLS_DHE_DSS_WITH_AES_128_GCM_SHA256,
-	tls.TLS_DHE_DSS_WITH_AES_256_GCM_SHA384,
-	tls.TLS_DH_DSS_WITH_AES_128_GCM_SHA256,
-	tls.TLS_DH_DSS_WITH_AES_256_GCM_SHA384,
+// generates transition msg, which is sent before reconnects
+// msg is saved to tdConn.transitionMsg
+// returns size of serialized tdConn.transitionMsg
+func (tdConn *tapdanceConn) preGenenerateTransition() int {
+	dummyGen := uint32(0)
+	dummyTransition := C2S_Transition_C2S_NO_CHANGE
+	tdConn.transitionMsg = ClientToStation{StateTransition: &dummyTransition,
+		DecoyListGeneration: &dummyGen,
+		Padding:             []byte(getRandPadding(150, 950, 10))}
+	return proto.Size(&tdConn.transitionMsg)
+}
+
+func (tdConn *tapdanceConn) writeTransition(transition C2S_Transition) (err error) {
+	currGen := Assets().GetGeneration()
+	tdConn.transitionMsg.DecoyListGeneration = &currGen
+	tdConn.transitionMsg.StateTransition = &transition
+	Logger.Debugln("tdConn.maxSend", tdConn.maxSend)
+	tdConn.maxSend += (proto.Size(&tdConn.transitionMsg) + 2) // 2 bytes for header
+	Logger.Debugln("tdConn.maxSend", tdConn.maxSend)
+
+	err = tdConn.writeProto(tdConn.transitionMsg)
+	return
+}
+
+/*
+	Each message is a 16-bit net-order int "TL" (type+len), followed by a data blob.
+	If TL is negative, the blob is pure app data, with length abs(TL).
+	If TL is positive, the blob is a protobuf, with length TL.
+	If TL is 0, then read the following 4 bytes. Those 4 bytes are a net-order u32.
+	    This u32 is the length of the blob, which begins after this u32.
+	    The blob is a protobuf.
+*/
+func getMsgWithHeader(msgType int, msgBytes []byte) []byte {
+	bufSend := new(bytes.Buffer)
+	var err error
+	switch msgType {
+	case msg_protobuf:
+		if len(msgBytes) <= int(maxInt16) {
+			bufSend.Grow(2 + len(msgBytes)) // to avoid double allocation
+			err = binary.Write(bufSend, binary.BigEndian, int16(len(msgBytes)))
+
+		} else {
+			bufSend.Grow(2 + 4 + len(msgBytes)) // to avoid double allocation
+			bufSend.Write([]byte{0, 0})
+			err = binary.Write(bufSend, binary.BigEndian, int32(len(msgBytes)))
+		}
+	case msg_raw_data:
+		err = binary.Write(bufSend, binary.BigEndian, int16(-len(msgBytes)))
+	default:
+		panic("getMsgWithHeader() called with msgType: " + strconv.Itoa(msgType))
+	}
+	if err != nil {
+		// shouldn't ever happen
+		Logger.Errorln("getMsgWithHeader() failed with error: ", err)
+		Logger.Errorln("msgType ", msgType)
+		Logger.Errorln("msgBytes ", msgBytes)
+	}
+	bufSend.Write(msgBytes)
+	return bufSend.Bytes()
+}
+
+func (tdConn *tapdanceConn) writeProto(msg ClientToStation) error {
+	msgBytes, err := proto.Marshal(&msg)
+	if err != nil {
+		return err
+	}
+
+	// don't ever chunk protobufs
+	couldSend := tdConn.maxSend - tdConn.sentTotal
+	if couldSend < len(msgBytes) {
+		// if we can't send it due to upload limit:
+		//    buffer it, reconnect, and try again
+		tdConn._writeBuffer = msgBytes
+		tdConn.writeMsgSize = len(msgBytes)
+		tdConn.writeMsgIndex = 0
+		tdConn.writeBufType = msg_protobuf
+		tdConn.writeReconnects++
+		tdConn.tryScheduleReconnect()
+		// reconnect right away
+		Logger.Infoln(tdConn.idStr() + " triggered reconnect in writeProto()")
+		Logger.Infoln(tdConn.idStr()+" protobuf was: ", msg.String())
+		// switch ^ to Debugln when/if non-StateTransition protobufs are sent regularly
+		return nil
+	} else {
+		Logger.Debugln(tdConn.idStr()+" sending protobuf: ", msg.String())
+		// if upload doesn't prevent us from sending it - just do it
+		// note that we always can send StateTransition, as space was reserved for it
+		b := getMsgWithHeader(msg_protobuf, msgBytes)
+		_, err = tdConn.tlsConn.Write(b)
+		tdConn.sentTotal += len(b)
+	}
+	return err
 }
 
 func (tdConn *tapdanceConn) establishTLStoDecoy() (err error) {
@@ -749,7 +893,9 @@ func (tdConn *tapdanceConn) prepareTDRequest() (tdRequest string, err error) {
 	master_key := tdConn.tlsConn.GetHandshakeLog().KeyMaterial.MasterSecret.Value
 
 	// write flags
-	if err = binary.Write(buf, binary.BigEndian, uint8(0)); err != nil {
+	if err = binary.Write(buf, binary.BigEndian, uint8(1)); err != nil {
+		// tentatively last 4 bytes are for version the of outer proto
+		// 1 signals current outer proto, which is TypeLen
 		return
 	}
 	buf.Write(master_key[:])
@@ -837,7 +983,7 @@ func (tdConn *tapdanceConn) loopPrintBandwidth() {
 
 	var totalBytesRead, bytesRead, totalBytesWritten, bytesWritten int
 	var printTimeout <-chan time.Time
-	for atomic.LoadInt32(&tdConn.state) != TD_STATE_CLOSED {
+	for {
 		if totalBytesWritten == 0 && totalBytesRead == 0 {
 			printTimeout = time.After(1 * time.Second)
 		}
@@ -853,8 +999,9 @@ func (tdConn *tapdanceConn) loopPrintBandwidth() {
 				", upload: " + getPrettyBandwidth(totalBytesWritten))
 			totalBytesWritten = 0
 			totalBytesRead = 0
+		case <-tdConn.stopped:
+			return
 		}
-		// update ts1
 	}
 }
 
@@ -885,6 +1032,16 @@ func (tdConn *tapdanceConn) Close() (err error) {
 	tdConn.closeOnce.Do(func() {
 		close(tdConn.stopped)
 		atomic.StoreInt32(&tdConn.state, TD_STATE_CLOSED)
+		waitForWriterToDie := time.After(2 * time.Second)
+		// TODO: stop sending SESSION_CLOSE if tdConn.tlsConn is closed
+		// but there is no check =(
+		select {
+		case _ = <-tdConn.writerStopped:
+			tdConn.writeTransition(C2S_Transition_C2S_SESSION_CLOSE)
+			Logger.Infoln(tdConn.idStr() + " sent SESSION_CLOSE")
+		case <-waitForWriterToDie:
+			Logger.Infoln(tdConn.idStr() + " timed out. Not sending SESSION_CLOSE")
+		}
 		if tdConn.tlsConn != nil {
 			err = tdConn.tlsConn.Close()
 		}

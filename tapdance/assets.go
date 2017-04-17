@@ -1,38 +1,30 @@
 package tapdance
 
 import (
-	"encoding/json"
+	"encoding/binary"
+	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/zmap/zcrypto/x509"
 	"io/ioutil"
+	"net"
 	"os"
 	"path"
 	"strconv"
 	"sync"
 )
 
-type decoyServer struct {
-	IP  string `json:"IP"`
-	SNI string `json:"SNI"`
-}
-
-var defaultDecoys = []decoyServer{
-	{IP: "192.122.190.104", SNI: "tapdance1.freeaeskey.xyz"},
-	{IP: "192.122.190.105", SNI: "tapdance2.freeaeskey.xyz"},
-}
-
 type assets struct {
 	sync.RWMutex
-	once   sync.Once
-	path   string
-	decoys []decoyServer
+	once sync.Once
+	path string
 
-	stationPubkey [32]byte
-	roots         *x509.CertPool
+	config ClientConf
+
+	roots *x509.CertPool
 
 	filenameStationPubkey string
 	filenameRoots         string
-	filenameDecoys        string
+	filenameClientConf    string
 }
 
 var assetsInstance *assets
@@ -45,15 +37,34 @@ var assetsOnce sync.Once
 // 2) "station_pubkey" contains TapDance station Public Key
 // 3) "roots" contains x509 roots
 func Assets() *assets {
+	initTLSDecoySpec := func(ip string, sni string) *TLSDecoySpec {
+		ipUint32 := binary.BigEndian.Uint32(net.ParseIP(ip).To4())
+		tlsDecoy := TLSDecoySpec{Hostname: &sni,
+			Ipv4Addr: &ipUint32}
+		return &tlsDecoy
+	}
+
+	var defaultDecoys = []*TLSDecoySpec{
+		initTLSDecoySpec("192.122.190.104", "tapdance1.freeaeskey.xyz"),
+	}
+
+	defaultKey := []byte{189, 193, 226, 121, 87, 194, 76, 106, 81, 218,
+		245, 186, 4, 222, 249, 237, 96, 101, 77, 161, 183, 123, 63,
+		216, 18, 104, 111, 181, 75, 208, 232, 12}
+	defualtKeyType := KeyType_AES_GCM_128
+	defaultPubKey := PubKey{Key: defaultKey, Type: &defualtKeyType}
+	defaultGeneration := uint32(0)
+	defaultDecoyList := DecoyList{TlsDecoys: defaultDecoys}
+	defaultClientConf := ClientConf{DecoyList: &defaultDecoyList,
+		DefaultPubkey: &defaultPubKey,
+		Generation:    &defaultGeneration}
+
 	assetsOnce.Do(func() {
 		assetsInstance = &assets{
-			path:   "./assets/",
-			decoys: defaultDecoys,
-			stationPubkey: [32]byte{211, 127, 10, 139, 150, 180, 97, 15, 56, 188, 7,
-				155, 7, 102, 41, 34, 70, 194, 210, 170, 50, 53, 234, 49, 42, 240,
-				41, 27, 91, 38, 247, 67},
+			path:                  "./assets/",
+			config:                defaultClientConf,
 			filenameRoots:         "roots",
-			filenameDecoys:        "decoys",
+			filenameClientConf:    "ClientConf",
 			filenameStationPubkey: "station_pubkey",
 		}
 		assetsInstance.readConfigs()
@@ -76,19 +87,6 @@ func (a *assets) SetAssetsDir(path string) {
 }
 
 func (a *assets) readConfigs() {
-	readPubkey := func(filename string) error {
-		staionPubkey, err := ioutil.ReadFile(filename)
-		if err != nil {
-			return err
-		}
-		if len(staionPubkey) != 32 {
-			return errors.New("Unexpected keyfile length! Expected: 32. Got: " +
-				strconv.Itoa(len(staionPubkey)))
-		}
-		copy(a.stationPubkey[:], staionPubkey[0:32])
-		return nil
-	}
-
 	readRoots := func(filename string) error {
 		rootCerts, err := ioutil.ReadFile(filename)
 		if err != nil {
@@ -104,25 +102,35 @@ func (a *assets) readConfigs() {
 		return nil
 	}
 
-	readDecoys := func(filename string) error {
+	readClientConf := func(filename string) error {
 		buf, err := ioutil.ReadFile(filename)
 		if err != nil {
 			return err
 		}
-		err = json.Unmarshal(buf, &a.decoys)
-		return err
+		clientConf := ClientConf{}
+		err = proto.Unmarshal(buf, &clientConf)
+		if err != nil {
+			return err
+		}
+		a.config = clientConf
+		return nil
+	}
+
+	readPubkey := func(filename string) error {
+		staionPubkey, err := ioutil.ReadFile(filename)
+		if err != nil {
+			return err
+		}
+		if len(staionPubkey) != 32 {
+			return errors.New("Unexpected keyfile length! Expected: 32. Got: " +
+				strconv.Itoa(len(staionPubkey)))
+		}
+		copy(a.config.DefaultPubkey.Key[:], staionPubkey[0:32])
+		return nil
 	}
 
 	var err error
 	Logger.Infoln("Assets: reading from folder " + a.path)
-
-	pubkeyFilename := path.Join(a.path, a.filenameStationPubkey)
-	err = readPubkey(pubkeyFilename)
-	if err != nil {
-		Logger.Warningln("Failed to read keyfile: " + err.Error())
-	} else {
-		Logger.Infoln("Public key succesfully read from " + pubkeyFilename)
-	}
 
 	rootsFilename := path.Join(a.path, a.filenameRoots)
 	err = readRoots(rootsFilename)
@@ -132,12 +140,20 @@ func (a *assets) readConfigs() {
 		Logger.Infoln("X.509 root CAs succesfully read from " + rootsFilename)
 	}
 
-	decoyFilename := path.Join(a.path, a.filenameDecoys)
-	err = readDecoys(decoyFilename)
+	clientConfFilename := path.Join(a.path, a.filenameClientConf)
+	err = readClientConf(clientConfFilename)
 	if err != nil {
-		Logger.Warningln("Failed to read decoy file: " + err.Error())
+		Logger.Warningln("Failed to read ClientConf file: " + err.Error())
 	} else {
-		Logger.Infoln("Decoys successfully read from " + decoyFilename)
+		Logger.Infoln("Client config succesfully read from " + clientConfFilename)
+	}
+
+	pubkeyFilename := path.Join(a.path, a.filenameStationPubkey)
+	err = readPubkey(pubkeyFilename)
+	if err != nil {
+		Logger.Warningln("Failed to read pubkey file: " + err.Error())
+	} else {
+		Logger.Infoln("Pubkey succesfully read from " + pubkeyFilename)
 	}
 }
 
@@ -147,9 +163,13 @@ func (a *assets) GetDecoyAddress() (sni string, addr string) {
 	a.RLock()
 	defer a.RUnlock()
 
-	decoyIndex := getRandInt(0, len(a.decoys)-1)
-	addr = a.decoys[decoyIndex].IP + ":443"
-	sni = a.decoys[decoyIndex].SNI
+	decoys := a.config.DecoyList.TlsDecoys
+	decoyIndex := getRandInt(0, len(decoys)-1)
+	ip := make(net.IP, 4)
+	binary.BigEndian.PutUint32(ip, decoys[decoyIndex].GetIpv4Addr())
+	// TODO: what checks need to be done, and what's guaranteed?
+	addr = ip.To4().String() + ":443"
+	sni = decoys[decoyIndex].GetHostname()
 	return
 }
 
@@ -164,64 +184,69 @@ func (a *assets) GetPubkey() *[32]byte {
 	a.RLock()
 	defer a.RUnlock()
 
-	return &(a.stationPubkey)
+	var pKey [32]byte
+	copy(pKey[:], a.config.DefaultPubkey.Key[:])
+	return &pKey
 }
 
-// Set Public key in persistent way (e.g. store to disk)
-func (a *assets) SetPubkey(pubkey [32]byte) (err error) {
+func (a *assets) GetGeneration() uint32 {
+	a.RLock()
+	defer a.RUnlock()
+
+	return a.config.GetGeneration()
+}
+
+func (a *assets) SetGeneration(gen uint32) (err error) {
 	a.Lock()
 	defer a.Unlock()
 
-	a.stationPubkey = pubkey
-	err = a.savePubkey()
+	copyGen := gen
+	a.config.Generation = &copyGen
+	err = a.saveClientConf()
+	return
+}
+
+// Set Public key in persistent way (e.g. store to disk)
+func (a *assets) SetPubkey(pubkey PubKey) (err error) {
+	a.Lock()
+	defer a.Unlock()
+
+	copyPubkey := pubkey
+	a.config.DefaultPubkey = &copyPubkey
+	err = a.saveClientConf()
+	return
+}
+
+func (a *assets) SetClientConf(conf *ClientConf) (err error) {
+	a.Lock()
+	defer a.Unlock()
+
+	a.config = *conf
+	err = a.saveClientConf()
 	return
 }
 
 // Set decoys in persistent way (e.g. store to disk)
-func (a *assets) SetDecoys(decoys []decoyServer) (err error) {
+func (a *assets) SetDecoys(decoys []*TLSDecoySpec) (err error) {
 	a.Lock()
 	defer a.Unlock()
 
-	a.decoys = decoys
-	err = a.saveDecoys()
+	a.config.DecoyList.TlsDecoys = decoys
+	err = a.saveClientConf()
 	return
 }
 
-func (a *assets) saveDecoys() error {
-	// TODO: switch from JSON to protobuf
-	buf, err := json.Marshal(a.decoys)
+func (a *assets) saveClientConf() error {
+	buf, err := proto.Marshal(&a.config)
 	if err != nil {
 		return err
 	}
-	filename := path.Join(a.path, a.filenameDecoys)
-	tmpFilename := path.Join(a.path, "."+a.filenameDecoys+".tmp")
+	filename := path.Join(a.path, a.filenameClientConf)
+	tmpFilename := path.Join(a.path, "."+a.filenameClientConf+".tmp")
 	err = ioutil.WriteFile(tmpFilename, buf[:], 0644)
 	if err != nil {
 		return err
 	}
-	os.Rename(tmpFilename, filename)
-	return nil
-}
 
-func (a *assets) savePubkey() error {
-	filename := path.Join(a.path, a.filenameStationPubkey)
-	tmpFilename := path.Join(a.path, "."+a.filenameStationPubkey+".tmp")
-	err := ioutil.WriteFile(tmpFilename, a.stationPubkey[:], 0644)
-	if err != nil {
-		return err
-	}
-	os.Rename(tmpFilename, filename)
-	return nil
+	return os.Rename(tmpFilename, filename)
 }
-
-/*
-We probably don't need those functions.
-If we do: how to marshall roots?
-
-func (a *assets) setRoots() error {
-}
-
-func (a *assets) saveRoots() error {
-	a.roots
-}
-*/
