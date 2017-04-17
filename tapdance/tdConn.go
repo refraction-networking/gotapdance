@@ -912,9 +912,10 @@ func (tdConn *tapdanceConn) prepareTDRequest() (tdRequest string, err error) {
 	// Ideally, it is never processed by decoy
 	tdRequest = "GET / HTTP/1.1\r\n"
 	tdRequest += "Host: " + tdConn.decoySNI + "\r\n"
+	tdRequest += "User-Agent: DecoyRouting/1.1 (+https://decoyrouting.com/info)\r\n"
 	tdRequest += "X-Ignore: "
 
-	tdRequest += getRandPadding(0, 750, 10)
+	tdRequest += getRandPadding(0, 650, 10)
 
 	keystreamOffset := len(tdRequest)
 	keystreamSize := (len(tag)/3+1)*4 + keystreamOffset // we can't use first 2 bits of every byte
