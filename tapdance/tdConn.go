@@ -611,30 +611,6 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 		Logger.Debugln(tdConn.idStr() + " received protobuf: " +
 			msg.String())
 
-		// handle state transitions
-		stateTransition := msg.GetStateTransition()
-		if expectedTransition != S2C_Transition_S2C_NO_CHANGE {
-			if expectedTransition != stateTransition {
-				err = errors.New("State Transition mismatch! Expected: " +
-					expectedTransition.String() +
-					", but received: " + stateTransition.String())
-				return
-			}
-		}
-		switch stateTransition {
-		case S2C_Transition_S2C_CONFIRM_RECONNECT:
-			fallthrough
-		case S2C_Transition_S2C_SESSION_INIT:
-			Logger.Infof(tdConn.idStr() +
-				" Successfully connected to TapDance Station!")
-		case S2C_Transition_S2C_SESSION_CLOSE:
-			err = errors.New("MSG_CLOSE")
-			Logger.Infof(tdConn.idStr() + " received MSG_CLOSE")
-		case S2C_Transition_S2C_ERROR:
-			err = errors.New("Received MSG_ERROR from station")
-			return
-		}
-
 		// Helper functions
 		handleConfigInfo := func(conf *ClientConf) {
 			currGen := Assets().GetGeneration()
@@ -655,6 +631,31 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 		// handle ConfigInfo
 		if confInfo := msg.ConfigInfo; confInfo != nil {
 			handleConfigInfo(confInfo)
+		}
+
+		// handle state transitions
+		stateTransition := msg.GetStateTransition()
+		if expectedTransition != S2C_Transition_S2C_NO_CHANGE {
+			if expectedTransition != stateTransition {
+				err = errors.New("State Transition mismatch! Expected: " +
+					expectedTransition.String() +
+					", but received: " + stateTransition.String())
+				return
+			}
+		}
+
+		switch stateTransition {
+		case S2C_Transition_S2C_CONFIRM_RECONNECT:
+			fallthrough
+		case S2C_Transition_S2C_SESSION_INIT:
+			Logger.Infof(tdConn.idStr() +
+				" Successfully connected to TapDance Station!")
+		case S2C_Transition_S2C_SESSION_CLOSE:
+			err = errors.New("MSG_CLOSE")
+			Logger.Infof(tdConn.idStr() + " received MSG_CLOSE")
+		case S2C_Transition_S2C_ERROR:
+			err = errors.New("Received MSG_ERROR from station")
+			return
 		}
 	default:
 		panic("Corrupted outerProtoMsgType")
