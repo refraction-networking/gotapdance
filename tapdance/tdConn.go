@@ -27,9 +27,9 @@ type tapdanceConn struct {
 	sessionId uint64 // for logging. Constant for tapdanceConn
 	flowId    int    // for logging. Increments with each attempt to reconnect
 	/* random per-connection (secret) id;
-	this way, the underlying SSL connection can disconnect
-	while the client's local conn and station's proxy conn
-	can stay connected */
+	   this way, the underlying SSL connection can disconnect
+	   while the client's local conn and station's proxy conn
+	   can stay connected */
 	remoteConnId [16]byte
 
 	maxSend   int
@@ -690,7 +690,9 @@ func (tdConn *tapdanceConn) writeBufferedData() (n int, err error) {
 	Logger.Debugf(tdConn.idStr() +
 		" Already sent: " + strconv.Itoa(tdConn.sentTotal) +
 		". Requested to send: " + strconv.Itoa(totalToSendLeft))
-	defer func() { tdConn.statsUpload <- n }()
+	defer func() {
+		tdConn.statsUpload <- n
+	}()
 
 	switch tdConn.writeBufType {
 	case msg_protobuf:
