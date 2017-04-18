@@ -668,6 +668,9 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 // after a fixed time limit; see SetDeadline and SetWriteDeadline.
 // TODO: Ideally should support multiple readers
 func (tdConn *tapdanceConn) Write(b []byte) (sentTotal int, err error) {
+	if len(b) == 0 {
+		return 0, nil
+	}
 	bb := make([]byte, len(b))
 	copy(bb, b)
 	select {
