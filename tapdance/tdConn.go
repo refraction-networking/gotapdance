@@ -1026,6 +1026,15 @@ func (tdConn *tapdanceConn) serverRandom() []byte {
 	return tdConn.tlsConn.GetHandshakeLog().ServerHello.Random
 }
 
+func (tdConn *tapdanceConn) IsClosed() bool {
+	select {
+	case <-tdConn.stopped:
+		return true
+	default:
+	}
+	return false
+}
+
 // Close closes the connection.
 // Any blocked Read or Write operations will be unblocked and return errors.
 func (tdConn *tapdanceConn) Close() (err error) {
