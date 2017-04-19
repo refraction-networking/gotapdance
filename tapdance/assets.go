@@ -30,6 +30,12 @@ type assets struct {
 var assetsInstance *assets
 var assetsOnce sync.Once
 
+func initTLSDecoySpec(ip string, sni string) *TLSDecoySpec {
+	ipUint32 := binary.BigEndian.Uint32(net.ParseIP(ip).To4())
+	tlsDecoy := TLSDecoySpec{Hostname: &sni, Ipv4Addr: &ipUint32}
+	return &tlsDecoy
+}
+
 // Path is expected (but doesn't have) to have several files
 // 1) "decoys" that has a list in following format:
 //       ip1:SNI1
@@ -37,13 +43,6 @@ var assetsOnce sync.Once
 // 2) "station_pubkey" contains TapDance station Public Key
 // 3) "roots" contains x509 roots
 func Assets() *assets {
-	initTLSDecoySpec := func(ip string, sni string) *TLSDecoySpec {
-		ipUint32 := binary.BigEndian.Uint32(net.ParseIP(ip).To4())
-		tlsDecoy := TLSDecoySpec{Hostname: &sni,
-			Ipv4Addr: &ipUint32}
-		return &tlsDecoy
-	}
-
 	var defaultDecoys = []*TLSDecoySpec{
 		initTLSDecoySpec("192.122.190.104", "tapdance1.freeaeskey.xyz"),
 		initTLSDecoySpec("192.122.190.105", "tapdance2.freeaeskey.xyz"),

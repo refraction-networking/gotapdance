@@ -9,15 +9,7 @@ import (
 	"path"
 	"reflect"
 	"testing"
-	"encoding/binary"
 )
-
-func initTLSDecoySpec(ip string, sni string) *TLSDecoySpec {
-	ipUint32 := binary.BigEndian.Uint32(net.ParseIP(ip).To4())
-	tlsDecoy := TLSDecoySpec{Hostname: &sni,
-		Ipv4Addr: &ipUint32}
-	return &tlsDecoy
-}
 
 func TestAssets_Decoys(t *testing.T) {
 	oldpath := Assets().path
