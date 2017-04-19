@@ -631,6 +631,12 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 		// handle ConfigInfo
 		if confInfo := msg.ConfigInfo; confInfo != nil {
 			handleConfigInfo(confInfo)
+			if !Assets().IsDecoyInList(tdConn.decoyAddr, tdConn.decoySNI) {
+				Logger.Warningln(tdConn.idStr() + ": current decoy is no longer " +
+					"in the list, changing it! Connection probably will break!")
+				// if current decoy is no longer in the list
+				tdConn.decoySNI, tdConn.decoyAddr = Assets().GetDecoyAddress()
+			}
 		}
 
 		// handle state transitions
