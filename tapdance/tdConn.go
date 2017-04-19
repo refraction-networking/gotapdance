@@ -789,6 +789,9 @@ func (tdConn *tapdanceConn) writeTransition(transition C2S_Transition) (err erro
 	    The blob is a protobuf.
 */
 func getMsgWithHeader(msgType int, msgBytes []byte) []byte {
+	if len(msgBytes) == 0 {
+		return nil
+	}
 	bufSend := new(bytes.Buffer)
 	var err error
 	switch msgType {
