@@ -11,6 +11,7 @@ import (
 	"path"
 	"strconv"
 	"sync"
+	"reflect"
 )
 
 type assets struct {
@@ -235,6 +236,16 @@ func (a *assets) SetDecoys(decoys []*TLSDecoySpec) (err error) {
 	a.config.DecoyList.TlsDecoys = decoys
 	err = a.saveClientConf()
 	return
+}
+
+func (a *assets) IsDecoyInList(ip string, sni string) bool {
+	decoy := initTLSDecoySpec(ip, sni)
+	for _, d := range a.config.GetDecoyList().GetTlsDecoys() {
+		if reflect.DeepEqual(&d, &decoy) {
+			return true;
+		}
+	}
+	return false;
 }
 
 func (a *assets) saveClientConf() error {
