@@ -44,10 +44,22 @@ func TestAssets_Decoys(t *testing.T) {
 		fmt.Println(err.Error())
 		t.Fail()
 	}
+	if !Assets().IsDecoyInList("19.21.23.42", "sergeyfrolov.github.io") {
+		fmt.Println("Decoy 19.21.23.42(sergeyfrolov.github.io) is NOT in Decoy List!")
+		t.Fail()
+	}
 	Assets().SetAssetsDir(dir2)
 	err = Assets().SetDecoys(testDecoys2)
 	if err != nil {
 		fmt.Println(err.Error())
+		t.Fail()
+	}
+	if Assets().IsDecoyInList("19.21.23.42", "sergeyfrolov.github.io") {
+		fmt.Println("Decoy 19.21.23.42(sergeyfrolov.github.io) is in Decoy List!")
+		t.Fail()
+	}
+	if !Assets().IsDecoyInList("11.22.33.44", "what.is.up") {
+		fmt.Println("Decoy 11.22.33.44(what.is.up) is NOT in Decoy List!")
 		t.Fail()
 	}
 	if !reflect.DeepEqual(Assets().config.DecoyList.TlsDecoys, testDecoys2) {
@@ -86,6 +98,14 @@ func TestAssets_Decoys(t *testing.T) {
 		fmt.Println("Assets are not equal!")
 		fmt.Println("Assets().decoys:", Assets().config.DecoyList.TlsDecoys)
 		fmt.Println("testDecoys1:", testDecoys1)
+		t.Fail()
+	}
+	if !Assets().IsDecoyInList("19.21.23.42", "sergeyfrolov.github.io") {
+		fmt.Println("Decoy 19.21.23.42(sergeyfrolov.github.io) is NOT in Decoy List!")
+		t.Fail()
+	}
+	if Assets().IsDecoyInList("11.22.33.44", "what.is.up") {
+		fmt.Println("Decoy 11.22.33.44(what.is.up) is in Decoy List!")
 		t.Fail()
 	}
 	for i := 0; i < 10; i++ {
