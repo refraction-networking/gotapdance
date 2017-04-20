@@ -390,6 +390,11 @@ func (tdConn *tapdanceConn) connect() {
 			}
 			tdConn.decoySNI, tdConn.decoyAddr = Assets().GetDecoyAddress()
 		}
+		if tdConn.decoyAddr == "" {
+			currErr = errors.New("tdConn.decoyAddr is empty!")
+			tdConn.setError(currErr, false)
+			return
+		}
 		Logger.Infoln(tdConn.idStr() + " Attempting to connect to decoy " + tdConn.decoySNI)
 		currErr = tdConn.establishTLStoDecoy()
 		if currErr != nil {

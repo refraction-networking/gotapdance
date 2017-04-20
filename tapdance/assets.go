@@ -166,6 +166,9 @@ func (a *assets) GetDecoyAddress() (sni string, addr string) {
 	defer a.RUnlock()
 
 	decoys := a.config.DecoyList.TlsDecoys
+	if len(decoys) == 0 {
+		return "", ""
+	}
 	decoyIndex := getRandInt(0, len(decoys)-1)
 	ip := make(net.IP, 4)
 	binary.BigEndian.PutUint32(ip, decoys[decoyIndex].GetIpv4Addr())
