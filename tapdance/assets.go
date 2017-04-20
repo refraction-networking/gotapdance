@@ -32,7 +32,13 @@ var assetsInstance *assets
 var assetsOnce sync.Once
 
 func initTLSDecoySpec(ip string, sni string) *TLSDecoySpec {
-	ipUint32 := binary.BigEndian.Uint32(net.ParseIP(ip).To4())
+	ip4 := net.ParseIP(ip)
+	var ipUint32 uint32
+	if ip4 != nil {
+		ipUint32 = binary.BigEndian.Uint32(net.ParseIP(ip).To4())
+	} else {
+		ipUint32 = 0
+	}
 	tlsDecoy := TLSDecoySpec{Hostname: &sni, Ipv4Addr: &ipUint32}
 	return &tlsDecoy
 }
