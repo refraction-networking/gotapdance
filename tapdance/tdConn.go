@@ -630,7 +630,9 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 				return
 			}
 
-			Assets().SetClientConf(conf)
+			_err := Assets().SetClientConf(conf); if _err != nil {
+				Logger.Errorln("Could not save SetClientConf():", _err.Error())
+			}
 		}
 
 		// handle ConfigInfo
