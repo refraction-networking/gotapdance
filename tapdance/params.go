@@ -22,6 +22,8 @@ const waitForFINDie = 22     // time to wait before crashing
 const maxInt16 = int16(^uint16(0) >> 1) // max msg size -> might have to chunk
 const minInt16 = int16(-maxInt16 - 1)
 
+const parallelDials = 5
+
 const (
 	TD_STATE_NEW = iota
 	TD_STATE_CONNECTED

@@ -6,6 +6,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -35,8 +36,49 @@ func NewTapDanceFlow(proxy *TapdanceProxy, id uint64) *TapDanceFlow {
 	return state
 }
 
+func shotgunDialHelper(id uint64, o *sync.Once, wg *sync.WaitGroup, r chan<- *tapdanceConn, e chan<- error) {
+	tmpResult, err := DialTapDance(id, nil)
+	onlyOnce := func() {
+		e <- err
+		r <- tmpResult
+	}
+	if err == nil {
+		o.Do(onlyOnce)
+	}
+	wg.Done()
+}
+
+func shotgunDialHelperCleanup(id uint64, o *sync.Once, wg *sync.WaitGroup, r chan<- *tapdanceConn, e chan<- error) {
+	tmpResult, err := DialTapDance(id, nil)
+	onlyOnce := func() {
+		e <- err
+		r <- tmpResult
+	}
+	if err == nil {
+		o.Do(onlyOnce)
+	} else {
+		wg.Wait()
+		o.Do(onlyOnce)
+	}
+}
+
+func shotgunDial(id uint64) (*tapdanceConn, error) {
+	o := sync.Once{}
+	wg := sync.WaitGroup{}
+	resultChan := make(chan *tapdanceConn)
+	errChan := make(chan error)
+	for i := 0; i < parallelDials-1; i++ {
+		wg.Add(1)
+		go shotgunDialHelper(id, &o, &wg, resultChan, errChan)
+	}
+	go shotgunDialHelperCleanup(id, &o, &wg, resultChan, errChan)
+	e := <-errChan
+	r := <-resultChan
+	return r, e
+}
+
 func (TDstate *TapDanceFlow) Redirect() (err error) {
-	TDstate.servConn, err = DialTapDance(TDstate.id, nil)
+	TDstate.servConn, err = shotgunDial(TDstate.id)
 	if err != nil {
 		TDstate.userConn.Close()
 		return
