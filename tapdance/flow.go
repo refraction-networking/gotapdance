@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -36,42 +37,50 @@ func NewTapDanceFlow(proxy *TapdanceProxy, id uint64) *TapDanceFlow {
 	return state
 }
 
-func shotgunDialHelper(id uint64, o *sync.Once, wg *sync.WaitGroup, r chan<- *tapdanceConn, e chan<- error) {
+func shotgunDialHelper(id uint64, successes *uint64, wg *sync.WaitGroup, r chan<- *tapdanceConn, e chan<- error) {
 	tmpResult, err := DialTapDance(id, nil)
-	onlyOnce := func() {
-		e <- err
-		r <- tmpResult
-	}
 	if err == nil {
-		o.Do(onlyOnce)
+		success := atomic.AddUint64(successes, 1)
+		if success == 1 {
+			e <- err
+			r <- tmpResult
+		} else if success > 1 {
+			tmpResult.Close()
+		}
 	}
 	wg.Done()
 }
 
-func shotgunDialHelperCleanup(id uint64, o *sync.Once, wg *sync.WaitGroup, r chan<- *tapdanceConn, e chan<- error) {
+func shotgunDialHelperCleanup(id uint64, successes *uint64, wg *sync.WaitGroup, r chan<- *tapdanceConn, e chan<- error) {
 	tmpResult, err := DialTapDance(id, nil)
-	onlyOnce := func() {
-		e <- err
-		r <- tmpResult
-	}
 	if err == nil {
-		o.Do(onlyOnce)
+		success := atomic.AddUint64(successes, 1)
+		if success == 1 {
+			e <- err
+			r <- tmpResult
+		} else if success > 1 {
+			tmpResult.Close()
+		}
 	} else {
 		wg.Wait()
-		o.Do(onlyOnce)
+		success := atomic.AddUint64(successes, 1)
+		if success == 1 {
+			e <- err
+			r <- tmpResult
+		}
 	}
 }
 
 func shotgunDial(id uint64) (*tapdanceConn, error) {
-	o := sync.Once{}
-	wg := sync.WaitGroup{}
+	successes := new(uint64)
+	wg := new(sync.WaitGroup)
 	resultChan := make(chan *tapdanceConn)
 	errChan := make(chan error)
 	for i := 0; i < parallelDials-1; i++ {
 		wg.Add(1)
-		go shotgunDialHelper(id, &o, &wg, resultChan, errChan)
+		go shotgunDialHelper(id, successes, wg, resultChan, errChan)
 	}
-	go shotgunDialHelperCleanup(id, &o, &wg, resultChan, errChan)
+	go shotgunDialHelperCleanup(id, successes, wg, resultChan, errChan)
 	e := <-errChan
 	r := <-resultChan
 	return r, e
