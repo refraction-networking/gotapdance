@@ -9,8 +9,8 @@ import (
 const timeoutMax = 30
 const timeoutMin = 20
 
-const sendLimitMax = 16 * 1024
-const sendLimitMin = 16*1024 - 1984
+const sendLimitMax = 15614
+const sendLimitMin = 14400
 
 const deadlineConnectTDStation = 15 // timeout for sending TD request and getting a response
 const deadlineTCPtoDecoy = 10       // deadline to establish TCP connection to decoy
