@@ -167,20 +167,16 @@ func (a *assets) readConfigs() {
 
 // gets randomDecoyAddress. sni stands for subject name indication.
 // addr is in format ipv4:port
-func (a *assets) GetDecoyAddress() (sni string, addr string) {
+func (a *assets) GetDecoy() (decoy TLSDecoySpec) {
 	a.RLock()
 	defer a.RUnlock()
 
 	decoys := a.config.DecoyList.TlsDecoys
 	if len(decoys) == 0 {
-		return "", ""
+		return TLSDecoySpec{}
 	}
 	decoyIndex := getRandInt(0, len(decoys)-1)
-	ip := make(net.IP, 4)
-	binary.BigEndian.PutUint32(ip, decoys[decoyIndex].GetIpv4Addr())
-	// TODO: what checks need to be done, and what's guaranteed?
-	addr = ip.To4().String() + ":443"
-	sni = decoys[decoyIndex].GetHostname()
+	decoy = *decoys[decoyIndex]
 	return
 }
 

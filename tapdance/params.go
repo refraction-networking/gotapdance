@@ -6,11 +6,13 @@ import (
 	"time"
 )
 
-const timeoutMax = 30
-const timeoutMin = 20
+const timeoutMax = 30000
+const timeoutMinModifier = 0.75
+// timeoutMin = timeoutMax * timeoutMinModifier
 
 const sendLimitMax = 15614
-const sendLimitMin = 14400
+const sendLimitMinModifier = 0.94
+// sendLimitMin = sendLimitMax * sendLimitMinModifier
 
 const deadlineConnectTDStation = 15 // timeout for sending TD request and getting a response
 const deadlineTCPtoDecoy = 10       // deadline to establish TCP connection to decoy

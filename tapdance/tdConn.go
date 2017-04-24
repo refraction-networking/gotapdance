@@ -20,45 +20,49 @@ import (
 )
 
 type tapdanceConn struct {
-	tcpConn      *net.TCPConn
-	tlsConn      *tls.Conn
-	customDialer func(string, string) (net.Conn, error)
+	tcpConn          *net.TCPConn
+	tlsConn          *tls.Conn
+	customDialer     func(string, string) (net.Conn, error)
 
-	sessionId uint64 // for logging. Constant for tapdanceConn
-	flowId    int    // for logging. Increments with each attempt to reconnect
+	sessionId        uint64 // for logging. Constant for tapdanceConn
+	flowId           int    // for logging. Increments with each attempt to reconnect
 	/* random per-connection (secret) id;
 	   this way, the underlying SSL connection can disconnect
 	   while the client's local conn and station's proxy conn
 	   can stay connected */
-	remoteConnId [16]byte
+	remoteConnId     [16]byte
 
-	maxSend   int
-	sentTotal int
 
-	decoyAddr string // ipv4_addr:port
-	decoySNI  string
+	decoyAddr        string // ipv4_addr:port
+	decoySNI         string
+	decoyMaxUploadLimit int
+	decoyMaxTimeout     int
+	decoyUploadLimit int
+	decoyTimeout     int
 
-	_readBuffer  []byte
-	_writeBuffer []byte
+	_readBuffer      []byte
+	_writeBuffer     []byte
 
-	writeMsgSize  int
-	writeMsgIndex int
-	writeBufType  int // appdata or protobug
+	sentTotal        int
 
-	stationPubkey *[32]byte
+	writeMsgSize     int
+	writeMsgIndex    int
+	writeBufType     int // appdata or protobug
 
-	state int32
-	err   error      // closing error
-	errMu sync.Mutex // make it RWMutex and RLock on read?
+	stationPubkey    *[32]byte
 
-	readChannel  chan []byte // HAVE TO BE NON-BLOCKING
-	writeChannel chan []byte //
+	state            int32
+	err              error      // closing error
+	errMu            sync.Mutex // make it RWMutex and RLock on read?
 
-	statsUpload   chan int
-	statsDownload chan int
+	readChannel      chan []byte // HAVE TO BE NON-BLOCKING
+	writeChannel     chan []byte //
 
-	readerTimeout <-chan time.Time
-	writerTimeout <-chan time.Time
+	statsUpload      chan int
+	statsDownload    chan int
+
+	readerTimeout    <-chan time.Time
+	writerTimeout    <-chan time.Time
 
 	// used by 2 engines to communicate /w one another
 	// true is sent upon success
@@ -342,14 +346,6 @@ func (tdConn *tapdanceConn) connect() {
 	var expectedTransition S2C_Transition
 	var connection_attempts int
 
-	// pregenerate transition protobuf, which is always sent before close and reconnect
-	transitionMsgSize := tdConn.preGenenerateTransition()
-
-	// Randomize tdConn.maxSend to avoid heuristics
-	tdConn.maxSend = getRandInt(sendLimitMin, sendLimitMax)
-	tdConn.maxSend -= transitionMsgSize // reserve space for transition msg
-	tdConn.maxSend -= 2                 // reserve 2 bytes for transition msg header
-
 	if reconnect {
 		connection_attempts = 2
 		expectedTransition = S2C_Transition_S2C_CONFIRM_RECONNECT
@@ -394,7 +390,7 @@ func (tdConn *tapdanceConn) connect() {
 				tdConn.failedDecoys = append(tdConn.failedDecoys,
 					tdConn.decoySNI + " " + tdConn.decoyAddr)
 			}
-			tdConn.decoySNI, tdConn.decoyAddr = Assets().GetDecoyAddress()
+			tdConn.setCurrentDecoy(Assets().GetDecoy())
 		}
 		if tdConn.decoyAddr == "" {
 			currErr = errors.New("tdConn.decoyAddr is empty!")
@@ -477,15 +473,22 @@ func (tdConn *tapdanceConn) connect() {
 
 		// TapDance should NOT have a timeout, timeouts have to be handled by client and server
 		tdConn.SetDeadline(time.Time{}) // unsets timeout
-		tdConn.writerTimeout = time.After(time.Duration(getRandInt(timeoutMin, timeoutMax)) *
-			time.Second)
+		tdConn.randomizeDecoyLimits()
+		tdConn.writerTimeout = time.After(time.Duration(tdConn.decoyTimeout) *
+			time.Millisecond)
+		// pregenerate transition protobuf, which is always sent before close and reconnect
+		transitionMsgSize := tdConn.preGenenerateTransition()
+		tdConn.decoyUploadLimit -= transitionMsgSize // reserve space for transition msg
+		tdConn.decoyUploadLimit -= 2                 // reserve 2 bytes for transition msg header
 		// reader shouldn't timeout yet
 		tdConn.readerTimeout = time.After(1 * time.Hour)
 
+		tdConn.sentTotal = 0
 		if !reconnect && len(tdConn.failedDecoys) > 0 {
 			tdConn.writeListFailedDecoys()
 		}
-		tdConn.sentTotal = 0
+		Logger.Infoln(tdConn.idStr() + " upload limit =", tdConn.decoyUploadLimit,
+			", timeout =", tdConn.decoyTimeout)
 		return
 	}
 	tdConn.setError(currErr, false)
@@ -653,7 +656,8 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 				Logger.Warningln(tdConn.idStr() + ": current decoy is no longer " +
 					"in the list, changing it! Connection probably will break!")
 				// if current decoy is no longer in the list
-				tdConn.decoySNI, tdConn.decoyAddr = Assets().GetDecoyAddress()
+				tdConn.tryScheduleReconnect()
+				tdConn.setCurrentDecoy(Assets().GetDecoy())
 			}
 		}
 
@@ -710,7 +714,7 @@ func (tdConn *tapdanceConn) Write(b []byte) (sentTotal int, err error) {
 }
 
 func (tdConn *tapdanceConn) writeBufferedData() (n int, err error) {
-	couldSend := tdConn.maxSend - tdConn.sentTotal
+	couldSend := tdConn.decoyUploadLimit - tdConn.sentTotal
 	totalToSendLeft := tdConn.writeMsgSize - tdConn.writeMsgIndex
 	toSend := totalToSendLeft
 	var b []byte
@@ -796,13 +800,54 @@ func (tdConn *tapdanceConn) writeListFailedDecoys() (err error) {
 	return
 }
 
+func (tdConn *tapdanceConn) randomizeDecoyLimits() {
+	minTcpWin := int(float64(tdConn.decoyMaxUploadLimit) * sendLimitMinModifier)
+	tdConn.decoyUploadLimit = getRandInt(minTcpWin, tdConn.decoyMaxUploadLimit)
+
+	minTimeout := int(float64(tdConn.decoyMaxTimeout) * timeoutMinModifier)
+	tdConn.decoyTimeout = getRandInt(minTimeout, tdConn.decoyMaxTimeout)
+}
+
+func (tdConn *tapdanceConn) setCurrentDecoy(decoy TLSDecoySpec) {
+	tdConn.decoySNI = decoy.GetHostname()
+	ip := make(net.IP, 4)
+	binary.BigEndian.PutUint32(ip, decoy.GetIpv4Addr())
+	// TODO: what checks need to be done, and what's guaranteed?
+	tdConn.decoyAddr = ip.To4().String() + ":443"
+
+	decoySpecificUploadLimit := int(decoy.GetTcpwin()) - 1
+	if decoySpecificUploadLimit <= 0 {
+		tdConn.decoyMaxUploadLimit = sendLimitMax
+	} else {
+		tdConn.decoyMaxUploadLimit = decoySpecificUploadLimit
+	}
+
+	// take some headspace
+	decoySpecificTimeout := int(float64(decoy.GetTimeout()) * 0.98) - 3000
+	if decoySpecificTimeout <= 0 {
+		tdConn.decoyMaxTimeout = timeoutMax
+	} else {
+		tdConn.decoyMaxTimeout = decoySpecificTimeout
+	}
+
+	tdConn.randomizeDecoyLimits()
+
+	if pubkey := decoy.GetPubkey().GetKey(); len(pubkey) == 32 {
+		var pKey [32]byte
+		copy(pKey[:], pubkey[:])
+		tdConn.stationPubkey = &pKey
+	} else {
+		tdConn.stationPubkey = Assets().GetPubkey()
+	}
+}
+
 func (tdConn *tapdanceConn) writeTransition(transition C2S_Transition) (err error) {
 	currGen := Assets().GetGeneration()
 	tdConn.transitionMsg.DecoyListGeneration = &currGen
 	tdConn.transitionMsg.StateTransition = &transition
-	Logger.Debugln("tdConn.maxSend", tdConn.maxSend)
-	tdConn.maxSend += (proto.Size(&tdConn.transitionMsg) + 2) // 2 bytes for header
-	Logger.Debugln("tdConn.maxSend", tdConn.maxSend)
+	Logger.Debugln("tdConn.maxSend", tdConn.decoyUploadLimit)
+	tdConn.decoyUploadLimit += (proto.Size(&tdConn.transitionMsg) + 2) // 2 bytes for header
+	Logger.Debugln("tdConn.maxSend", tdConn.decoyUploadLimit)
 
 	err = tdConn.writeProto(tdConn.transitionMsg)
 	return
@@ -855,7 +900,7 @@ func (tdConn *tapdanceConn) writeProto(msg ClientToStation) error {
 	}
 
 	// don't ever chunk protobufs
-	couldSend := tdConn.maxSend - tdConn.sentTotal
+	couldSend := tdConn.decoyUploadLimit - tdConn.sentTotal
 	if couldSend < len(msgBytes) {
 		// if we can't send it due to upload limit:
 		//    buffer it, reconnect, and try again
