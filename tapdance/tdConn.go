@@ -83,6 +83,8 @@ type tapdanceConn struct {
 	timeoutReconnects int
 
 	transitionMsg ClientToStation
+
+	failedDecoys []string
 }
 
 /* Create new TapDance connection
@@ -388,6 +390,10 @@ func (tdConn *tapdanceConn) connect() {
 					return
 				}
 			}
+			if i > 0 {
+				tdConn.failedDecoys = append(tdConn.failedDecoys,
+					tdConn.decoySNI + " " + tdConn.decoyAddr)
+			}
 			tdConn.decoySNI, tdConn.decoyAddr = Assets().GetDecoyAddress()
 		}
 		if tdConn.decoyAddr == "" {
@@ -474,6 +480,9 @@ func (tdConn *tapdanceConn) connect() {
 		// reader shouldn't timeout yet
 		tdConn.readerTimeout = time.After(1 * time.Hour)
 
+		if !reconnect && len(tdConn.failedDecoys) > 0 {
+			tdConn.writeListFailedDecoys()
+		}
 		tdConn.sentTotal = 0
 		return
 	}
@@ -773,6 +782,16 @@ func (tdConn *tapdanceConn) preGenenerateTransition() int {
 		DecoyListGeneration: &dummyGen,
 		Padding:             []byte(getRandPadding(150, 950, 10))}
 	return proto.Size(&tdConn.transitionMsg)
+}
+
+func (tdConn *tapdanceConn) writeListFailedDecoys() (err error) {
+	currGen := Assets().GetGeneration()
+	msgFailedDecoys := ClientToStation{DecoyListGeneration: &currGen,
+		Padding:             []byte(getRandPadding(150, 500, 10)),
+		FailedDecoys: tdConn.failedDecoys,
+	}
+	err = tdConn.writeProto(msgFailedDecoys)
+	return
 }
 
 func (tdConn *tapdanceConn) writeTransition(transition C2S_Transition) (err error) {
