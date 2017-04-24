@@ -401,7 +401,8 @@ func (tdConn *tapdanceConn) connect() {
 			tdConn.setError(currErr, false)
 			return
 		}
-		Logger.Infoln(tdConn.idStr() + " Attempting to connect to decoy " + tdConn.decoySNI)
+		Logger.Infoln(tdConn.idStr() + " Attempting to connect to decoy " +
+			tdConn.decoySNI + " (" + tdConn.decoyAddr + ")")
 		currErr = tdConn.establishTLStoDecoy()
 		if currErr != nil {
 			Logger.Errorf(tdConn.idStr() + " establishTLStoDecoy(" +
@@ -409,7 +410,8 @@ func (tdConn *tapdanceConn) connect() {
 				") failed with " + currErr.Error())
 			continue
 		} else {
-			Logger.Infof(tdConn.idStr() + " Connected to decoy " + tdConn.decoySNI)
+			Logger.Infof(tdConn.idStr() + " Connected to decoy " +
+				tdConn.decoySNI + " (" + tdConn.decoyAddr + ")")
 		}
 
 		// Check if cipher is supported
