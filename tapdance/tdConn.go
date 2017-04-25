@@ -478,7 +478,7 @@ func (tdConn *tapdanceConn) connect() {
 		// TapDance should NOT have a timeout, timeouts have to be handled by client and server
 		tdConn.SetDeadline(time.Time{}) // unsets timeout
 		tdConn.writerTimeout = time.After(time.Duration(getRandInt(timeoutMin, timeoutMax)) *
-			time.Second)
+			time.Millisecond)
 		// reader shouldn't timeout yet
 		tdConn.readerTimeout = time.After(1 * time.Hour)
 

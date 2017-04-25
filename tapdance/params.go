@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-const timeoutMax = 30
-const timeoutMin = 20
+const timeoutMax = 30000
+const timeoutMin = 20000
 
 const sendLimitMax = 15614
 const sendLimitMin = 14400
