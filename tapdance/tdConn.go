@@ -955,7 +955,7 @@ func (tdConn *tapdanceConn) prepareTDRequest() (tdRequest string, err error) {
 	// Ideally, it is never processed by decoy
 	tdRequest = "GET / HTTP/1.1\r\n"
 	tdRequest += "Host: " + tdConn.decoySNI + "\r\n"
-	tdRequest += "User-Agent: TapDance/1.1 (+https://decoyrouting.com/info)\r\n"
+	tdRequest += "User-Agent: TapDance/1.1 (+https://tapdance.team/info)\r\n"
 	tdRequest += "X-Ignore: "
 
 	tdRequest += getRandPadding(0, 650, 10)
