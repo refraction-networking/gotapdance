@@ -85,3 +85,21 @@ func TestGetRandInt(t *testing.T) {
 	fmt.Println("Average:", float64(avg)/float64(n_values))
 
 }
+
+func TestRandString(t *testing.T) {
+	const n_values = 20000
+	const stringsToPrint = 10
+	for i := 0; i < n_values; i++ {
+		randLen := getRandInt(3, 16)
+		randString := getRandString(randLen)
+		if i < stringsToPrint {
+			fmt.Println("Random string with length", randLen, ":", randString)
+		}
+		if len(randString) != randLen {
+			fmt.Println("Random string length mismatch!" +
+				"Expected:", randLen,
+				"Got:", randString, " (length ", len(randString), ")")
+
+		}
+	}
+}
