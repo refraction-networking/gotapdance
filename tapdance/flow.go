@@ -18,7 +18,7 @@ type TapDanceFlow struct {
 	// reference to global proxy
 	proxy *TapdanceProxy
 
-	servConn *tapdanceConn
+	servConn *tapdanceRWConn
 	userConn net.Conn
 }
 

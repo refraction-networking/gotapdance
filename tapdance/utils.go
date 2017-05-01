@@ -88,6 +88,15 @@ func getRandPadding(minLen int, maxLen int, smoothness int) string {
 	return strings.Repeat("#", paddingLen)
 }
 
+func getRandString(len int) string {
+	const alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	randString := make([]byte, len)
+	for i := range randString {
+		randString[i] = alphabet[getRandInt(0, len(alphabet))]
+	}
+	return string(randString)
+}
+
 func obfuscateTag(stegoPayload []byte, stationPubkey [32]byte) (tag []byte, err error) {
 	var sharedSecret, clientPrivate, clientPublic, representative [32]byte
 	for ok := false; ok != true; {
