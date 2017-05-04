@@ -17,6 +17,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"fmt"
 )
 
 type tapdanceConn struct {
@@ -95,7 +96,15 @@ Args:
 func DialTapDance(
 	id uint64,
 	customDialer func(string, string) (net.Conn, error)) (tdConn *tapdanceConn, err error) {
-
+	// to prevent overload TapDance station may request users to back off for a while
+	if tmpBackoffTimestamp := Assets().GetTmpBackoff(); tmpBackoffTimestamp != 0 {
+		leftToWait := int(tmpBackoffTimestamp - time.Now().Unix())
+		if leftToWait > 0 {
+			err = errors.New("TapDance station requested backoff! Left to wait: " +
+				strconv.FormatUint(uint64(leftToWait), 10) + " seconds")
+			return
+		}
+	}
 	tdConn = new(tapdanceConn)
 
 	tdConn.customDialer = customDialer
@@ -655,6 +664,13 @@ func (tdConn *tapdanceConn) read_msg(expectedTransition S2C_Transition) (n int, 
 				// if current decoy is no longer in the list
 				tdConn.decoySNI, tdConn.decoyAddr = Assets().GetDecoyAddress()
 			}
+		}
+
+		if tmpBackoff := msg.GetTmpBackoff(); tmpBackoff != 0 {
+			Assets().SetTmpBackoff(time.Now().Unix() + int64(tmpBackoff))
+			err = errors.New("TapDance station requested backoff for " +
+				strconv.FormatUint(uint64(tmpBackoff), 10) + " seconds")
+			return
 		}
 
 		// handle state transitions
