@@ -88,11 +88,11 @@ func getRandPadding(minLen int, maxLen int, smoothness int) string {
 	return strings.Repeat("#", paddingLen)
 }
 
-func getRandString(len int) string {
+func getRandString(length int) string {
 	const alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	randString := make([]byte, len)
+	randString := make([]byte, length)
 	for i := range randString {
-		randString[i] = alphabet[getRandInt(0, len(alphabet))]
+		randString[i] = alphabet[getRandInt(0, len(alphabet) - 1)]
 	}
 	return string(randString)
 }

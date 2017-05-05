@@ -9,9 +9,9 @@ import (
 	"net"
 	"os"
 	"path"
+	"reflect"
 	"strconv"
 	"sync"
-	"reflect"
 )
 
 type assets struct {
@@ -251,10 +251,10 @@ func (a *assets) IsDecoyInList(ip string, sni string) bool {
 	decoy := initTLSDecoySpec(ip, sni)
 	for _, d := range a.config.GetDecoyList().GetTlsDecoys() {
 		if reflect.DeepEqual(&d, &decoy) {
-			return true;
+			return true
 		}
 	}
-	return false;
+	return false
 }
 
 func (a *assets) saveClientConf() error {
@@ -263,7 +263,7 @@ func (a *assets) saveClientConf() error {
 		return err
 	}
 	filename := path.Join(a.path, a.filenameClientConf)
-	tmpFilename := path.Join(a.path, "."+a.filenameClientConf+".tmp")
+	tmpFilename := path.Join(a.path, "."+a.filenameClientConf+"."+getRandString(5)+".tmp")
 	err = ioutil.WriteFile(tmpFilename, buf[:], 0644)
 	if err != nil {
 		return err
