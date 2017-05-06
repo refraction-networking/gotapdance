@@ -88,19 +88,6 @@ func TestGetRandInt(t *testing.T) {
 
 func TestRandString(t *testing.T) {
 	const n_values = 20000
-	const stringsToPrint = 20
-	for i := 0; i < n_values; i++ {
-		len = getRandInt(3, 16)
-		getStrin
-		if i < stringsToPrint {
-		fmt.Println("Random string with length", len, ":", )
-		}
-	}
-}
-}
-
-func TestRandString(t *testing.T) {
-	const n_values = 20000
 	const stringsToPrint = 10
 	for i := 0; i < n_values; i++ {
 		randLen := getRandInt(3, 16)
@@ -116,4 +103,3 @@ func TestRandString(t *testing.T) {
 		}
 	}
 }
->>>>>>> master

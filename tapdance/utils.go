@@ -14,6 +14,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"strings"
+	"errors"
+	"strconv"
 )
 
 func AesGcmEncrypt(plaintext []byte, key []byte, iv []byte) (ciphertext []byte, err error) {
@@ -97,7 +99,12 @@ func getRandString(length int) string {
 	return string(randString)
 }
 
-func obfuscateTag(stegoPayload []byte, stationPubkey [32]byte) (tag []byte, err error) {
+func obfuscateTag(stegoPayload []byte, stationPubkey []byte) (tag []byte, err error) {
+	if len(stationPubkey) != 32 {
+		err = errors.New("Unexpected station pubkey length. Expected: 32." +
+			" Received: " + strconv.Itoa(len(stationPubkey)) + ".")
+		return
+	}
 	var sharedSecret, clientPrivate, clientPublic, representative [32]byte
 	for ok := false; ok != true; {
 		var slice_key_private []byte = clientPrivate[:]
@@ -128,6 +135,15 @@ func obfuscateTag(stegoPayload []byte, stationPubkey [32]byte) (tag []byte, err 
 	tag = tagBuf.Bytes()
 	Logger.Debugf("len(tag)", tagBuf.Len())
 	return
+}
+
+func Uint16toInt16(i uint16) int16 {
+	pos := int16(i & 32767)
+	neg := int16(0)
+	if i&32768 != 0 {
+		neg = int16(-32768)
+	}
+	return pos + neg
 }
 
 func reverseEncrypt(ciphertext []byte, keyStream []byte) (plaintext string) {
