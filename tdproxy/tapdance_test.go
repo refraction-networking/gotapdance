@@ -1,4 +1,4 @@
-package tapdance
+package tdproxy
 
 import (
 	"bytes"
@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 )
-
 
 func asTestHandshakeLaunchProxy(t *testing.T) {
 	// hangs, as it fails to read anything from nc

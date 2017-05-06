@@ -1,8 +1,10 @@
 package tapdance
 
 import (
+	"errors"
 	"github.com/zmap/zcrypto/tls"
 	"math"
+	"strconv"
 	"time"
 )
 
@@ -29,10 +31,43 @@ const (
 	TD_STATE_CLOSED
 )
 
+type MsgType int8
+
 const (
-	msg_raw_data = iota
-	msg_protobuf
+	msg_raw_data MsgType = 1
+	msg_protobuf MsgType = 2
 )
+
+func (m *MsgType) Str() string {
+	switch *m {
+	case msg_raw_data:
+		return "msg_raw_data"
+	case msg_protobuf:
+		return "msg_protobuf"
+	default:
+		return strconv.Itoa(int(*m))
+	}
+}
+
+var errMsgClose = errors.New("MSG CLOSE")
+
+type TdTagType int8
+
+const (
+	HTTP_GET_INCOMPLETE TdTagType = 0
+	HTTP_POST_COMPLETE  TdTagType = 1
+)
+
+func (m *TdTagType) Str() string {
+	switch *m {
+	case HTTP_GET_INCOMPLETE:
+		return "HTTP_GET_INCOMPLETE"
+	case HTTP_POST_COMPLETE:
+		return "HTTP_POST_COMPLETE"
+	default:
+		return strconv.Itoa(int(*m))
+	}
+}
 
 // List of actually supported ciphers(not a list of offered ciphers!)
 // Essentially all AES GCM ciphers, except for ANON and PSK

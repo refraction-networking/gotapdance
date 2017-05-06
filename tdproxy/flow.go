@@ -1,4 +1,4 @@
-package tapdance
+package tdproxy
 
 import (
 	"errors"
@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	""
 )
 
 // Connection-oriented state
@@ -18,7 +19,7 @@ type TapDanceFlow struct {
 	// reference to global proxy
 	proxy *TapdanceProxy
 
-	servConn *tapdanceRWConn
+	servConn *Conn
 	userConn net.Conn
 }
 

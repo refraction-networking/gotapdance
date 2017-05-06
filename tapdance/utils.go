@@ -13,9 +13,9 @@ import (
 
 	"bytes"
 	"encoding/binary"
-	"strings"
 	"errors"
 	"strconv"
+	"strings"
 )
 
 func AesGcmEncrypt(plaintext []byte, key []byte, iv []byte) (ciphertext []byte, err error) {
@@ -53,13 +53,13 @@ func AesGcmDecrypt(ciphertext []byte, key []byte, iv []byte) (plaintext []byte, 
 }
 
 // Tries to get crypto random int in range [min, max]
-// In case of crypto failure -- return unsecure pseudorandom
+// In case of crypto failure -- return insecure pseudorandom
 func getRandInt(min int, max int) (result int) {
 	// I can't believe Golang is making me do that
 	// Flashback to awful C/C++ libraries
 	diff := max - min
 	if diff < 0 {
-		Logger.Warningf("fetRandInt(): max is less than min")
+		Logger().Warningf("fetRandInt(): max is less than min")
 		min = max
 		diff *= -1
 	} else if diff == 0 {
@@ -71,7 +71,7 @@ func getRandInt(min int, max int) (result int) {
 		v *= -1
 	}
 	if err != nil {
-		Logger.Warningf("Unable to securely get getRandInt(): " + err.Error())
+		Logger().Warningf("Unable to securely get getRandInt(): " + err.Error())
 		v = mrand.Int63()
 	}
 	return min + int(v%int64(diff+1))
@@ -94,7 +94,7 @@ func getRandString(length int) string {
 	const alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	randString := make([]byte, length)
 	for i := range randString {
-		randString[i] = alphabet[getRandInt(0, len(alphabet) - 1)]
+		randString[i] = alphabet[getRandInt(0, len(alphabet)-1)]
 	}
 	return string(randString)
 }
@@ -116,8 +116,9 @@ func obfuscateTag(stegoPayload []byte, stationPubkey []byte) (tag []byte, err er
 
 		ok = extra25519.ScalarBaseMult(&clientPublic, &representative, &clientPrivate)
 	}
-
-	curve25519.ScalarMult(&sharedSecret, &clientPrivate, &stationPubkey)
+	var stationPubkeyByte32 [32]byte
+	copy(stationPubkeyByte32[:], stationPubkey)
+	curve25519.ScalarMult(&sharedSecret, &clientPrivate, &stationPubkeyByte32)
 
 	tagBuf := new(bytes.Buffer) // What we have to encrypt with the shared secret using AES
 	tagBuf.Write(representative[:])
@@ -133,8 +134,40 @@ func obfuscateTag(stegoPayload []byte, stationPubkey []byte) (tag []byte, err er
 
 	tagBuf.Write(encryptedData)
 	tag = tagBuf.Bytes()
-	Logger.Debugf("len(tag)", tagBuf.Len())
+	Logger().Debugf("len(tag)", tagBuf.Len())
 	return
+}
+
+func getMsgWithHeader(msgType MsgType, msgBytes []byte) []byte {
+	if len(msgBytes) == 0 {
+		return nil
+	}
+	bufSend := new(bytes.Buffer)
+	var err error
+	switch msgType {
+	case msg_protobuf:
+		if len(msgBytes) <= int(maxInt16) {
+			bufSend.Grow(2 + len(msgBytes)) // to avoid double allocation
+			err = binary.Write(bufSend, binary.BigEndian, int16(len(msgBytes)))
+
+		} else {
+			bufSend.Grow(2 + 4 + len(msgBytes)) // to avoid double allocation
+			bufSend.Write([]byte{0, 0})
+			err = binary.Write(bufSend, binary.BigEndian, int32(len(msgBytes)))
+		}
+	case msg_raw_data:
+		err = binary.Write(bufSend, binary.BigEndian, int16(-len(msgBytes)))
+	default:
+		panic("getMsgWithHeader() called with msgType: " + strconv.Itoa(int(msgType)))
+	}
+	if err != nil {
+		// shouldn't ever happen
+		Logger().Errorln("getMsgWithHeader() failed with error: ", err)
+		Logger().Errorln("msgType ", msgType)
+		Logger().Errorln("msgBytes ", msgBytes)
+	}
+	bufSend.Write(msgBytes)
+	return bufSend.Bytes()
 }
 
 func Uint16toInt16(i uint16) int16 {

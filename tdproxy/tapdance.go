@@ -1,14 +1,14 @@
-package tapdance
+package tdproxy
 
 import (
-	"github.com/Sirupsen/logrus"
 	"net"
 	"strconv"
 	"sync"
 	"time"
+	"github.com/SergeyFrolov/gotapdance/tapdance"
 )
 
-var Logger = logrus.New()
+var Logger = tapdance.Logger()
 
 const (
 	TD_INITIALIZED = "Initialized"
@@ -19,46 +19,39 @@ const (
 
 // global object
 type TapdanceProxy struct {
-	State string
+	State            string
 
-	stationPubkey [32]byte // contents of keyfile
+	listener         net.Listener
 
-	listener net.Listener
+	listenPort       int
 
-	listenPort int
-
-	countTunnels counter_uint64
+	countTunnels     tapdance.CounterUint64
 
 	// statistics
-	notPickedUp      counter_uint64
-	timedOut         counter_uint64
-	closedGracefully counter_uint64
-	unexpectedError  counter_uint64
+	notPickedUp      tapdance.CounterUint64
+	timedOut         tapdance.CounterUint64
+	closedGracefully tapdance.CounterUint64
+	unexpectedError  tapdance.CounterUint64
 
-	connections struct {
+	connections      struct {
 		sync.RWMutex
 		m map[uint64]*TapDanceFlow
 	}
 
-	statsTicker *time.Ticker
+	statsTicker      *time.Ticker
 
-	stop bool
+	stop             bool
 }
 
 func NewTapdanceProxy(listenPort int) *TapdanceProxy {
 	//Logger.Level = logrus.DebugLevel
-	Logger.Level = logrus.InfoLevel
-	Logger.Formatter = new(MyFormatter)
 	proxy := new(TapdanceProxy)
 	proxy.listenPort = listenPort
-	// TODO: do I need it?
-	copy(proxy.stationPubkey[:], Assets().GetPubkey()[:])
 
 	proxy.connections.m = make(map[uint64]*TapDanceFlow)
 	proxy.State = TD_INITIALIZED
 
-	Logger.Infof("Succesfully initialized new Tapdance Proxy." +
-		" Please press \"Launch\" to start accepting connections.")
+	Logger.Infof("Succesfully initialized new Tapdance Proxy")
 	Logger.Debug(*proxy)
 
 	return proxy

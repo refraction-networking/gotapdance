@@ -25,7 +25,6 @@ func TestAssets_Decoys(t *testing.T) {
 		t.Fail()
 	}
 
-
 	var testDecoys1 = []*TLSDecoySpec{
 		initTLSDecoySpec("4.8.15.16", "ericw.us"),
 		initTLSDecoySpec("19.21.23.42", "sergeyfrolov.github.io"),

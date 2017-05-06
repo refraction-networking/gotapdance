@@ -1,11 +1,10 @@
+// +build ignore
+
 package tapdance
 
 import (
-	"bytes"
-	"crypto/cipher"
 	"crypto/rand"
 	"encoding/binary"
-	"encoding/hex"
 	"errors"
 	"github.com/golang/protobuf/proto"
 	"github.com/zmap/zcrypto/tls"
@@ -13,7 +12,6 @@ import (
 	"net"
 	"runtime"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -43,7 +41,7 @@ type tapdanceRWConn struct {
 
 	writeMsgSize  int
 	writeMsgIndex int
-	writeBufType  int // appdata or protobug
+	writeBufType  MsgType // appdata or protobug
 
 	stationPubkey *[32]byte
 
@@ -121,7 +119,7 @@ func dialRWTapDance(
 	tdConn.statsDownload = make(chan int, 32)
 
 	tdConn.state = TD_STATE_NEW
-	tdConn.connect()
+	//tdConn.connect()
 
 	err = tdConn.err
 	if err == nil {
@@ -160,7 +158,7 @@ func (tdConn *tapdanceRWConn) engineMain() {
 			Logger.Infoln(tdConn.idStr() + " reconnecting!" +
 				" write_total: " + strconv.Itoa(tdConn.writeReconnects) +
 				" timeout_total: " + strconv.Itoa(tdConn.timeoutReconnects))
-			tdConn.connect()
+			//tdConn.connect()
 			continue
 		case TD_STATE_CONNECTED:
 		default:
@@ -293,205 +291,6 @@ func (tdConn *tapdanceRWConn) readSubEngine() {
 	}
 }
 
-func (tdConn *tapdanceRWConn) connect() {
-	var reconnect bool
-	// store current error, set it as connection-wide error if all attempts to connect failed
-	currErr := errors.New("No connection attempts were made yet")
-
-	defer func() {
-		tdConn.sentTotal = 0
-		_err := tdConn.getError()
-		connectOk := (_err == nil)
-		if connectOk {
-			Logger.Debugf(tdConn.idStr() + " connect success")
-			atomic.StoreInt32(&tdConn.state, TD_STATE_CONNECTED)
-			if reconnect {
-				select {
-				case tdConn.doneReconnect <- connectOk:
-				case <-tdConn.stopped:
-				}
-			}
-		} else {
-			Logger.Debugf(tdConn.idStr()+" connect fail", _err)
-			atomic.StoreInt32(&tdConn.state, TD_STATE_CLOSED)
-		}
-	}()
-
-	switch atomic.LoadInt32(&tdConn.state) {
-	case TD_STATE_RECONNECT:
-		reconnect = true
-	case TD_STATE_NEW:
-		reconnect = false
-	case TD_STATE_CONNECTED:
-		currErr = errors.New(tdConn.idStr() + " called reconnect " +
-			", but state is TD_STATE_CONNECTED")
-		tdConn.setError(currErr, false)
-		return
-	case TD_STATE_CLOSED:
-		currErr = errors.New(tdConn.idStr() + " called reconnect " +
-			"but state is TD_STATE_CLOSED")
-		tdConn.setError(currErr, false)
-		return
-	default:
-		currErr = errors.New(tdConn.idStr() + " called reconnect " +
-			"but state is garbage: " + strconv.FormatUint(uint64(tdConn.state), 10))
-		tdConn.setError(currErr, false)
-		return
-	}
-
-	var expectedTransition S2C_Transition
-	var connection_attempts int
-
-	// pregenerate transition protobuf, which is always sent before close and reconnect
-	transitionMsgSize := tdConn.preGenenerateTransition()
-
-	// Randomize tdConn.maxSend to avoid heuristics
-	tdConn.maxSend = getRandInt(sendLimitMin, sendLimitMax)
-	tdConn.maxSend -= transitionMsgSize // reserve space for transition msg
-	tdConn.maxSend -= 2                 // reserve 2 bytes for transition msg header
-
-	if reconnect {
-		connection_attempts = 2
-		expectedTransition = S2C_Transition_S2C_CONFIRM_RECONNECT
-		awaitFINSendRST := time.After(waitForFINSendRST * time.Second)
-		awaitFINDie := time.After(waitForFINDie * time.Second)
-		readerStopped := false
-		for !readerStopped {
-			select {
-			case _ = <-tdConn.readerStopped:
-				// wait for readEngine to stop
-				readerStopped = true
-			case <-awaitFINSendRST:
-				Logger.Errorf(tdConn.idStr() + " FIN await timeout: sending RST")
-				tdConn.tlsConn.Close()
-			case <-awaitFINDie:
-				Logger.Errorf(tdConn.idStr() + " FIN await timeout: dying!")
-				currErr = errors.New("FIN await timeout")
-				tdConn.setError(currErr, false)
-				return
-			case <-tdConn.stopped:
-				return
-			}
-		}
-		tdConn.tlsConn.Close()
-	} else {
-		connection_attempts = 6
-		expectedTransition = S2C_Transition_S2C_SESSION_INIT
-	}
-
-	for i := 0; i < connection_attempts; i++ {
-		tdConn.flowId++
-		if !reconnect {
-			// sleep to prevent overwhelming decoy servers
-			if waitTime := sleepBeforeConnect(i); waitTime != nil {
-				select {
-				case <-waitTime:
-				case <-tdConn.stopped:
-					return
-				}
-			}
-			if i > 0 {
-				tdConn.failedDecoys = append(tdConn.failedDecoys,
-					tdConn.decoySNI + " " + tdConn.decoyAddr)
-			}
-			tdConn.decoySNI, tdConn.decoyAddr = Assets().GetDecoyAddress()
-		}
-		if tdConn.decoyAddr == "" {
-			currErr = errors.New("tdConn.decoyAddr is empty!")
-			tdConn.setError(currErr, false)
-			return
-		}
-		Logger.Infoln(tdConn.idStr() + " Attempting to connect to decoy " +
-			tdConn.decoySNI + " (" + tdConn.decoyAddr + ")")
-		currErr = tdConn.establishTLStoDecoy()
-		if currErr != nil {
-			Logger.Errorf(tdConn.idStr() + " establishTLStoDecoy(" +
-				tdConn.decoySNI + "," + tdConn.decoyAddr +
-				") failed with " + currErr.Error())
-			continue
-		} else {
-			Logger.Infof(tdConn.idStr() + " Connected to decoy " +
-				tdConn.decoySNI + " (" + tdConn.decoyAddr + ")")
-		}
-
-		// Check if cipher is supported
-		cipherIsSupported := func(id uint16) bool {
-			for _, c := range TDSupportedCiphers {
-				if c == id {
-					return true
-				}
-			}
-			return false
-		}
-		if !cipherIsSupported(tdConn.tlsConn.ConnectionState().CipherSuite) {
-			Logger.Errorf(tdConn.idStr() + " decoy " + tdConn.decoySNI +
-				", offered unsupported cipher #" +
-				strconv.FormatUint(uint64(tdConn.tlsConn.ConnectionState().CipherSuite), 10))
-			currErr = errors.New("Unsupported cipher.")
-			tdConn.tlsConn.Close()
-			continue
-		}
-
-		tdConn.SetDeadline(time.Now().Add(deadlineConnectTDStation * time.Second))
-
-		var tdRequest string
-		tdRequest, currErr = tdConn.prepareTDRequest()
-		Logger.Debugf(tdConn.idStr() + " Prepared initial TD request:" + tdRequest)
-		if currErr != nil {
-			Logger.Errorf(tdConn.idStr() +
-				" Preparation of initial TD request failed with " + currErr.Error())
-			tdConn.tlsConn.Close()
-			continue
-		}
-
-		Logger.Infoln(tdConn.idStr() + " Attempting to connect to TapDance Station" +
-			" with connection ID: " + hex.EncodeToString(tdConn.remoteConnId[:]))
-		tdConn.sentTotal = 0
-		_, currErr = tdConn.tlsConn.Write([]byte(tdRequest))
-		if currErr != nil {
-			Logger.Errorf(tdConn.idStr() +
-				" Could not send initial TD request, error: " + currErr.Error())
-			tdConn.tlsConn.Close()
-			continue
-		}
-
-		_, currErr = tdConn.read_msg(expectedTransition)
-		if currErr != nil {
-			str_err := currErr.Error()
-			if strings.Contains(str_err, ": i/o timeout") || // client timed out
-				currErr.Error() == "EOF" {
-				// decoy timed out
-				currErr = errors.New("TapDance station didn't pick up the request: " + str_err)
-				Logger.Errorf(tdConn.idStr() + " " + currErr.Error())
-			} else {
-				// any other error will be fatal
-				Logger.Errorf(tdConn.idStr() +
-					" fatal error reading from TapDance station: " +
-					currErr.Error())
-				tdConn.setError(currErr, false)
-				return
-			}
-			tdConn.tlsConn.Close()
-			continue
-		}
-
-		// TapDance should NOT have a timeout, timeouts have to be handled by client and server
-		tdConn.SetDeadline(time.Time{}) // unsets timeout
-		tdConn.writerTimeout = time.After(time.Duration(getRandInt(timeoutMin, timeoutMax)) *
-			time.Millisecond)
-		// reader shouldn't timeout yet
-		tdConn.readerTimeout = time.After(1 * time.Hour)
-
-		if !reconnect && len(tdConn.failedDecoys) > 0 {
-			tdConn.writeListFailedDecoys()
-		}
-		tdConn.sentTotal = 0
-		return
-	}
-	tdConn.setError(currErr, false)
-	return
-}
-
 // Read reads data from the connection.
 // TODO: Read can be made to time out and return a Error with Timeout() == true
 // after a fixed time limit; see SetDeadline and SetReadDeadline.
@@ -548,7 +347,7 @@ func (tdConn *tapdanceRWConn) read_msg(expectedTransition S2C_Transition) (n int
 		            This u32 is the length of the blob, which begins after this u32.
 		            The blob is a protobuf.
 	*/
-	var outerProtoMsgType uint8
+	var outerProtoMsgType MsgType
 
 	//TODO: check FIN+last data case
 	for readBytesTotal < headerSize {
@@ -563,14 +362,6 @@ func (tdConn *tapdanceRWConn) read_msg(expectedTransition S2C_Transition) (n int
 		}
 	}
 
-	Uint16toInt16 := func(i uint16) int16 {
-		pos := int16(i & 32767)
-		neg := int16(0)
-		if i&32768 != 0 {
-			neg = int16(-32768)
-		}
-		return pos + neg
-	}
 	// Get TIL
 	typeLen := Uint16toInt16(binary.BigEndian.Uint16(tdConn._readBuffer[0:2]))
 	if typeLen < 0 {
@@ -627,60 +418,6 @@ func (tdConn *tapdanceRWConn) read_msg(expectedTransition S2C_Transition) (n int
 		Logger.Debugln(tdConn.idStr() + " received protobuf: " +
 			msg.String())
 
-		// Helper functions
-		handleConfigInfo := func(conf *ClientConf) {
-			currGen := Assets().GetGeneration()
-			if conf.GetGeneration() < currGen {
-				Logger.Infoln(tdConn.idStr()+" not appliying new config due to "+
-					"lower generation: ", conf.GetGeneration(), " "+
-					"(have:", currGen, ")")
-				return
-			} else if conf.GetGeneration() < currGen {
-				Logger.Infoln(tdConn.idStr()+" not appliying new config due to "+
-					" currently having same generation: ", currGen)
-				return
-			}
-
-			_err := Assets().SetClientConf(conf); if _err != nil {
-				Logger.Errorln("Could not save SetClientConf():", _err.Error())
-			}
-		}
-
-		// handle ConfigInfo
-		if confInfo := msg.ConfigInfo; confInfo != nil {
-			handleConfigInfo(confInfo)
-			if !Assets().IsDecoyInList(tdConn.decoyAddr, tdConn.decoySNI) {
-				Logger.Warningln(tdConn.idStr() + ": current decoy is no longer " +
-					"in the list, changing it! Connection probably will break!")
-				// if current decoy is no longer in the list
-				tdConn.decoySNI, tdConn.decoyAddr = Assets().GetDecoyAddress()
-			}
-		}
-
-		// handle state transitions
-		stateTransition := msg.GetStateTransition()
-		if expectedTransition != S2C_Transition_S2C_NO_CHANGE {
-			if expectedTransition != stateTransition {
-				err = errors.New("State Transition mismatch! Expected: " +
-					expectedTransition.String() +
-					", but received: " + stateTransition.String())
-				return
-			}
-		}
-
-		switch stateTransition {
-		case S2C_Transition_S2C_CONFIRM_RECONNECT:
-			fallthrough
-		case S2C_Transition_S2C_SESSION_INIT:
-			Logger.Infof(tdConn.idStr() +
-				" Successfully connected to TapDance Station!")
-		case S2C_Transition_S2C_SESSION_CLOSE:
-			err = errors.New("MSG_CLOSE")
-			Logger.Infof(tdConn.idStr() + " received MSG_CLOSE")
-		case S2C_Transition_S2C_ERROR:
-			err = errors.New("Received MSG_ERROR from station")
-			return
-		}
 	default:
 		panic("Corrupted outerProtoMsgType")
 	}
@@ -755,13 +492,13 @@ func (tdConn *tapdanceRWConn) writeBufferedData() (n int, err error) {
 				return
 			} else {
 				// split buffer in chunks and reconnect after
-				toSend = couldSend
+				toSend = couldSend - headerSize
 			}
 		}
 		b = getMsgWithHeader(msg_raw_data,
 			tdConn._writeBuffer[tdConn.writeMsgIndex:tdConn.writeMsgIndex+toSend])
 	default:
-		panic("writeBufferedData() writeBufType: " + strconv.Itoa(tdConn.writeBufType))
+		panic("writeBufferedData() writeBufType: " + strconv.Itoa(int(tdConn.writeBufType)))
 	}
 
 	n, err = tdConn.tlsConn.Write(b[:])
@@ -789,7 +526,7 @@ func (tdConn *tapdanceRWConn) preGenenerateTransition() int {
 func (tdConn *tapdanceRWConn) writeListFailedDecoys() (err error) {
 	currGen := Assets().GetGeneration()
 	msgFailedDecoys := ClientToStation{DecoyListGeneration: &currGen,
-		Padding:             []byte(getRandPadding(150, 500, 10)),
+		Padding:      []byte(getRandPadding(150, 500, 10)),
 		FailedDecoys: tdConn.failedDecoys,
 	}
 	err = tdConn.writeProto(msgFailedDecoys)
@@ -816,37 +553,6 @@ func (tdConn *tapdanceRWConn) writeTransition(transition C2S_Transition) (err er
 	    This u32 is the length of the blob, which begins after this u32.
 	    The blob is a protobuf.
 */
-func getMsgWithHeader(msgType int, msgBytes []byte) []byte {
-	if len(msgBytes) == 0 {
-		return nil
-	}
-	bufSend := new(bytes.Buffer)
-	var err error
-	switch msgType {
-	case msg_protobuf:
-		if len(msgBytes) <= int(maxInt16) {
-			bufSend.Grow(2 + len(msgBytes)) // to avoid double allocation
-			err = binary.Write(bufSend, binary.BigEndian, int16(len(msgBytes)))
-
-		} else {
-			bufSend.Grow(2 + 4 + len(msgBytes)) // to avoid double allocation
-			bufSend.Write([]byte{0, 0})
-			err = binary.Write(bufSend, binary.BigEndian, int32(len(msgBytes)))
-		}
-	case msg_raw_data:
-		err = binary.Write(bufSend, binary.BigEndian, int16(-len(msgBytes)))
-	default:
-		panic("getMsgWithHeader() called with msgType: " + strconv.Itoa(msgType))
-	}
-	if err != nil {
-		// shouldn't ever happen
-		Logger.Errorln("getMsgWithHeader() failed with error: ", err)
-		Logger.Errorln("msgType ", msgType)
-		Logger.Errorln("msgBytes ", msgBytes)
-	}
-	bufSend.Write(msgBytes)
-	return bufSend.Bytes()
-}
 
 func (tdConn *tapdanceRWConn) writeProto(msg ClientToStation) error {
 	msgBytes, err := proto.Marshal(&msg)
@@ -879,99 +585,6 @@ func (tdConn *tapdanceRWConn) writeProto(msg ClientToStation) error {
 		tdConn.sentTotal += len(b)
 	}
 	return err
-}
-
-func (tdConn *tapdanceRWConn) establishTLStoDecoy() (err error) {
-	config := getZtlsConfig("Firefox50", tdConn.decoySNI)
-	var dialConn net.Conn
-	if tdConn.customDialer != nil {
-		dialConn, err = tdConn.customDialer("tcp", tdConn.decoyAddr)
-		if err != nil {
-			return err
-		}
-	} else {
-		dialConn, err = net.DialTimeout("tcp", tdConn.decoyAddr,
-			deadlineTCPtoDecoy*time.Second)
-		if err != nil {
-			return err
-		}
-	}
-	if config.ServerName == "" {
-		// if SNI is unset -- try IP
-		config.ServerName, _, err = net.SplitHostPort(tdConn.decoyAddr)
-		if err != nil {
-			dialConn.Close()
-			return
-		}
-		Logger.Infoln(tdConn.idStr() + ": SNI was nil. Setting it to" +
-			config.ServerName)
-	}
-	tdConn.tlsConn = tls.Client(dialConn, &config)
-	err = tdConn.tlsConn.Handshake()
-	if err != nil {
-		dialConn.Close()
-		return
-	}
-	tdConn.tcpConn = dialConn.(*net.TCPConn)
-	return
-}
-
-// get current state of cipher and encrypt zeros to get keystream
-func (tdConn *tapdanceRWConn) getKeystream(length int) (keystream []byte, err error) {
-	zeros := make([]byte, length)
-
-	if servConnCipher, ok := tdConn.tlsConn.OutCipher().(cipher.AEAD); ok {
-		keystream = servConnCipher.Seal(nil, tdConn.tlsConn.OutSeq(), zeros, nil)
-		return
-	} else {
-		err = errors.New("Could not convert tlsConn.OutCipher to cipher.AEAD")
-	}
-	return
-}
-
-func (tdConn *tapdanceRWConn) prepareTDRequest() (tdRequest string, err error) {
-	// Generate initial TapDance request
-	buf := new(bytes.Buffer) // What we have to encrypt with the shared secret using AES
-
-	master_key := tdConn.tlsConn.GetHandshakeLog().KeyMaterial.MasterSecret.Value
-
-	// write flags
-	if err = binary.Write(buf, binary.BigEndian, uint8(1)); err != nil {
-		// tentatively last 4 bytes are for version the of outer proto
-		// 1 signals current outer proto, which is TypeLen
-		return
-	}
-	buf.Write(master_key[:])
-	buf.Write(tdConn.serverRandom())
-	buf.Write(tdConn.clientRandom())
-	buf.Write(tdConn.remoteConnId[:]) // connection id for persistence
-
-	tag, err := obfuscateTag(buf.Bytes(), *tdConn.stationPubkey) // What we encode into the ciphertext
-	if err != nil {
-		return
-	}
-
-	// Don't even need the following HTTP request
-	// Ideally, it is never processed by decoy
-	tdRequest = "GET / HTTP/1.1\r\n"
-	tdRequest += "Host: " + tdConn.decoySNI + "\r\n"
-	tdRequest += "User-Agent: TapDance/1.1 (+https://tapdance.team/info)\r\n"
-	tdRequest += "X-Ignore: "
-
-	tdRequest += getRandPadding(0, 650, 10)
-
-	keystreamOffset := len(tdRequest)
-	keystreamSize := (len(tag)/3+1)*4 + keystreamOffset // we can't use first 2 bits of every byte
-	whole_keystream, err := tdConn.getKeystream(keystreamSize)
-	if err != nil {
-		return
-	}
-	keystreamAtTag := whole_keystream[keystreamOffset:]
-
-	tdRequest += reverseEncrypt(tag, keystreamAtTag)
-	Logger.Debugf("Prepared initial request to Decoy") //, td_request)
-
-	return
 }
 
 func (tdConn *tapdanceRWConn) idStr() string {
@@ -1059,14 +672,6 @@ func (tdConn *tapdanceRWConn) tryScheduleReconnect() {
 			return
 		}
 	}
-}
-
-func (tdConn *tapdanceRWConn) clientRandom() []byte {
-	return tdConn.tlsConn.GetHandshakeLog().ClientHello.Random
-}
-
-func (tdConn *tapdanceRWConn) serverRandom() []byte {
-	return tdConn.tlsConn.GetHandshakeLog().ServerHello.Random
 }
 
 func (tdConn *tapdanceRWConn) IsClosed() bool {
