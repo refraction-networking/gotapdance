@@ -12,20 +12,23 @@ import (
 	"reflect"
 	"strconv"
 	"sync"
+	"time"
 )
 
 type assets struct {
 	sync.RWMutex
-	once sync.Once
-	path string
+	once                  sync.Once
+	path                  string
+	tmpBackoff            int64 // unix timestamp for when to stop backoff
 
-	config ClientConf
+	config                ClientConf
 
-	roots *x509.CertPool
+	roots                 *x509.CertPool
 
 	filenameStationPubkey string
 	filenameRoots         string
 	filenameClientConf    string
+	filenameTmpBackoff    string
 }
 
 var assetsInstance *assets
@@ -74,6 +77,7 @@ func Assets() *assets {
 			filenameRoots:         "roots",
 			filenameClientConf:    "ClientConf",
 			filenameStationPubkey: "station_pubkey",
+			filenameTmpBackoff:    "tmp_backoff",
 		}
 		assetsInstance.readConfigs()
 	})
@@ -137,6 +141,29 @@ func (a *assets) readConfigs() {
 		return nil
 	}
 
+	readTmpBackoff := func(filename string) error {
+		tmpBackoffStr, err := ioutil.ReadFile(filename)
+		if err != nil {
+			return err
+		}
+		backoffInt64, err := strconv.ParseInt(string(tmpBackoffStr), 10, 64)
+		if err != nil {
+			Logger.Errorln("Failed to Parse tmp_backoff:", err)
+			return err
+		}
+		if time.Now().Unix() > backoffInt64 {
+			err = os.Remove(filename)
+			Logger.Infoln("Temporary backoff has expired! Removing the ", filename)
+			if err != nil {
+				Logger.Errorln(err)
+				return err
+			}
+		} else {
+			a.tmpBackoff = backoffInt64
+		}
+		return nil
+	}
+
 	var err error
 	Logger.Infoln("Assets: reading from folder " + a.path)
 
@@ -162,6 +189,15 @@ func (a *assets) readConfigs() {
 		Logger.Warningln("Failed to read pubkey file: " + err.Error())
 	} else {
 		Logger.Infoln("Pubkey succesfully read from " + pubkeyFilename)
+	}
+
+	// TODO: stop printing backoff read failures
+	backoffFilename := path.Join(a.path, a.filenameStationPubkey)
+	err = readTmpBackoff(backoffFilename)
+	if err != nil {
+		Logger.Warningln("Failed to read backoff file: " + err.Error())
+	} else {
+		Logger.Infoln("Backoff succesfully read from " + pubkeyFilename)
 	}
 }
 
@@ -207,6 +243,13 @@ func (a *assets) GetGeneration() uint32 {
 	return a.config.GetGeneration()
 }
 
+func (a *assets) GetTmpBackoff() int64 {
+	a.RLock()
+	defer a.RUnlock()
+
+	return a.tmpBackoff
+}
+
 func (a *assets) SetGeneration(gen uint32) (err error) {
 	a.Lock()
 	defer a.Unlock()
@@ -247,6 +290,15 @@ func (a *assets) SetDecoys(decoys []*TLSDecoySpec) (err error) {
 	return
 }
 
+func (a *assets) SetTmpBackoff(tmpBackoff int64) (err error) {
+	a.Lock()
+	defer a.Unlock()
+
+	a.tmpBackoff = tmpBackoff
+	err = a.saveTmpBackoff()
+	return
+}
+
 func (a *assets) IsDecoyInList(ip string, sni string) bool {
 	decoy := initTLSDecoySpec(ip, sni)
 	for _, d := range a.config.GetDecoyList().GetTlsDecoys() {
@@ -265,6 +317,18 @@ func (a *assets) saveClientConf() error {
 	filename := path.Join(a.path, a.filenameClientConf)
 	tmpFilename := path.Join(a.path, "."+a.filenameClientConf+"."+getRandString(5)+".tmp")
 	err = ioutil.WriteFile(tmpFilename, buf[:], 0644)
+	if err != nil {
+		return err
+	}
+
+	return os.Rename(tmpFilename, filename)
+}
+
+func (a *assets) saveTmpBackoff() error {
+	strTmpBackoff := strconv.FormatInt(a.tmpBackoff, 10)
+	filename := path.Join(a.path, a.filenameTmpBackoff)
+	tmpFilename := path.Join(a.path, "."+a.filenameTmpBackoff+"."+getRandString(5)+".tmp")
+	err := ioutil.WriteFile(tmpFilename, []byte(strTmpBackoff), 0644)
 	if err != nil {
 		return err
 	}
