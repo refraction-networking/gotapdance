@@ -13,7 +13,7 @@ GOPATH="${HOME}/go/"
 go get github.com/SergeyFrolov/gotapdance github.com/Sirupsen/logrus \
            github.com/agl/ed25519/extra25519 github.com/zmap/zcrypto/x509 \
            github.com/zmap/zcrypto/tls golang.org/x/crypto/curve25519 \
-           golang.org/x/mobile/cmd/gomobile  
+           golang.org/x/mobile/cmd/gomobile github.com/golang/protobuf/proto
 ```
 Ignore the "no buildable Go source files" warning.
 
