@@ -3,7 +3,7 @@ package tapdance
 import (
 	"encoding/binary"
 	"github.com/golang/protobuf/proto"
-	"github.com/pkg/errors"
+	"errors"
 	"github.com/zmap/zcrypto/x509"
 	"io/ioutil"
 	"net"
