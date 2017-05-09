@@ -17,6 +17,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"fmt"
 )
 
 type tapdanceConn struct {
@@ -773,6 +774,17 @@ func (tdConn *tapdanceConn) writeBufferedData() (n int, err error) {
 				toSend = couldSend - headerSize
 			}
 		}
+		// Temporary workaround for panic observed in production
+        	if tdConn.writeMsgIndex >= len(tdConn._writeBuffer) || tdConn.writeMsgIndex+toSend > len(tdConn._writeBuffer) {
+            		errMsg := fmt.Sprintf("tdConn._writeBuffer slice bounds out of range: %d[%d:%d] (%d, %d)",
+                		len(tdConn._writeBuffer),
+                		tdConn.writeMsgIndex,
+                		tdConn.writeMsgIndex+toSend,
+                		couldSend,
+                		totalToSendLeft)
+            		Logger.Infoln(tdConn.idStr() + " " + errMsg)
+            		return 0, errors.New(errMsg)
+        	}
 		b = getMsgWithHeader(msg_raw_data,
 			tdConn._writeBuffer[tdConn.writeMsgIndex:tdConn.writeMsgIndex+toSend])
 	default:
