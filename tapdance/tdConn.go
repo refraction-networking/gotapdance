@@ -770,7 +770,7 @@ func (tdConn *tapdanceConn) writeBufferedData() (n int, err error) {
 				return
 			} else {
 				// split buffer in chunks and reconnect after
-				toSend = couldSend
+				toSend = couldSend - headerSize
 			}
 		}
 		b = getMsgWithHeader(msg_raw_data,
