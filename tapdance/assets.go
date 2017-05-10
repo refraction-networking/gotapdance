@@ -9,10 +9,10 @@ import (
 	"net"
 	"os"
 	"path"
-	"reflect"
 	"strconv"
 	"sync"
 	"time"
+	"strings"
 )
 
 type assets struct {
@@ -44,6 +44,18 @@ func initTLSDecoySpec(ip string, sni string) *TLSDecoySpec {
 	}
 	tlsDecoy := TLSDecoySpec{Hostname: &sni, Ipv4Addr: &ipUint32}
 	return &tlsDecoy
+}
+
+func (ds *TLSDecoySpec) GetIpv4AddrStr() string {
+	if ds.Ipv4Addr != nil {
+		ip := make(net.IP, 4)
+		binary.BigEndian.PutUint32(ip, ds.GetIpv4Addr())
+		// TODO: what checks need to be done, and what's guaranteed?
+		ipv4Str := ip.To4().String() + ":443"
+		return ipv4Str
+	} else {
+		return ""
+	}
 }
 
 // Path is expected (but doesn't have) to have several files
@@ -212,11 +224,8 @@ func (a *assets) GetDecoyAddress() (sni string, addr string) {
 		return "", ""
 	}
 	decoyIndex := getRandInt(0, len(decoys)-1)
-	ip := make(net.IP, 4)
-	binary.BigEndian.PutUint32(ip, decoys[decoyIndex].GetIpv4Addr())
-	// TODO: what checks need to be done, and what's guaranteed?
-	addr = ip.To4().String() + ":443"
 	sni = decoys[decoyIndex].GetHostname()
+	addr = decoys[decoyIndex].GetIpv4AddrStr()
 	return
 }
 
@@ -299,10 +308,10 @@ func (a *assets) SetTmpBackoff(tmpBackoff int64) (err error) {
 	return
 }
 
-func (a *assets) IsDecoyInList(ip string, sni string) bool {
-	decoy := initTLSDecoySpec(ip, sni)
+func (a *assets) IsDecoyInList(ipv4str string, hostname string) bool {
 	for _, d := range a.config.GetDecoyList().GetTlsDecoys() {
-		if reflect.DeepEqual(&d, &decoy) {
+		if strings.Compare(d.GetHostname(), hostname) == 0 &&
+			strings.Compare(d.GetIpv4AddrStr(), ipv4str) == 0 {
 			return true
 		}
 	}
