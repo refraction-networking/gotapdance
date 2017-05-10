@@ -309,9 +309,15 @@ func (a *assets) SetTmpBackoff(tmpBackoff int64) (err error) {
 }
 
 func (a *assets) IsDecoyInList(ipv4str string, hostname string) bool {
+	var ipToCheck string
+	if strings.HasSuffix(ipv4str, ":443") {
+		ipToCheck = ipv4str
+	} else {
+		ipToCheck = ipv4str + ":443"
+	}
 	for _, d := range a.config.GetDecoyList().GetTlsDecoys() {
 		if strings.Compare(d.GetHostname(), hostname) == 0 &&
-			strings.Compare(d.GetIpv4AddrStr(), ipv4str) == 0 {
+			strings.Compare(d.GetIpv4AddrStr(), ipToCheck) == 0 {
 			return true
 		}
 	}
