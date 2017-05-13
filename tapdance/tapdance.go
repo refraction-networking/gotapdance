@@ -74,7 +74,7 @@ func (proxy *TapdanceProxy) statsHelper() error {
 
 func (proxy *TapdanceProxy) Listen() error {
 	var err error
-	listenAddress := "0.0.0.0:" + strconv.Itoa(proxy.listenPort)
+	listenAddress := "127.0.0.1:" + strconv.Itoa(proxy.listenPort)
 
 	proxy.State = TD_LISTENING
 	proxy.stop = false
