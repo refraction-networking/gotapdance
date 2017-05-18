@@ -399,10 +399,6 @@ func (tdConn *tapdanceConn) connect() {
 					return
 				}
 			}
-			if i > 0 {
-				tdConn.failedDecoys = append(tdConn.failedDecoys,
-					tdConn.decoySNI + " " + tdConn.decoyAddr)
-			}
 			tdConn.decoySNI, tdConn.decoyAddr = Assets().GetDecoyAddress()
 		}
 		if tdConn.decoyAddr == "" {
@@ -417,6 +413,8 @@ func (tdConn *tapdanceConn) connect() {
 			Logger.Errorf(tdConn.idStr() + " establishTLStoDecoy(" +
 				tdConn.decoySNI + "," + tdConn.decoyAddr +
 				") failed with " + currErr.Error())
+			tdConn.failedDecoys = append(tdConn.failedDecoys,
+				tdConn.decoySNI + " " + tdConn.decoyAddr + " " + currErr.Error())
 			continue
 		} else {
 			Logger.Infof(tdConn.idStr() + " Connected to decoy " +
@@ -433,10 +431,12 @@ func (tdConn *tapdanceConn) connect() {
 			return false
 		}
 		if !cipherIsSupported(tdConn.tlsConn.ConnectionState().CipherSuite) {
-			Logger.Errorf(tdConn.idStr() + " decoy " + tdConn.decoySNI +
-				", offered unsupported cipher #" +
+			currErr = errors.New(tdConn.idStr() + " decoy " + tdConn.decoySNI +
+			", offered unsupported cipher #" +
 				strconv.FormatUint(uint64(tdConn.tlsConn.ConnectionState().CipherSuite), 10))
-			currErr = errors.New("Unsupported cipher.")
+			Logger.Errorln(currErr.Error())
+			tdConn.failedDecoys = append(tdConn.failedDecoys,
+				tdConn.decoySNI + " " + tdConn.decoyAddr + " " + currErr.Error())
 			tdConn.tlsConn.Close()
 			continue
 		}
@@ -447,9 +447,12 @@ func (tdConn *tapdanceConn) connect() {
 		tdRequest, currErr = tdConn.prepareTDRequest()
 		Logger.Debugf(tdConn.idStr() + " Prepared initial TD request:" + tdRequest)
 		if currErr != nil {
-			Logger.Errorf(tdConn.idStr() +
+			currErr = errors.New(tdConn.idStr() +
 				" Preparation of initial TD request failed with " + currErr.Error())
+			Logger.Errorln(currErr.Error())
 			tdConn.tlsConn.Close()
+			tdConn.failedDecoys = append(tdConn.failedDecoys,
+				tdConn.decoySNI + " " + tdConn.decoyAddr + " " + currErr.Error())
 			continue
 		}
 
@@ -460,6 +463,8 @@ func (tdConn *tapdanceConn) connect() {
 		if currErr != nil {
 			Logger.Errorf(tdConn.idStr() +
 				" Could not send initial TD request, error: " + currErr.Error())
+			tdConn.failedDecoys = append(tdConn.failedDecoys,
+				tdConn.decoySNI + " " + tdConn.decoyAddr + " " + currErr.Error())
 			tdConn.tlsConn.Close()
 			continue
 		}
@@ -467,6 +472,8 @@ func (tdConn *tapdanceConn) connect() {
 		_, currErr = tdConn.read_msg(expectedTransition)
 		if currErr != nil {
 			str_err := currErr.Error()
+			tdConn.failedDecoys = append(tdConn.failedDecoys,
+				tdConn.decoySNI + " " + tdConn.decoyAddr + " " + str_err)
 			if strings.Contains(str_err, ": i/o timeout") || // client timed out
 				currErr.Error() == "EOF" {
 				// decoy timed out
