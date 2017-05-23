@@ -204,7 +204,7 @@ func (a *assets) readConfigs() {
 	}
 
 	// TODO: stop printing backoff read failures
-	backoffFilename := path.Join(a.path, a.filenameStationPubkey)
+	backoffFilename := path.Join(a.path, a.filenameTmpBackoff)
 	err = readTmpBackoff(backoffFilename)
 	if err != nil {
 		Logger.Warningln("Failed to read backoff file: " + err.Error())
