@@ -198,16 +198,15 @@ func (a *assets) readConfigs() {
 	pubkeyFilename := path.Join(a.path, a.filenameStationPubkey)
 	err = readPubkey(pubkeyFilename)
 	if err != nil {
-		Logger.Warningln("Failed to read pubkey file: " + err.Error())
+		Logger.Debugln("Failed to read pubkey file: " + err.Error())
 	} else {
 		Logger.Infoln("Pubkey succesfully read from " + pubkeyFilename)
 	}
 
-	// TODO: stop printing backoff read failures
 	backoffFilename := path.Join(a.path, a.filenameTmpBackoff)
 	err = readTmpBackoff(backoffFilename)
 	if err != nil {
-		Logger.Warningln("Failed to read backoff file: " + err.Error())
+		Logger.Debugln("Failed to read backoff file: " + err.Error())
 	} else {
 		Logger.Infoln("Backoff succesfully read from " + pubkeyFilename)
 	}
