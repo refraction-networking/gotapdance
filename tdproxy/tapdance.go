@@ -1,31 +1,33 @@
+// Package tdproxy implements TapdanceProxy, which can ListenAndServe() on a given port,
+// so you can use it as a SOCKS or HTTP proxy elsewhere.
 package tdproxy
 
 import (
+	"github.com/SergeyFrolov/gotapdance/tapdance"
 	"net"
 	"strconv"
 	"sync"
 	"time"
-	"github.com/SergeyFrolov/gotapdance/tapdance"
 )
 
 var Logger = tapdance.Logger()
 
 const (
-	TD_INITIALIZED = "Initialized"
-	TD_LISTENING   = "Listening"
-	TD_STOPPED     = "Stopped"
-	TD_ERROR       = "Error"
+	ProxyStateInitialized = "Initialized"
+	ProxyStateListening   = "Listening"
+	ProxyStateStopped     = "Stopped"
+	ProxyStateError       = "Error"
 )
 
-// global object
-type TapdanceProxy struct {
-	State            string
+// TODO: consider implementing https://golang.org/pkg/net/#Listener or other default interface
+type TapDanceProxy struct {
+	State string
 
-	listener         net.Listener
+	listener net.Listener
 
-	listenPort       int
+	listenPort int
 
-	countTunnels     tapdance.CounterUint64
+	countTunnels tapdance.CounterUint64
 
 	// statistics
 	notPickedUp      tapdance.CounterUint64
@@ -33,23 +35,23 @@ type TapdanceProxy struct {
 	closedGracefully tapdance.CounterUint64
 	unexpectedError  tapdance.CounterUint64
 
-	connections      struct {
+	connections struct {
 		sync.RWMutex
-		m map[uint64]*TapDanceFlow
+		m map[uint64]*tapDanceFlow
 	}
 
-	statsTicker      *time.Ticker
+	statsTicker *time.Ticker
 
-	stop             bool
+	stop bool
 }
 
-func NewTapdanceProxy(listenPort int) *TapdanceProxy {
+func NewTapDanceProxy(listenPort int) *TapDanceProxy {
 	//Logger.Level = logrus.DebugLevel
-	proxy := new(TapdanceProxy)
+	proxy := new(TapDanceProxy)
 	proxy.listenPort = listenPort
 
-	proxy.connections.m = make(map[uint64]*TapDanceFlow)
-	proxy.State = TD_INITIALIZED
+	proxy.connections.m = make(map[uint64]*tapDanceFlow)
+	proxy.State = ProxyStateInitialized
 
 	Logger.Infof("Succesfully initialized new Tapdance Proxy")
 	Logger.Debug(*proxy)
@@ -57,7 +59,7 @@ func NewTapdanceProxy(listenPort int) *TapdanceProxy {
 	return proxy
 }
 
-func (proxy *TapdanceProxy) statsHelper() error {
+func (proxy *TapDanceProxy) statsHelper() error {
 	proxy.statsTicker = time.NewTicker(time.Second * time.Duration(60))
 	for range proxy.statsTicker.C {
 		Logger.Infof(proxy.GetStatistics())
@@ -65,16 +67,14 @@ func (proxy *TapdanceProxy) statsHelper() error {
 	return nil
 }
 
-func (proxy *TapdanceProxy) Listen() error {
+func (proxy *TapDanceProxy) ListenAndServe() error {
 	var err error
-	listenAddress := "0.0.0.0:" + strconv.Itoa(proxy.listenPort)
+	listenAddress := "127.0.0.1:" + strconv.Itoa(proxy.listenPort)
 
-	proxy.State = TD_LISTENING
+	proxy.State = ProxyStateListening
 	proxy.stop = false
 	if proxy.listener, err = net.Listen("tcp", listenAddress); err != nil {
-		Logger.Infof("Failed listening at port " + strconv.Itoa(proxy.listenPort) +
-			". Error: " + err.Error())
-		proxy.State = TD_ERROR
+		proxy.State = ProxyStateError
 		return err
 	}
 	Logger.Infof("Accepting connections at port " + strconv.Itoa(proxy.listenPort))
@@ -85,19 +85,19 @@ func (proxy *TapdanceProxy) Listen() error {
 			go proxy.handleUserConn(conn)
 		} else {
 			if proxy.stop {
-				proxy.State = TD_STOPPED
+				proxy.State = ProxyStateStopped
 				err = nil
 			} else {
-				proxy.State = TD_ERROR
+				proxy.State = ProxyStateError
 			}
 			return err
 		}
 	}
-	proxy.State = TD_STOPPED
+	proxy.State = ProxyStateStopped
 	return nil
 }
 
-func (proxy *TapdanceProxy) Stop() error {
+func (proxy *TapDanceProxy) Stop() error {
 	proxy.stop = true
 	proxy.listener.Close()
 	proxy.connections.Lock()
@@ -109,23 +109,17 @@ func (proxy *TapdanceProxy) Stop() error {
 	return nil
 }
 
-func (proxy *TapdanceProxy) handleUserConn(userConn net.Conn) {
-	tdState, err := proxy.NewConnectionToTDStation(&userConn)
+func (proxy *TapDanceProxy) handleUserConn(userConn net.Conn) {
+	tdState := proxy.addFlow(&userConn)
 	defer func() {
 		proxy.connections.Lock()
 		delete(proxy.connections.m, tdState.id)
 		proxy.connections.Unlock()
 	}()
 
-	if err != nil {
-		userConn.Close()
-		//Logger.Errorf("Establishing initial connection to decoy server failed with " + err.Error())
-		return
-	}
-
 	// Initial request is not lost, because we still haven't read anything from client socket
 	// So we just start Redirecting (client socket) <-> (server socket)
-	if err = tdState.Redirect(); err != nil {
+	if err := tdState.redirect(); err != nil {
 		Logger.Errorf("[Session " + strconv.FormatUint(uint64(tdState.id), 10) +
 			"] Shut down with error: " + err.Error())
 	} else {
@@ -135,31 +129,31 @@ func (proxy *TapdanceProxy) handleUserConn(userConn net.Conn) {
 	return
 }
 
-func (proxy *TapdanceProxy) GetStatistics() (statistics string) {
+func (proxy *TapDanceProxy) GetStatistics() (statistics string) {
 	statistics = "Sessions total: " +
-		strconv.FormatUint(uint64(proxy.countTunnels.get()), 10)
+		strconv.FormatUint(uint64(proxy.countTunnels.Get()), 10)
 	statistics += ". Not picked up: " +
-		strconv.FormatUint(uint64(proxy.notPickedUp.get()), 10)
+		strconv.FormatUint(uint64(proxy.notPickedUp.Get()), 10)
 	statistics += ". Timed out: " +
-		strconv.FormatUint(uint64(proxy.timedOut.get()), 10)
+		strconv.FormatUint(uint64(proxy.timedOut.Get()), 10)
 	statistics += ". Unexpected error: " +
-		strconv.FormatUint(uint64(proxy.unexpectedError.get()), 10)
+		strconv.FormatUint(uint64(proxy.unexpectedError.Get()), 10)
 	statistics += ". Graceful close: " +
-		strconv.FormatUint(uint64(proxy.closedGracefully.get()), 10)
+		strconv.FormatUint(uint64(proxy.closedGracefully.Get()), 10)
 	return
 }
 
-func (proxy *TapdanceProxy) GetStats() (stats string) {
+func (proxy *TapDanceProxy) GetStats() (stats string) {
 	stats = proxy.State + "\nPort: " + strconv.Itoa(proxy.listenPort) +
 		"\nActive connections: " + strconv.Itoa(len(proxy.connections.m))
 	return
 }
 
-func (proxy *TapdanceProxy) NewConnectionToTDStation(userConn *net.Conn) (pTapdanceState *TapDanceFlow, err error) {
+func (proxy *TapDanceProxy) addFlow(userConn *net.Conn) (pTapdanceState *tapDanceFlow) {
 	// Init connection state
-	id := proxy.countTunnels.inc()
+	id := proxy.countTunnels.Inc()
 
-	pTapdanceState = NewTapDanceFlow(proxy, id)
+	pTapdanceState = makeTapDanceFlow(proxy, id)
 	pTapdanceState.userConn = *userConn
 
 	proxy.connections.Lock()

@@ -29,9 +29,9 @@ func asTestHandshakeLaunchProxy(t *testing.T) {
 		grepCmd.Wait()
 		fmt.Println(grepBytes)
 	}()
-	tap_dance_proxy := NewTapdanceProxy(10500)
+	tap_dance_proxy := NewTapDanceProxy(10500)
 	go func() {
-		err := tap_dance_proxy.Listen()
+		err := tap_dance_proxy.ListenAndServe()
 		errChan <- err
 	}()
 	err := <-errChan
@@ -54,8 +54,8 @@ func TestSendSeq(t *testing.T) {
 		}
 	}
 
-	tapdanceProxy := NewTapdanceProxy(10600)
-	go tapdanceProxy.Listen()
+	tapdanceProxy := NewTapDanceProxy(10600)
+	go tapdanceProxy.ListenAndServe()
 	time.Sleep(10 * time.Second)
 	proxyUrl, err := url.Parse("http://127.0.0.1:10600")
 	if err != nil {
