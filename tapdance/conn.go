@@ -3,7 +3,6 @@ package tapdance
 import (
 	"crypto/rand"
 	"errors"
-	"io"
 	"net"
 	"strconv"
 	"time"
