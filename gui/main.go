@@ -5,13 +5,13 @@
 package main
 
 import (
+	"image"
 	_ "image/png"
 	"time"
-	"image"
 
 	"golang.org/x/mobile/app"
-	"golang.org/x/mobile/gl"
 	"golang.org/x/mobile/asset"
+	"golang.org/x/mobile/gl"
 
 	"golang.org/x/mobile/event/lifecycle"
 	"golang.org/x/mobile/event/paint"
@@ -19,9 +19,9 @@ import (
 	"golang.org/x/mobile/event/touch"
 
 	"golang.org/x/mobile/exp/gl/glutil"
-	"golang.org/x/mobile/exp/sprite/glsprite"
 	"golang.org/x/mobile/exp/sprite"
 	"golang.org/x/mobile/exp/sprite/clock"
+	"golang.org/x/mobile/exp/sprite/glsprite"
 
 	"github.com/SergeyFrolov/gotapdance/tapdance"
 )
@@ -31,7 +31,7 @@ var (
 
 	glctx gl.Context
 
-	glutilImages     *glutil.Images
+	glutilImages *glutil.Images
 	spriteEngine sprite.Engine
 
 	currentScene Scene
@@ -39,15 +39,15 @@ var (
 	sizeEvent size.Event
 	scaleDraw = float32(1)
 
-	buttonTexLaunch sprite.SubTex
-	buttonTexStop sprite.SubTex
+	buttonTexLaunch   sprite.SubTex
+	buttonTexStop     sprite.SubTex
 	buttonTexQuestion sprite.SubTex
-	buttonTexBack sprite.SubTex
-	buttonTexInfo sprite.SubTex
-	textLoremTex sprite.SubTex
+	buttonTexBack     sprite.SubTex
+	buttonTexInfo     sprite.SubTex
+	textLoremTex      sprite.SubTex
 
 	proxyLaunched bool
-	tapdanceProxy    *tapdance.TapdanceProxy
+	tapdanceProxy *tapdance.TapdanceProxy
 )
 
 type arrangerFunc func(e sprite.Engine, n *sprite.Node, t clock.Time)
@@ -88,7 +88,6 @@ func main() {
 		}
 	})
 }
-
 
 func onSizeEvent(event size.Event) {
 	sizeEvent = event
@@ -138,7 +137,7 @@ func onStop() {
 }
 
 func onPaint() {
-	if currentScene !=nil {
+	if currentScene != nil {
 		r, g, b := currentScene.GetBackgroundColor()
 		glctx.ClearColor(r, g, b, 1)
 

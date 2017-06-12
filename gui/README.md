@@ -1,9 +1,15 @@
+# This subpackage is garbage
+Here be dragons.
+This subpackage is not updated and kept here for history:
+pure Golang GUI is not a viable option as of 2016.
+It would've had bugs, if it worked.
+You were warned.
+# Whatever, how do I build the garbage?
 ## Install egl libraries:
 On Ubuntu:
 ```
 sudo apt-get install libegl1-mesa-dev libgles2-mesa-dev libx11-dev
 ```
-
 ## Get gomobile
 You'd need [gomobile](https://godoc.org/golang.org/x/mobile/cmd/gomobile) to compile GUI version:
  ```bash
@@ -19,12 +25,12 @@ To test if your plugged phone is visible to adb you may use
 ```
 To install on plugged in Android phone:
 ```
-gomobile install -target android -o gui.apk github.com/SergeyFrolov/gotapdance/gui
+gomobile install -target android -o gui.apk github.com/SergeyFrolov/gotapdance/gui # this, of course, will fail
 ```
 ## Build PC
 ```
   cd ${GOPATH}/src/github.com/SergeyFrolov/gotapdance/gui
-  go build -a
+  go build -a # this, of course, will fail
   ./gui
 ```
 
