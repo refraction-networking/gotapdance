@@ -3,7 +3,7 @@ package tapdance
 import (
 	"encoding/binary"
 	"github.com/golang/protobuf/proto"
-	"errors"
+	"github.com/pkg/errors"
 	"github.com/zmap/zcrypto/x509"
 	"io/ioutil"
 	"net"
@@ -12,24 +12,20 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
-	"strings"
 )
 
 type assets struct {
 	sync.RWMutex
-	once                  sync.Once
-	path                  string
-	tmpBackoff            int64 // unix timestamp for when to stop backoff
+	once sync.Once
+	path string
 
-	config                ClientConf
+	config ClientConf
 
-	roots                 *x509.CertPool
+	roots *x509.CertPool
 
 	filenameStationPubkey string
 	filenameRoots         string
 	filenameClientConf    string
-	filenameTmpBackoff    string
 }
 
 var assetsInstance *assets
@@ -45,18 +41,6 @@ func initTLSDecoySpec(ip string, sni string) *TLSDecoySpec {
 	}
 	tlsDecoy := TLSDecoySpec{Hostname: &sni, Ipv4Addr: &ipUint32}
 	return &tlsDecoy
-}
-
-func (ds *TLSDecoySpec) GetIpv4AddrStr() string {
-	if ds.Ipv4Addr != nil {
-		ip := make(net.IP, 4)
-		binary.BigEndian.PutUint32(ip, ds.GetIpv4Addr())
-		// TODO: what checks need to be done, and what's guaranteed?
-		ipv4Str := ip.To4().String() + ":443"
-		return ipv4Str
-	} else {
-		return ""
-	}
 }
 
 // Path is expected (but doesn't have) to have several files
@@ -90,7 +74,6 @@ func Assets() *assets {
 			filenameRoots:         "roots",
 			filenameClientConf:    "ClientConf",
 			filenameStationPubkey: "station_pubkey",
-			filenameTmpBackoff:    "tmp_backoff",
 		}
 		assetsInstance.readConfigs()
 	})
@@ -154,29 +137,6 @@ func (a *assets) readConfigs() {
 		return nil
 	}
 
-	readTmpBackoff := func(filename string) error {
-		tmpBackoffStr, err := ioutil.ReadFile(filename)
-		if err != nil {
-			return err
-		}
-		backoffInt64, err := strconv.ParseInt(string(tmpBackoffStr), 10, 64)
-		if err != nil {
-			Logger.Errorln("Failed to Parse tmp_backoff:", err)
-			return err
-		}
-		if time.Now().Unix() > backoffInt64 {
-			err = os.Remove(filename)
-			Logger.Infoln("Temporary backoff has expired! Removing the ", filename)
-			if err != nil {
-				Logger.Errorln(err)
-				return err
-			}
-		} else {
-			a.tmpBackoff = backoffInt64
-		}
-		return nil
-	}
-
 	var err error
 	Logger().Infoln("Assets: reading from folder " + a.path)
 
@@ -203,14 +163,6 @@ func (a *assets) readConfigs() {
 	} else {
 		Logger().Infoln("Pubkey succesfully read from " + pubkeyFilename)
 	}
-
-	backoffFilename := path.Join(a.path, a.filenameTmpBackoff)
-	err = readTmpBackoff(backoffFilename)
-	if err != nil {
-		Logger.Debugln("Failed to read backoff file: " + err.Error())
-	} else {
-		Logger.Infoln("Backoff succesfully read from " + pubkeyFilename)
-	}
 }
 
 // gets randomDecoyAddress. sni stands for subject name indication.
@@ -224,8 +176,11 @@ func (a *assets) GetDecoyAddress() (sni string, addr string) {
 		return "", ""
 	}
 	decoyIndex := getRandInt(0, len(decoys)-1)
+	ip := make(net.IP, 4)
+	binary.BigEndian.PutUint32(ip, decoys[decoyIndex].GetIpv4Addr())
+	// TODO: what checks need to be done, and what's guaranteed?
+	addr = ip.To4().String() + ":443"
 	sni = decoys[decoyIndex].GetHostname()
-	addr = decoys[decoyIndex].GetIpv4AddrStr()
 	return
 }
 
@@ -277,13 +232,6 @@ func (a *assets) GetGeneration() uint32 {
 	defer a.RUnlock()
 
 	return a.config.GetGeneration()
-}
-
-func (a *assets) GetTmpBackoff() int64 {
-	a.RLock()
-	defer a.RUnlock()
-
-	return a.tmpBackoff
 }
 
 func (a *assets) SetGeneration(gen uint32) (err error) {
@@ -346,18 +294,6 @@ func (a *assets) saveClientConf() error {
 	filename := path.Join(a.path, a.filenameClientConf)
 	tmpFilename := path.Join(a.path, "."+a.filenameClientConf+"."+getRandString(5)+".tmp")
 	err = ioutil.WriteFile(tmpFilename, buf[:], 0644)
-	if err != nil {
-		return err
-	}
-
-	return os.Rename(tmpFilename, filename)
-}
-
-func (a *assets) saveTmpBackoff() error {
-	strTmpBackoff := strconv.FormatInt(a.tmpBackoff, 10)
-	filename := path.Join(a.path, a.filenameTmpBackoff)
-	tmpFilename := path.Join(a.path, "."+a.filenameTmpBackoff+"."+getRandString(5)+".tmp")
-	err := ioutil.WriteFile(tmpFilename, []byte(strTmpBackoff), 0644)
 	if err != nil {
 		return err
 	}
