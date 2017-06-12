@@ -1,10 +1,10 @@
 package proxybind
 
 import (
-	"errors"
 	"bytes"
-	"io"
+	"errors"
 	"github.com/Sirupsen/logrus"
+	"io"
 
 	"github.com/SergeyFrolov/gotapdance/tapdance"
 )
@@ -13,7 +13,7 @@ var td_proxy *tapdance.TapdanceProxy
 var buffer bytes.Buffer
 var b = make([]byte, 1048576)
 
-func NewDecoyProxy(listenPort int) (err error){
+func NewDecoyProxy(listenPort int) (err error) {
 
 	tapdance.Logger.Out = &buffer
 	tapdance.Logger.Level = logrus.InfoLevel
