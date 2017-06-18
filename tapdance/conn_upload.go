@@ -9,11 +9,8 @@ import (
 )
 
 /*
-TODO: It probably should have read flow that reads messages and then send "STAHP" to channel when read
-TODO: we can avoid reconnecting if idle for too long
-NOTE: DialRConn does NOT track amounts of uploaded data against upload limit, as it is currently
-guaranteed to never exceed current min limit of 13kB.
-Shall this ever change -- please take needed precautions and reconnect.
+TODO: It probably should have read flow that reads messages and says STAAAHP to channel when read
+TODO: here we actually can avoid reconnecting if idle for too long
 */
 
 // Used for writing data and session control messages

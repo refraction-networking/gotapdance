@@ -33,65 +33,69 @@ func doDialTDConn(customDialer func(string, string) (net.Conn, error), id uint64
 	tdConn.remoteConnId = make([]byte, 16)
 	rand.Read(tdConn.remoteConnId[:])
 
-	initialRawRConn := makeTdRaw(HTTP_GET_INCOMPLETE,
+	rawRConn := makeTdRaw(HTTP_GET_INCOMPLETE,
 		tdConn.stationPubkey[:],
 		tdConn.remoteConnId[:])
-	initialRawRConn.strIdSuffix = "R"
-	initialRawRConn.customDialer = tdConn.customDialer
-	initialRawRConn.sessionId = tdConn.sessionId
+	rawRConn.strIdSuffix = "R"
+	rawRConn.customDialer = tdConn.customDialer
+	rawRConn.sessionId = tdConn.sessionId
 
-	err := initialRawRConn.Dial()
+	err := rawRConn.Dial()
 	if err != nil {
 		return nil, err
 	}
-	tdConn.readerConn, err = DialRConn(initialRawRConn, tdConn)
+	readerConn, err := DialRConn(rawRConn, tdConn)
 	if err != nil {
 		return nil, err
 	}
 
-	err = tdConn.readerConn.YieldUpload()
+	err = readerConn.YieldUpload()
 	// TODO: traffic fingerprinting issue
 	// TODO: fundamental issue of observable dependency between 2 flows
 	if err != nil {
-		tdConn.readerConn.Close()
+		readerConn.Close()
 		return nil, err
 	}
 
-	initialRawWConn := makeTdRaw(HTTP_POST_COMPLETE,
+	rawWConn := makeTdRaw(HTTP_POST_COMPLETE,
 		tdConn.stationPubkey[:],
 		tdConn.remoteConnId[:])
-	initialRawWConn.strIdSuffix = "W"
-	initialRawWConn.customDialer = tdConn.customDialer
-	initialRawWConn.sessionId = tdConn.sessionId
-	initialRawWConn.decoySpec = initialRawRConn.decoySpec
-	initialRawWConn.pinDecoySpec = true
+	rawWConn.strIdSuffix = "W"
+	rawWConn.customDialer = tdConn.customDialer
+	rawWConn.sessionId = tdConn.sessionId
+	rawWConn.decoySpec = rawRConn.decoySpec
+	rawWConn.pinDecoySpec = true
 
-	err = initialRawWConn.Dial()
+	err = rawWConn.Dial()
 	if err != nil {
-		tdConn.readerConn.Close()
+		readerConn.Close()
 		return nil, err
 	}
-	tdConn.writerConn, err = DialWConn(initialRawWConn, tdConn)
+	writerConn, err := DialWConn(rawWConn, tdConn)
 	if err != nil {
-		tdConn.readerConn.Close()
+		readerConn.Close()
 		return nil, err
 	}
-	err = tdConn.writerConn.AcquireYield()
+	err = writerConn.AcquireYield()
 	if err != nil {
-		tdConn.readerConn.Close()
+		readerConn.Close()
+		writerConn.Close()
 		return nil, err
 	}
 	go func() {
 		// TODO: actually do yield confirmation
 		time.Sleep(time.Duration(getRandInt(1, 5432)) * time.Millisecond)
 		Logger().Infoln(tdConn.idStr() + " faking yield confirmation!")
-		tdConn.writerConn.yieldConfirmed <- struct{}{}
+		writerConn.yieldConfirmed <- struct{}{}
 	}()
-	err = tdConn.writerConn.WaitForYieldConfirmation()
+	err = writerConn.WaitForYieldConfirmation()
 	if err != nil {
-		tdConn.readerConn.Close()
+		readerConn.Close()
+		writerConn.Close()
 		return nil, err
 	}
+	tdConn.readerConn = readerConn
+	tdConn.writerConn = writerConn
 	return tdConn, nil
 }
 
@@ -159,6 +163,8 @@ func (tdConn *Conn) processProto(msg StationToClient) error {
 			tdConn.writerConn.tdRaw.decoySpec = Assets().GetDecoy()
 		}
 	}
+
+	// note that flows only push unexpected transition protobufs up here
 	stateTransition := msg.GetStateTransition()
 	switch stateTransition {
 	case S2C_Transition_S2C_NO_CHANGE:
@@ -166,18 +172,18 @@ func (tdConn *Conn) processProto(msg StationToClient) error {
 	case S2C_Transition_S2C_SESSION_CLOSE:
 		Logger().Infof(tdConn.idStr() + " received MSG_CLOSE")
 		return errMsgClose
-	case S2C_Transition_S2C_CONFIRM_RECONNECT:
-		fallthrough
-	case S2C_Transition_S2C_SESSION_INIT:
-		fallthrough
 	case S2C_Transition_S2C_ERROR:
 		err := errors.New("received error message from station:" +
 			msg.GetErrReason().String())
 		Logger().Errorln(tdConn.idStr() + " " + err.Error())
 		tdConn.Close()
 		return err
+	case S2C_Transition_S2C_CONFIRM_RECONNECT:
+		fallthrough
+	case S2C_Transition_S2C_SESSION_INIT:
+		fallthrough
 	default:
-		err := errors.New("Corrupted and Unexpected State Transition " +
+		err := errors.New("Unexpected State Transition " +
 			"in initialized Conn:" + stateTransition.String())
 		Logger().Errorln(tdConn.idStr() + " " + err.Error())
 		tdConn.Close()
