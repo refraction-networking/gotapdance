@@ -30,7 +30,6 @@ guaranteed to never exceed current min limit of 13kB.
 Shall this ever change -- please take needed precautions and reconnect.
 */
 
-// TODO: check if cipher is supported
 // Establishes initial connection to TapDance station
 // Doesn't yield upload and acts as read flow
 func DialRConn(tdRaw tdRawConn, tdConn *Conn) (rConn *tapdanceRConn, err error) {
@@ -59,9 +58,8 @@ func DialRConn(tdRaw tdRawConn, tdConn *Conn) (rConn *tapdanceRConn, err error) 
 	return
 }
 
-func (rConn *tapdanceRConn) Read(b []byte) (n int, err error) {
-	n, err = rConn.bsbuf.Read(b)
-	return
+func (rConn *tapdanceRConn) Read(b []byte) (int, error) {
+	return rConn.bsbuf.Read(b)
 }
 
 func (rConn *tapdanceRConn) updateReadDeadline() {
@@ -75,11 +73,11 @@ func (rConn *tapdanceRConn) updateReadDeadline() {
 }
 
 func (rConn *tapdanceRConn) spawnReaderEngine() {
-	// TODO: defer close bsbuf here?
+	defer rConn.bsbuf.Unblock()
 	for {
 		msgType, msgLen, err := rConn.readHeader()
 		if err != nil {
-			// setError
+			rConn.closeWithErrorOnce(err)
 			return
 		}
 		if msgLen == 0 {
@@ -89,23 +87,29 @@ func (rConn *tapdanceRConn) spawnReaderEngine() {
 		case msg_raw_data:
 			buf, err := rConn.readRawData(msgLen)
 			if err != nil {
+				rConn.closeWithErrorOnce(err)
 				return
 			}
 			_, err = rConn.bsbuf.Write(buf)
 			if err != nil {
+				rConn.closeWithErrorOnce(err)
 				return
 			}
 		case msg_protobuf:
 			msg, err := rConn.readProtobuf(msgLen)
 			if err != nil {
+				rConn.closeWithErrorOnce(err)
 				return
 			}
 			// push protobuf up for processing
 			err = rConn.tdConn.processProto(msg)
 			if err != nil {
+				rConn.closeWithErrorOnce(err)
 				return
 			}
 		default:
+			rConn.closeWithErrorOnce(errors.New("Corrupted outer protocol header: " +
+				msgType.Str()))
 			return
 		}
 	}
@@ -294,6 +298,7 @@ func (rConn *tapdanceRConn) closeWithErrorOnce(err error) {
 		rConn.tdRaw.Close()
 	})
 }
+
 func (rConn *tapdanceRConn) Close() error {
 	rConn.closeWithErrorOnce(errors.New("closed externally"))
 	return rConn.closeErr
