@@ -20,7 +20,7 @@ import (
 // Both reader and writer flows shall have this underlying raw connection.
 // Knows about but doesn't keep track of timeout and upload limit
 type tdRawConn struct {
-	tcpConn closeWriter
+	tcpConn closeWriterConn
 	tlsConn *tls.Conn
 
 	flowId      uint64
@@ -40,7 +40,7 @@ type tdRawConn struct {
 	initialMsg   StationToClient
 	tagType      TdTagType
 
-	ContentLength int // used only in POST-based tags
+	UploadLimit int // used only in POST-based tags
 
 	closed    chan struct{}
 	closeOnce sync.Once
@@ -116,9 +116,11 @@ func (tdRaw *tdRawConn) dial(reconnect bool) error {
 				return errors.New("decoySpec is pinned, but empty!")
 			}
 		} else {
-			tdRaw.decoySpec = Assets().GetDecoy()
-			if tdRaw.decoySpec.GetIpv4AddrStr() == "" {
-				return errors.New("tdConn.decoyAddr is empty!")
+			if !reconnect {
+				tdRaw.decoySpec = Assets().GetDecoy()
+				if tdRaw.decoySpec.GetIpv4AddrStr() == "" {
+					return errors.New("tdConn.decoyAddr is empty!")
+				}
 			}
 		}
 
@@ -175,7 +177,6 @@ func (tdRaw *tdRawConn) tryDialOnce(expectedTransition S2C_Transition) (err erro
 
 	var tdRequest string
 	tdRequest, err = tdRaw.prepareTDRequest(tdRaw.tagType)
-	Logger().Debugf(tdRaw.idStr() + " Prepared initial TD request:" + tdRequest)
 	if err != nil {
 		Logger().Errorf(tdRaw.idStr() +
 			" Preparation of initial TD request failed with " + err.Error())
@@ -230,7 +231,7 @@ func (tdRaw *tdRawConn) tryDialOnce(expectedTransition S2C_Transition) (err erro
 		} else {
 			Logger().Infoln(tdRaw.idStr() + " Successfully connected to TapDance Station")
 		}
-	case HTTP_POST_COMPLETE:
+	case HTTP_POST_INCOMPLETE:
 		// don't wait for response
 	default:
 		panic("Unsupported td handshake type:" + tdRaw.tagType.Str())
@@ -276,7 +277,7 @@ func (tdRaw *tdRawConn) establishTLStoDecoy() (err error) {
 		dialConn.Close()
 		return
 	}
-	closeWriter, ok := dialConn.(closeWriter)
+	closeWriter, ok := dialConn.(closeWriterConn)
 	if !ok {
 		return errors.New("dialConn is not a closeWriter")
 	}
@@ -297,17 +298,19 @@ func (tdRaw *tdRawConn) getKeystream(length int) (keystream []byte, err error) {
 	return
 }
 
-func (tdRaw *tdRawConn) Close() {
+func (tdRaw *tdRawConn) Close() error {
+	var err error
 	tdRaw.closeOnce.Do(func() {
 		close(tdRaw.closed)
 		if tdRaw.tlsConn != nil {
-			tdRaw.tlsConn.Close()
+			err = tdRaw.tlsConn.Close()
 		}
 	})
-	return
+	return err
 }
 
-type closeWriter interface {
+type closeWriterConn interface {
+	net.Conn
 	CloseWrite() error
 }
 
@@ -315,17 +318,19 @@ func (tdRaw *tdRawConn) closeWrite() error {
 	return tdRaw.tcpConn.CloseWrite()
 }
 
-func (tdRaw *tdRawConn) prepareTDRequest(handshakeType TdTagType) (tdRequest string, err error) {
+func (tdRaw *tdRawConn) prepareTDRequest(handshakeType TdTagType) (string, error) {
 	// Generate initial TapDance request
 	buf := new(bytes.Buffer) // What we have to encrypt with the shared secret using AES
 
 	master_key := tdRaw.tlsConn.GetHandshakeLog().KeyMaterial.MasterSecret.Value
 
 	// write flags
-	if err = binary.Write(buf, binary.BigEndian, uint8(1)); err != nil {
-		// tentatively last 4 bytes are for version the of outer proto
-		// 1 signals current outer proto, which is TypeLen
-		return
+	flags := tdFlagUseTIL
+	if tdRaw.tagType == HTTP_POST_INCOMPLETE {
+		flags |= tdFlagUploadOnly
+	}
+	if err := binary.Write(buf, binary.BigEndian, flags); err != nil {
+		return "", err
 	}
 	buf.Write(master_key[:])
 	buf.Write(tdRaw.serverRandom())
@@ -334,45 +339,57 @@ func (tdRaw *tdRawConn) prepareTDRequest(handshakeType TdTagType) (tdRequest str
 
 	tag, err := obfuscateTag(buf.Bytes(), tdRaw.stationPubkey) // What we encode into the ciphertext
 	if err != nil {
-		return
+		return "", err
 	}
+	return tdRaw.genHTTP1Tag(tag)
+}
 
-	switch handshakeType {
+// mutates tdRaw: sets tdRaw.UploadLimit
+func (tdRaw *tdRawConn) genHTTP1Tag(tag []byte) (string, error) {
+	var httpTag string
+	switch tdRaw.tagType {
+	// for complete copy http generator of golang
+	case HTTP_GET_COMPLETE:
+		fallthrough
 	case HTTP_GET_INCOMPLETE:
-		// Don't even need the following HTTP request
-		// Ideally, it is never processed by decoy
-		tdRequest = "GET / HTTP/1.1\r\n"
-		tdRequest += "Host: " + tdRaw.decoySpec.GetHostname() + "\r\n"
-		tdRequest += "User-Agent: TapDance/1.2 (+https://tapdance.team/info)\r\n"
-		tdRequest += "X-Ignore: "
-	case HTTP_POST_COMPLETE:
-		tdRaw.ContentLength = getRandInt(900000, 1045000)
-		ContentLengthStr := strconv.Itoa(tdRaw.ContentLength)
-		tdRequest = "POST / HTTP/1.1\r\n"
-		tdRequest += "Host: " + tdRaw.decoySpec.GetHostname() + "\r\n"
-		tdRequest += "User-Agent: TapDance/1.2 (+https://tapdance.team/info)\r\n"
-		tdRequest += "X-Ignore: IamTapDanceIncompleteHTTPRequest\r\n"
-		tdRequest += "Content-Type: application/zip; boundary=----WebKitFormBoundaryaym16ehT29q60rUx\r\n"
-		tdRequest += "Content-Length: " + ContentLengthStr + "\r\n"
-		tdRequest += "\r\n"
-		tdRequest += "----WebKitFormBoundaryaym16ehT29q60rUx\r\n"
-		tdRequest += "Content-Disposition: form-data; name=\"td.zip\"\r\n"
+		tdRaw.UploadLimit = int(tdRaw.decoySpec.GetTcpwin()) - getRandInt(1, 1045)
+		httpTag = `GET / HTTP/1.1
+Host: ` + tdRaw.decoySpec.GetHostname() + `
+User-Agent: TapDance/1.2 (+https://tapdance.team/info)
+Accept-Encoding: None
+X-Ignore: ` + getRandPadding(7, 612, 10)
+		httpTag = strings.Replace(httpTag, "\n", "\r\n", -1)
+	case HTTP_POST_INCOMPLETE:
+		ContentLength := getRandInt(900000, 1045000)
+		tdRaw.UploadLimit = ContentLength - 1
+		httpTag = `POST / HTTP/1.1
+Accept-Encoding: None
+Host: ` + tdRaw.decoySpec.GetHostname() + `
+User-Agent: TapDance/1.2 (+https://tapdance.team/info)
+X-Padding: ` + getRandPadding(1, 461, 10) + `
+Content-Type: application/zip; boundary=----WebKitFormBoundaryaym16ehT29q60rUx
+Content-Length: ` + strconv.Itoa(ContentLength) + `
+
+----WebKitFormBoundaryaym16ehT29q60rUx
+Content-Disposition: form-data; name=\"td.zip\"
+`
+		httpTag = strings.Replace(httpTag, "\n", "\r\n", -1)
 	}
 
-	tdRequest += getRandPadding(4, 650, 10)
-
-	keystreamOffset := len(tdRequest)
+	keystreamOffset := len(httpTag)
 	keystreamSize := (len(tag)/3+1)*4 + keystreamOffset // we can't use first 2 bits of every byte
 	whole_keystream, err := tdRaw.getKeystream(keystreamSize)
 	if err != nil {
-		return
+		return httpTag, err
 	}
 	keystreamAtTag := whole_keystream[keystreamOffset:]
 
-	tdRequest += reverseEncrypt(tag, keystreamAtTag)
-	Logger().Debugf("Prepared initial request to Decoy") //, td_request)
-
-	return
+	httpTag += reverseEncrypt(tag, keystreamAtTag)
+	if tdRaw.tagType == HTTP_GET_COMPLETE {
+		httpTag += "\r\n\r\n"
+	}
+	Logger().Debugf("Generated HTTP TAG:\n%s\n", httpTag)
+	return httpTag, nil
 }
 
 func (tdRaw *tdRawConn) idStr() string {

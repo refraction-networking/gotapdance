@@ -201,11 +201,11 @@ func (a *assets) GetDecoy() TLSDecoySpec {
 	// TODO: stop enforcing values >= defaults.
 	// Fix ackhole instead
 	if chosenDecoy.GetTimeout() < timeoutMin {
-		timeout := uint32(getRandInt(timeoutMin, timeoutMax))
+		timeout := uint32(timeoutMax)
 		chosenDecoy.Timeout = &timeout
 	}
 	if chosenDecoy.GetTcpwin() < sendLimitMin {
-		tcpWin := uint32(getRandInt(sendLimitMin, sendLimitMax))
+		tcpWin := uint32(sendLimitMax)
 		chosenDecoy.Tcpwin = &tcpWin
 	}
 	return chosenDecoy

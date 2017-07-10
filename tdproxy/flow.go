@@ -21,27 +21,36 @@ type tapDanceFlow struct {
 
 	servConn net.Conn // can cast to tapdance.Conn but don't need to
 	userConn net.Conn
+	splitFlows bool
 }
 
-func makeTapDanceFlow(proxy *TapDanceProxy, id uint64) *tapDanceFlow {
+// TODO: use dial() functor
+func makeTapDanceFlow(proxy *TapDanceProxy, id uint64, splitFlows bool) *tapDanceFlow {
 	state := new(tapDanceFlow)
 
 	state.proxy = proxy
 	state.id = id
 
 	state.startMs = time.Now()
+	state.splitFlows = splitFlows
 
 	Logger.Debugf("Created new TDState ", state)
 	return state
 }
 
 func (TDstate *tapDanceFlow) redirect() error {
-	conn, err := tapdance.DialSOCKS()
+	dialer := tapdance.Dialer{}
+	var err error
+	if TDstate.splitFlows {
+		TDstate.servConn, err = dialer.DialSOCKSSplitFlow()
+	} else {
+		TDstate.servConn, err = dialer.DialSOCKS()
+
+	}
 	if err != nil {
 		TDstate.userConn.Close()
 		return err
 	}
-	TDstate.servConn = conn
 	errChan := make(chan error)
 	defer func() {
 		TDstate.userConn.Close()

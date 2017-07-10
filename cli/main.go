@@ -4,10 +4,12 @@ import (
 	"flag"
 	"fmt"
 	"github.com/SergeyFrolov/gotapdance/tdproxy"
+	"github.com/pkg/profile"
 	"os"
 )
 
 func main() {
+	defer profile.Start().Stop()
 	portPtr := flag.Int("port", 10500, "port number")
 	flag.Parse()
 

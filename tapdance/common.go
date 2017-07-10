@@ -18,8 +18,7 @@ const deadlineConnectTDStation = 15 // timeout for sending TD request and gettin
 const deadlineTCPtoDecoy = 10       // deadline to establish TCP connection to decoy
 
 // during reconnects we send FIN to server and wait until we get FIN back:
-const waitForFINSendRST = 13 // time to wait before sending RST
-const waitForFINDie = 22     // time to wait before crashing
+const waitForFINDie = 22000 // time to wait before crashing
 
 const maxInt16 = int16(^uint16(0) >> 1) // max msg size -> might have to chunk
 const minInt16 = int16(-maxInt16 - 1)
@@ -30,6 +29,27 @@ const (
 	TD_STATE_RECONNECT
 	TD_STATE_CLOSED
 )
+
+type FlowType int8
+
+const (
+	FlowUpload        FlowType = 0x1
+	FlowReadOnly      FlowType = 0x2
+	FlowBidirectional FlowType = 0x4
+)
+
+func (m *FlowType) Str() string {
+	switch *m {
+	case FlowUpload:
+		return "FlowUpload"
+	case FlowReadOnly:
+		return "FlowReadOnly"
+	case FlowBidirectional:
+		return "FlowBidirectional"
+	default:
+		return strconv.Itoa(int(*m))
+	}
+}
 
 type MsgType int8
 
@@ -54,20 +74,32 @@ var errMsgClose = errors.New("MSG CLOSE")
 type TdTagType int8
 
 const (
-	HTTP_GET_INCOMPLETE TdTagType = 0
-	HTTP_POST_COMPLETE  TdTagType = 1
+	HTTP_GET_INCOMPLETE  TdTagType = 0
+	HTTP_GET_COMPLETE    TdTagType = 1
+	HTTP_POST_INCOMPLETE TdTagType = 2
 )
 
 func (m *TdTagType) Str() string {
 	switch *m {
 	case HTTP_GET_INCOMPLETE:
 		return "HTTP_GET_INCOMPLETE"
-	case HTTP_POST_COMPLETE:
-		return "HTTP_POST_COMPLETE"
+	case HTTP_GET_COMPLETE:
+		return "HTTP_GET_COMPLETE"
+	case HTTP_POST_INCOMPLETE:
+		return "HTTP_POST_INCOMPLETE"
 	default:
 		return strconv.Itoa(int(*m))
 	}
 }
+
+// First byte of tag is for FLAGS
+// bit 0 (1 << 7) determines if flow is bidirectional(0) or upload-only(1)
+// bits 1-6 are unassigned
+// bit 7 (1 << 0) signals to use TypeLen outer proto
+var (
+	tdFlagUploadOnly = uint8(1 << 7)
+	tdFlagUseTIL     = uint8(1 << 0)
+)
 
 // List of actually supported ciphers(not a list of offered ciphers!)
 // Essentially all AES GCM ciphers, except for ANON and PSK
