@@ -43,13 +43,22 @@ func initTLSDecoySpec(ip string, sni string) *TLSDecoySpec {
 	return &tlsDecoy
 }
 
-// Path is expected (but doesn't have) to have several files
-// 1) "decoys" that has a list in following format:
-//       ip1:SNI1
-//       ip2:SNI2
-// 2) "station_pubkey" contains TapDance station Public Key
-// 3) "roots" contains x509 roots
+// First call to Assets or AssetsFromDir sets the path.
 func Assets() *assets {
+	_initAssets := func() {initAssets("./assets/")}
+	assetsOnce.Do(_initAssets)
+	return assetsInstance
+}
+
+// First call to Assets or AssetsFromDir sets the path.
+// Thus, It is safe to access assets via default Assets() function afterwards.
+func AssetsFromDir(path string) *assets {
+	_initAssets := func() {initAssets(path)}
+	assetsOnce.Do(_initAssets)
+	return assetsInstance
+}
+
+func initAssets(path string) {
 	var defaultDecoys = []*TLSDecoySpec{
 		initTLSDecoySpec("192.122.190.104", "tapdance1.freeaeskey.xyz"),
 		initTLSDecoySpec("192.122.190.105", "tapdance2.freeaeskey.xyz"),
@@ -67,17 +76,14 @@ func Assets() *assets {
 		DefaultPubkey: &defaultPubKey,
 		Generation:    &defaultGeneration}
 
-	assetsOnce.Do(func() {
-		assetsInstance = &assets{
-			path:                  "./assets/",
-			config:                defaultClientConf,
-			filenameRoots:         "roots",
-			filenameClientConf:    "ClientConf",
-			filenameStationPubkey: "station_pubkey",
-		}
-		assetsInstance.readConfigs()
-	})
-	return assetsInstance
+	assetsInstance = &assets{
+		path:                  path,
+		config:                defaultClientConf,
+		filenameRoots:         "roots",
+		filenameClientConf:    "ClientConf",
+		filenameStationPubkey: "station_pubkey",
+	}
+	assetsInstance.readConfigs()
 }
 
 func (a *assets) GetAssetsDir() string {
@@ -86,6 +92,7 @@ func (a *assets) GetAssetsDir() string {
 	return a.path
 }
 
+// Deprecated, use AssetsFromDir() once instead.
 func (a *assets) SetAssetsDir(path string) {
 	a.Lock()
 	defer a.Unlock()

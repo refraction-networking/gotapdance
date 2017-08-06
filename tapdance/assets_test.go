@@ -21,13 +21,12 @@ func TestAssets_Decoys(t *testing.T) {
 	}
 	dir2, err := ioutil.TempDir("/tmp/", "decoy2")
 	if err != nil {
-		fmt.Println(err.Error())
-		t.Fail()
+		t.Fatal(err)
 	}
 
 	var testDecoys1 = []*TLSDecoySpec{
 		initTLSDecoySpec("4.8.15.16", "ericw.us"),
-		initTLSDecoySpec("19.21.23.42", "sergeyfrolov.github.io"),
+		initTLSDecoySpec("19.21.23.42", "blahblahbl.ah"),
 	}
 
 	var testDecoys2 = []*TLSDecoySpec{
@@ -40,26 +39,21 @@ func TestAssets_Decoys(t *testing.T) {
 	Assets().SetAssetsDir(dir1)
 	err = Assets().SetDecoys(testDecoys1)
 	if err != nil {
-		fmt.Println(err.Error())
-		t.Fail()
+		t.Fatal(err)
 	}
-	if !Assets().IsDecoyInList("19.21.23.42", "sergeyfrolov.github.io") {
-		fmt.Println("Decoy 19.21.23.42(sergeyfrolov.github.io) is NOT in Decoy List!")
-		t.Fail()
+	if !Assets().IsDecoyInList("19.21.23.42", "blahblahbl.ah") {
+		t.Fatal("Decoy 19.21.23.42(blahblahbl.ah) is NOT in Decoy List!")
 	}
 	Assets().SetAssetsDir(dir2)
 	err = Assets().SetDecoys(testDecoys2)
 	if err != nil {
-		fmt.Println(err.Error())
-		t.Fail()
+		t.Fatal(err)
 	}
-	if Assets().IsDecoyInList("19.21.23.42", "sergeyfrolov.github.io") {
-		fmt.Println("Decoy 19.21.23.42(sergeyfrolov.github.io) is in Decoy List!")
-		t.Fail()
+	if Assets().IsDecoyInList("19.21.23.42", "blahblahbl.ah") {
+		t.Fatal("Decoy 19.21.23.42(blahblahbl.ah) is in Decoy List!")
 	}
 	if !Assets().IsDecoyInList("11.22.33.44", "what.is.up") {
-		fmt.Println("Decoy 11.22.33.44(what.is.up) is NOT in Decoy List!")
-		t.Fail()
+		t.Fatal("Decoy 11.22.33.44(what.is.up) is NOT in Decoy List!")
 	}
 	if !reflect.DeepEqual(Assets().config.DecoyList.TlsDecoys, testDecoys2) {
 		fmt.Println("Assets are not equal!")
@@ -81,8 +75,7 @@ func TestAssets_Decoys(t *testing.T) {
 		_sni, addr := Assets().GetDecoyAddress()
 		host_addr, _, err := net.SplitHostPort(addr)
 		if err != nil {
-			fmt.Println("Corrupted addr:", addr, ". Error:", err.Error())
-			t.Fail()
+			t.Fatal("Corrupted addr:", addr, ". Error:", err.Error())
 		}
 		decoyServ := initTLSDecoySpec(host_addr, _sni)
 		if !decoyInList(decoyServ, Assets().config.DecoyList.TlsDecoys) {
@@ -99,20 +92,17 @@ func TestAssets_Decoys(t *testing.T) {
 		fmt.Println("testDecoys1:", testDecoys1)
 		t.Fail()
 	}
-	if !Assets().IsDecoyInList("19.21.23.42", "sergeyfrolov.github.io") {
-		fmt.Println("Decoy 19.21.23.42(sergeyfrolov.github.io) is NOT in Decoy List!")
-		t.Fail()
+	if !Assets().IsDecoyInList("19.21.23.42", "blahblahbl.ah") {
+		t.Fatal("Decoy 19.21.23.42(blahblahbl.ah) is NOT in Decoy List!")
 	}
 	if Assets().IsDecoyInList("11.22.33.44", "what.is.up") {
-		fmt.Println("Decoy 11.22.33.44(what.is.up) is in Decoy List!")
-		t.Fail()
+		t.Fatal("Decoy 11.22.33.44(what.is.up) is in Decoy List!")
 	}
 	for i := 0; i < 10; i++ {
 		_sni, addr := Assets().GetDecoyAddress()
 		host_addr, _, err := net.SplitHostPort(addr)
 		if err != nil {
-			fmt.Println("Corrupted addr:", addr, ". Error:", err.Error())
-			t.Fail()
+			t.Fatal("Corrupted addr:", addr, ". Error:", err.Error())
 		}
 		decoyServ := initTLSDecoySpec(host_addr, _sni)
 		if !decoyInList(decoyServ, Assets().config.DecoyList.TlsDecoys) {
@@ -140,13 +130,11 @@ func TestAssets_Pubkey(t *testing.T) {
 	Assets().saveClientConf()
 	dir1, err := ioutil.TempDir("/tmp/", "pubkey1")
 	if err != nil {
-		fmt.Println(err.Error())
-		t.Fail()
+		t.Fatal(err)
 	}
 	dir2, err := ioutil.TempDir("/tmp/", "pubkey2")
 	if err != nil {
-		fmt.Println(err.Error())
-		t.Fail()
+		t.Fatal(err)
 	}
 
 	var pubkey1 = initPubKey([]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
@@ -159,14 +147,12 @@ func TestAssets_Pubkey(t *testing.T) {
 	Assets().SetAssetsDir(dir1)
 	err = Assets().SetPubkey(pubkey1)
 	if err != nil {
-		fmt.Println(err.Error())
-		t.Fail()
+		t.Fatal(err)
 	}
 	Assets().SetAssetsDir(dir2)
 	err = Assets().SetPubkey(pubkey2)
 	if err != nil {
-		fmt.Println(err.Error())
-		t.Fail()
+		t.Fatal(err)
 	}
 	if !bytes.Equal(Assets().config.DefaultPubkey.Key[:], pubkey2.Key[:]) {
 		fmt.Println("Pubkeys are not equal!")
