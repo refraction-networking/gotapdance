@@ -15,8 +15,7 @@ func TestObfuscate(t *testing.T) {
 		rand.Read(randStr)
 		obfuscated, err := obfuscateTag(randStr, *Assets().GetPubkey())
 		if err != nil {
-			Logger.Errorf("Error: ", err.Error())
-			os.Exit(1)
+			t.Fatalf("Error: %v\n", err)
 		} else {
 			printHex(obfuscated, "obfuscated")
 		}
@@ -96,7 +95,7 @@ func TestRandString(t *testing.T) {
 			fmt.Println("Random string with length", randLen, ":", randString)
 		}
 		if len(randString) != randLen {
-			fmt.Println("Random string length mismatch!" +
+			fmt.Println("Random string length mismatch!"+
 				"Expected:", randLen,
 				"Got:", randString, " (length ", len(randString), ")")
 

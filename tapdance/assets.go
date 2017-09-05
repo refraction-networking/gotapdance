@@ -3,32 +3,29 @@ package tapdance
 import (
 	"encoding/binary"
 	"github.com/golang/protobuf/proto"
-	"errors"
+	"github.com/pkg/errors"
 	"github.com/zmap/zcrypto/x509"
 	"io/ioutil"
 	"net"
 	"os"
 	"path"
 	"strconv"
-	"sync"
-	"time"
 	"strings"
+	"sync"
 )
 
 type assets struct {
 	sync.RWMutex
-	once                  sync.Once
-	path                  string
-	tmpBackoff            int64 // unix timestamp for when to stop backoff
+	once sync.Once
+	path string
 
-	config                ClientConf
+	config ClientConf
 
-	roots                 *x509.CertPool
+	roots *x509.CertPool
 
 	filenameStationPubkey string
 	filenameRoots         string
 	filenameClientConf    string
-	filenameTmpBackoff    string
 }
 
 var assetsInstance *assets
@@ -46,25 +43,22 @@ func initTLSDecoySpec(ip string, sni string) *TLSDecoySpec {
 	return &tlsDecoy
 }
 
-func (ds *TLSDecoySpec) GetIpv4AddrStr() string {
-	if ds.Ipv4Addr != nil {
-		ip := make(net.IP, 4)
-		binary.BigEndian.PutUint32(ip, ds.GetIpv4Addr())
-		// TODO: what checks need to be done, and what's guaranteed?
-		ipv4Str := ip.To4().String() + ":443"
-		return ipv4Str
-	} else {
-		return ""
-	}
+// First call to Assets or AssetsFromDir sets the path.
+func Assets() *assets {
+	_initAssets := func() { initAssets("./assets/") }
+	assetsOnce.Do(_initAssets)
+	return assetsInstance
 }
 
-// Path is expected (but doesn't have) to have several files
-// 1) "decoys" that has a list in following format:
-//       ip1:SNI1
-//       ip2:SNI2
-// 2) "station_pubkey" contains TapDance station Public Key
-// 3) "roots" contains x509 roots
-func Assets() *assets {
+// First call to Assets or AssetsFromDir sets the path.
+// Thus, It is safe to access assets via default Assets() function afterwards.
+func AssetsFromDir(path string) *assets {
+	_initAssets := func() { initAssets(path) }
+	assetsOnce.Do(_initAssets)
+	return assetsInstance
+}
+
+func initAssets(path string) {
 	var defaultDecoys = []*TLSDecoySpec{
 		initTLSDecoySpec("192.122.190.104", "tapdance1.freeaeskey.xyz"),
 		initTLSDecoySpec("192.122.190.105", "tapdance2.freeaeskey.xyz"),
@@ -82,18 +76,14 @@ func Assets() *assets {
 		DefaultPubkey: &defaultPubKey,
 		Generation:    &defaultGeneration}
 
-	assetsOnce.Do(func() {
-		assetsInstance = &assets{
-			path:                  "./assets/",
-			config:                defaultClientConf,
-			filenameRoots:         "roots",
-			filenameClientConf:    "ClientConf",
-			filenameStationPubkey: "station_pubkey",
-			filenameTmpBackoff:    "tmp_backoff",
-		}
-		assetsInstance.readConfigs()
-	})
-	return assetsInstance
+	assetsInstance = &assets{
+		path:                  path,
+		config:                defaultClientConf,
+		filenameRoots:         "roots",
+		filenameClientConf:    "ClientConf",
+		filenameStationPubkey: "station_pubkey",
+	}
+	assetsInstance.readConfigs()
 }
 
 func (a *assets) GetAssetsDir() string {
@@ -102,6 +92,7 @@ func (a *assets) GetAssetsDir() string {
 	return a.path
 }
 
+// Deprecated, use AssetsFromDir() once instead.
 func (a *assets) SetAssetsDir(path string) {
 	a.Lock()
 	defer a.Unlock()
@@ -153,62 +144,31 @@ func (a *assets) readConfigs() {
 		return nil
 	}
 
-	readTmpBackoff := func(filename string) error {
-		tmpBackoffStr, err := ioutil.ReadFile(filename)
-		if err != nil {
-			return err
-		}
-		backoffInt64, err := strconv.ParseInt(string(tmpBackoffStr), 10, 64)
-		if err != nil {
-			Logger.Errorln("Failed to Parse tmp_backoff:", err)
-			return err
-		}
-		if time.Now().Unix() > backoffInt64 {
-			err = os.Remove(filename)
-			Logger.Infoln("Temporary backoff has expired! Removing the ", filename)
-			if err != nil {
-				Logger.Errorln(err)
-				return err
-			}
-		} else {
-			a.tmpBackoff = backoffInt64
-		}
-		return nil
-	}
-
 	var err error
-	Logger.Infoln("Assets: reading from folder " + a.path)
+	Logger().Infoln("Assets: reading from folder " + a.path)
 
 	rootsFilename := path.Join(a.path, a.filenameRoots)
 	err = readRoots(rootsFilename)
 	if err != nil {
-		Logger.Warningln("Failed to read root ca file: " + err.Error())
+		Logger().Warningln("Failed to read root ca file: " + err.Error())
 	} else {
-		Logger.Infoln("X.509 root CAs succesfully read from " + rootsFilename)
+		Logger().Infoln("X.509 root CAs succesfully read from " + rootsFilename)
 	}
 
 	clientConfFilename := path.Join(a.path, a.filenameClientConf)
 	err = readClientConf(clientConfFilename)
 	if err != nil {
-		Logger.Warningln("Failed to read ClientConf file: " + err.Error())
+		Logger().Warningln("Failed to read ClientConf file: " + err.Error())
 	} else {
-		Logger.Infoln("Client config succesfully read from " + clientConfFilename)
+		Logger().Infoln("Client config succesfully read from " + clientConfFilename)
 	}
 
 	pubkeyFilename := path.Join(a.path, a.filenameStationPubkey)
 	err = readPubkey(pubkeyFilename)
 	if err != nil {
-		Logger.Debugln("Failed to read pubkey file: " + err.Error())
+		Logger().Debugln("Failed to read pubkey file: " + err.Error())
 	} else {
-		Logger.Infoln("Pubkey succesfully read from " + pubkeyFilename)
-	}
-
-	backoffFilename := path.Join(a.path, a.filenameTmpBackoff)
-	err = readTmpBackoff(backoffFilename)
-	if err != nil {
-		Logger.Debugln("Failed to read backoff file: " + err.Error())
-	} else {
-		Logger.Infoln("Backoff succesfully read from " + pubkeyFilename)
+		Logger().Infoln("Pubkey succesfully read from " + pubkeyFilename)
 	}
 }
 
@@ -223,9 +183,39 @@ func (a *assets) GetDecoyAddress() (sni string, addr string) {
 		return "", ""
 	}
 	decoyIndex := getRandInt(0, len(decoys)-1)
+	ip := make(net.IP, 4)
+	binary.BigEndian.PutUint32(ip, decoys[decoyIndex].GetIpv4Addr())
+	// TODO: what checks need to be done, and what's guaranteed?
+	addr = ip.To4().String() + ":443"
 	sni = decoys[decoyIndex].GetHostname()
-	addr = decoys[decoyIndex].GetIpv4AddrStr()
 	return
+}
+
+// gets randomDecoyAddress. sni stands for subject name indication.
+// addr is in format ipv4:port
+func (a *assets) GetDecoy() TLSDecoySpec {
+	a.RLock()
+	defer a.RUnlock()
+
+	decoys := a.config.DecoyList.TlsDecoys
+	chosenDecoy := TLSDecoySpec{}
+	if len(decoys) == 0 {
+		return chosenDecoy
+	}
+	decoyIndex := getRandInt(0, len(decoys)-1)
+	chosenDecoy = *decoys[decoyIndex]
+
+	// TODO: stop enforcing values >= defaults.
+	// Fix ackhole instead
+	if chosenDecoy.GetTimeout() < timeoutMin {
+		timeout := uint32(timeoutMax)
+		chosenDecoy.Timeout = &timeout
+	}
+	if chosenDecoy.GetTcpwin() < sendLimitMin {
+		tcpWin := uint32(sendLimitMax)
+		chosenDecoy.Tcpwin = &tcpWin
+	}
+	return chosenDecoy
 }
 
 func (a *assets) GetRoots() *x509.CertPool {
@@ -249,13 +239,6 @@ func (a *assets) GetGeneration() uint32 {
 	defer a.RUnlock()
 
 	return a.config.GetGeneration()
-}
-
-func (a *assets) GetTmpBackoff() int64 {
-	a.RLock()
-	defer a.RUnlock()
-
-	return a.tmpBackoff
 }
 
 func (a *assets) SetGeneration(gen uint32) (err error) {
@@ -298,25 +281,12 @@ func (a *assets) SetDecoys(decoys []*TLSDecoySpec) (err error) {
 	return
 }
 
-func (a *assets) SetTmpBackoff(tmpBackoff int64) (err error) {
-	a.Lock()
-	defer a.Unlock()
-
-	a.tmpBackoff = tmpBackoff
-	err = a.saveTmpBackoff()
-	return
-}
-
-func (a *assets) IsDecoyInList(ipv4str string, hostname string) bool {
-	var ipToCheck string
-	if strings.HasSuffix(ipv4str, ":443") {
-		ipToCheck = ipv4str
-	} else {
-		ipToCheck = ipv4str + ":443"
-	}
+func (a *assets) IsDecoyInList(decoy TLSDecoySpec) bool {
+	ipv4str := decoy.GetIpv4AddrStr()
+	hostname := decoy.GetHostname()
 	for _, d := range a.config.GetDecoyList().GetTlsDecoys() {
 		if strings.Compare(d.GetHostname(), hostname) == 0 &&
-			strings.Compare(d.GetIpv4AddrStr(), ipToCheck) == 0 {
+			strings.Compare(d.GetIpv4AddrStr(), ipv4str) == 0 {
 			return true
 		}
 	}
@@ -331,18 +301,6 @@ func (a *assets) saveClientConf() error {
 	filename := path.Join(a.path, a.filenameClientConf)
 	tmpFilename := path.Join(a.path, "."+a.filenameClientConf+"."+getRandString(5)+".tmp")
 	err = ioutil.WriteFile(tmpFilename, buf[:], 0644)
-	if err != nil {
-		return err
-	}
-
-	return os.Rename(tmpFilename, filename)
-}
-
-func (a *assets) saveTmpBackoff() error {
-	strTmpBackoff := strconv.FormatInt(a.tmpBackoff, 10)
-	filename := path.Join(a.path, a.filenameTmpBackoff)
-	tmpFilename := path.Join(a.path, "."+a.filenameTmpBackoff+"."+getRandString(5)+".tmp")
-	err := ioutil.WriteFile(tmpFilename, []byte(strTmpBackoff), 0644)
 	if err != nil {
 		return err
 	}
