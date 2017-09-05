@@ -23,28 +23,21 @@ const waitForFINDie = 22000 // time to wait before crashing
 const maxInt16 = int16(^uint16(0) >> 1) // max msg size -> might have to chunk
 const minInt16 = int16(-maxInt16 - 1)
 
-const (
-	TD_STATE_NEW = iota
-	TD_STATE_CONNECTED
-	TD_STATE_RECONNECT
-	TD_STATE_CLOSED
-)
-
-type FlowType int8
+type flowType int8
 
 const (
-	FlowUpload        FlowType = 0x1
-	FlowReadOnly      FlowType = 0x2
-	FlowBidirectional FlowType = 0x4
+	flowUpload        flowType = 0x1
+	flowReadOnly      flowType = 0x2
+	flowBidirectional flowType = 0x4
 )
 
-func (m *FlowType) Str() string {
+func (m *flowType) Str() string {
 	switch *m {
-	case FlowUpload:
+	case flowUpload:
 		return "FlowUpload"
-	case FlowReadOnly:
+	case flowReadOnly:
 		return "FlowReadOnly"
-	case FlowBidirectional:
+	case flowBidirectional:
 		return "FlowBidirectional"
 	default:
 		return strconv.Itoa(int(*m))
@@ -71,22 +64,22 @@ func (m *MsgType) Str() string {
 
 var errMsgClose = errors.New("MSG CLOSE")
 
-type TdTagType int8
+type tdTagType int8
 
 const (
-	HTTP_GET_INCOMPLETE  TdTagType = 0
-	HTTP_GET_COMPLETE    TdTagType = 1
-	HTTP_POST_INCOMPLETE TdTagType = 2
+	tagHttpGetIncomplete  tdTagType = 0
+	tagHttpGetComplete    tdTagType = 1
+	tagHttpPostIncomplete tdTagType = 2
 )
 
-func (m *TdTagType) Str() string {
+func (m *tdTagType) Str() string {
 	switch *m {
-	case HTTP_GET_INCOMPLETE:
-		return "HTTP_GET_INCOMPLETE"
-	case HTTP_GET_COMPLETE:
-		return "HTTP_GET_COMPLETE"
-	case HTTP_POST_INCOMPLETE:
-		return "HTTP_POST_INCOMPLETE"
+	case tagHttpGetIncomplete:
+		return "HTTP GET Incomplete"
+	case tagHttpGetComplete:
+		return "HTTP GET Complete"
+	case tagHttpPostIncomplete:
+		return "HTTP POST Incomplete"
 	default:
 		return strconv.Itoa(int(*m))
 	}

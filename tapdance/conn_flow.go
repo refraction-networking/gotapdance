@@ -3,7 +3,7 @@ TODO: It probably should have read flow that reads messages and says STAAAHP to 
 TODO: here we actually can avoid reconnecting if idle for too long
 TODO: confirm that all writes are recorded towards data limit
 
- _______________________tapdanceFlowConn Mode Chart ____________________________
+ _______________________TapdanceFlowConn Mode Chart ____________________________
 |FlowType     |Default Tag|Diff from old-school bidirectional  | Engines spawned|
 |-------------|-----------|------------------------------------|----------------|
 |Bidirectional| HTTP GET  |                                    | Writer, Reader |
@@ -22,39 +22,12 @@ import (
 	"github.com/golang/protobuf/proto"
 	"io"
 	"net"
-	"strconv"
 	"sync"
 	"time"
 )
 
-func dialBidirectional(customDialer func(string, string) (net.Conn, error),
-	id uint64) (*tapdanceFlowConn, error) {
-
-	stationPubkey := Assets().GetPubkey()
-
-	remoteConnId := make([]byte, 16)
-	rand.Read(remoteConnId[:])
-
-	rawConn := makeTdRaw(HTTP_GET_INCOMPLETE,
-		stationPubkey[:],
-		remoteConnId[:])
-	rawConn.customDialer = customDialer
-	rawConn.sessionId = id
-
-	err := rawConn.Dial()
-	if err != nil {
-		return nil, err
-	}
-	flowConn, err := makeTdFlow(FlowBidirectional, &rawConn)
-	if err != nil {
-		flowConn.closeWithErrorOnce(err)
-		return nil, err
-	}
-	return flowConn, nil
-}
-
 // Represents single tapdance flow
-type tapdanceFlowConn struct {
+type TapdanceFlowConn struct {
 	tdRaw *tdRawConn
 
 	bsbuf     *bsbuffer.BSBuffer
@@ -62,7 +35,7 @@ type tapdanceFlowConn struct {
 	headerBuf [6]byte
 
 	writeSliceChan    chan []byte
-	writeResultChan   chan IoOpResult
+	writeResultChan   chan ioOpResult
 	writtenBytesTotal int
 
 	yieldConfirmed chan struct{} // used by rConn to signal that flow was picked up
@@ -77,65 +50,81 @@ type tapdanceFlowConn struct {
 	closeOnce sync.Once
 	closeErr  error
 
-	flowType FlowType
+	flowType flowType
 }
 
-// Sets up engines. Does not make any network calls
-func makeTdFlow(flow FlowType, tdRaw *tdRawConn) (*tapdanceFlowConn, error) {
+// Returns TapDance connection, that is ready to be Dial'd
+func NewTapDanceConn() (net.Conn, error) {
+	return makeTdFlow(flowBidirectional, nil)
+}
+
+// Prepares TD flow: does not make any network calls nor sets up engines
+func makeTdFlow(flow flowType, tdRaw *tdRawConn) (*TapdanceFlowConn, error) {
 	if tdRaw == nil {
-		return nil, errors.New(flow.Str() + " error: tdRaw is a nil pointer")
-	}
-	if tdRaw.tlsConn == nil {
-		// dial tdRawConn if not dialed yet
-		err := tdRaw.Dial()
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	flowConn := &tapdanceFlowConn{tdRaw: tdRaw}
-
-	// don't lose initial msg from station
-	// strip off state transition and push protobuf up for processing
-	flowConn.tdRaw.initialMsg.StateTransition = nil
-	err := flowConn.processProto(tdRaw.initialMsg)
-	if err != nil {
-		return nil, err
+		// raw TapDance connection is not given, make a new one
+		stationPubkey := Assets().GetPubkey()
+		remoteConnId := make([]byte, 16)
+		rand.Read(remoteConnId[:])
+		tdRaw = makeTdRaw(tagHttpGetIncomplete,
+			stationPubkey[:],
+			remoteConnId[:])
+		tdRaw.sessionId = sessionsTotal.GetAndInc()
 	}
 
+	flowConn := &TapdanceFlowConn{tdRaw: tdRaw}
 	flowConn.bsbuf = bsbuffer.NewBSBuffer()
 	flowConn.closed = make(chan struct{})
 	flowConn.flowType = flow
-	switch flow {
-	case FlowUpload:
+	return flowConn, nil
+}
+
+func (flowConn *TapdanceFlowConn) Dial() error {
+	if flowConn.tdRaw.tlsConn == nil {
+		// if still hasn't dialed
+		err := flowConn.tdRaw.Dial()
+		if err != nil {
+			return err
+		}
+	}
+	// don't lose initial msg from station
+	// strip off state transition and push protobuf up for processing
+	flowConn.tdRaw.initialMsg.StateTransition = nil
+	err := flowConn.processProto(flowConn.tdRaw.initialMsg)
+	if err != nil {
+		flowConn.closeWithErrorOnce(err)
+		return err
+	}
+
+	switch flowConn.flowType {
+	case flowUpload:
 		fallthrough
-	case FlowBidirectional:
+	case flowBidirectional:
 		go flowConn.spawnReaderEngine()
 		flowConn.reconnectSuccess = make(chan bool, 1)
 		flowConn.reconnectStarted = make(chan struct{})
 		flowConn.writeSliceChan = make(chan []byte)
-		flowConn.writeResultChan = make(chan IoOpResult)
+		flowConn.writeResultChan = make(chan ioOpResult)
 		go flowConn.spawnWriterEngine()
-		return flowConn, nil
-	case FlowReadOnly:
+		return nil
+	case flowReadOnly:
 		go flowConn.spawnReaderEngine()
-		return flowConn, nil
+		return nil
 	default:
 		panic("Not implemented")
 	}
 }
 
-type IoOpResult struct {
+type ioOpResult struct {
 	err error
 	n   int
 }
 
-func (flowConn *tapdanceFlowConn) schedReconnectNow() {
+func (flowConn *TapdanceFlowConn) schedReconnectNow() {
 	flowConn.tdRaw.tlsConn.SetReadDeadline(time.Now())
 }
 
 // returns bool indicating success of reconnect
-func (flowConn *tapdanceFlowConn) awaitReconnect() bool {
+func (flowConn *TapdanceFlowConn) awaitReconnect() bool {
 	defer func() { flowConn.writtenBytesTotal = 0 }()
 	for {
 		select {
@@ -151,7 +140,7 @@ func (flowConn *tapdanceFlowConn) awaitReconnect() bool {
 // Write writes data to the connection.
 // Write can be made to time out and return an Error with Timeout() == true
 // after a fixed time limit; see SetDeadline and SetWriteDeadline.
-func (flowConn *tapdanceFlowConn) spawnWriterEngine() {
+func (flowConn *TapdanceFlowConn) spawnWriterEngine() {
 	defer close(flowConn.writeResultChan)
 	for {
 		select {
@@ -162,34 +151,54 @@ func (flowConn *tapdanceFlowConn) spawnWriterEngine() {
 		case <-flowConn.closed:
 			return
 		case b := <-flowConn.writeSliceChan:
-			// current chunking policy: never do it in POST flows, as we are allowed
-			// to send up to 1MB, e.g. something fishy is going on
-			if len(b)+6+1024 > flowConn.tdRaw.UploadLimit-flowConn.writtenBytesTotal {
+			ioResult := ioOpResult{}
+			bytesSent := 0
+
+			canSend := func() int {
+				// checks the upload limit
 				// 6 is max header size (protobufs aren't sent here though)
 				// 1024 is max transition message size
-				flowConn.schedReconnectNow()
-				if !flowConn.awaitReconnect() {
-					return
+				return flowConn.tdRaw.UploadLimit -
+					flowConn.writtenBytesTotal - 6 - 1024
+			}
+			for bytesSent < len(b) {
+				idxToSend := len(b)
+				if idxToSend-bytesSent > canSend() {
+					Logger().Infof("%s reconnecting due to upload limit: "+
+						"idxToSend (%d) - bytesSent(%d) > UploadLimit(%d) - "+
+						"writtenBytesTotal(%d) - 6 - 1024 \n",
+						flowConn.idStr(), idxToSend, bytesSent,
+						flowConn.tdRaw.UploadLimit, flowConn.writtenBytesTotal)
+					flowConn.schedReconnectNow()
+					if !flowConn.awaitReconnect() {
+						return
+					}
+				}
+				Logger().Debugf("%s WriterEngine: writing\n%s", flowConn.idStr(), hex.Dump(b))
+
+				if cs := maxInt(canSend(), int(^int16(0))); idxToSend-bytesSent > cs {
+					// just reconnected and still can't send: time to chunk
+					idxToSend = bytesSent + cs
+				}
+
+				// TODO: outerProto limit on data size
+				bufToSend := b[bytesSent:idxToSend]
+				bufToSendWithHeader := getMsgWithHeader(msg_raw_data, bufToSend) // TODO: optimize!
+				headerSize := len(bufToSendWithHeader) - len(bufToSend)
+
+				n, err := flowConn.tdRaw.tlsConn.Write(bufToSendWithHeader)
+				if n >= headerSize {
+					// TODO: that's kinda hacky
+					n -= headerSize
+				}
+				ioResult.n += n
+				bytesSent += n
+				flowConn.writtenBytesTotal += len(bufToSendWithHeader)
+				if err != nil {
+					ioResult.err = err
+					break
 				}
 			}
-			Logger().Debugf("%s WriterEngine: writing\n%s", flowConn.idStr(), hex.Dump(b))
-
-			if len(b)+6+1024 > flowConn.tdRaw.UploadLimit {
-				flowConn.closeWithErrorOnce(errors.New("tried to send too much (" +
-					strconv.Itoa(len(b)) + " bytes)"))
-				return
-			}
-
-			// TODO: outerProto limit on data size
-			bWithHeader := getMsgWithHeader(msg_raw_data, b) // TODO: optimize!
-			headerSize := len(bWithHeader) - len(b)
-			ioResult := IoOpResult{}
-			ioResult.n, ioResult.err = flowConn.tdRaw.tlsConn.Write(bWithHeader)
-			if ioResult.n >= headerSize {
-				// TODO: that's kinda hacky
-				ioResult.n -= headerSize
-			}
-			flowConn.writtenBytesTotal += ioResult.n
 			select {
 			case flowConn.writeResultChan <- ioResult:
 			case <-flowConn.closed:
@@ -199,10 +208,9 @@ func (flowConn *tapdanceFlowConn) spawnWriterEngine() {
 	}
 }
 
-func (flowConn *tapdanceFlowConn) spawnReaderEngine() {
+func (flowConn *TapdanceFlowConn) spawnReaderEngine() {
 	flowConn.updateReadDeadline()
 	flowConn.recvbuf = make([]byte, 1500)
-	defer flowConn.bsbuf.Unblock()
 	for {
 		msgType, msgLen, err := flowConn.readHeader()
 		if err != nil {
@@ -248,7 +256,7 @@ func (flowConn *tapdanceFlowConn) spawnReaderEngine() {
 // Write writes data to the connection.
 // Write can be made to time out and return an Error with Timeout() == true
 // after a fixed time limit; see SetDeadline and SetWriteDeadline.
-func (flowConn *tapdanceFlowConn) Write(b []byte) (int, error) {
+func (flowConn *TapdanceFlowConn) Write(b []byte) (int, error) {
 	select {
 	case flowConn.writeSliceChan <- b:
 	case <-flowConn.closed:
@@ -262,22 +270,11 @@ func (flowConn *tapdanceFlowConn) Write(b []byte) (int, error) {
 	}
 }
 
-func (flowConn *tapdanceFlowConn) Read(b []byte) (int, error) {
+func (flowConn *TapdanceFlowConn) Read(b []byte) (int, error) {
 	return flowConn.bsbuf.Read(b)
 }
 
-// Action to take based on error
-type ErrVerdict int32
-
-const (
-	ErrVerdictCarryOn           ErrVerdict = 0
-	ErrVerdictScheduleReconnect ErrVerdict = 1
-	ErrVerdictStartReconnect    ErrVerdict = 2
-	ErrVerdictClose             ErrVerdict = 3
-	ErrVerdictCrash             ErrVerdict = 4
-)
-
-func (rConn *tapdanceFlowConn) readRawData(msgLen int) ([]byte, error) {
+func (rConn *TapdanceFlowConn) readRawData(msgLen int) ([]byte, error) {
 	if cap(rConn.recvbuf) < msgLen {
 		rConn.recvbuf = make([]byte, msgLen)
 	}
@@ -298,7 +295,7 @@ func (rConn *tapdanceFlowConn) readRawData(msgLen int) ([]byte, error) {
 	return rConn.recvbuf[:readBytesTotal], err
 }
 
-func (flowConn *tapdanceFlowConn) readProtobuf(msgLen int) (msg StationToClient, err error) {
+func (flowConn *TapdanceFlowConn) readProtobuf(msgLen int) (msg StationToClient, err error) {
 	rbuf := make([]byte, msgLen)
 	var readBytes int
 	var readBytesTotal int // both header and body
@@ -317,7 +314,7 @@ func (flowConn *tapdanceFlowConn) readProtobuf(msgLen int) (msg StationToClient,
 	return
 }
 
-func (flowConn *tapdanceFlowConn) readHeader() (msgType MsgType, msgLen int, err error) {
+func (flowConn *TapdanceFlowConn) readHeader() (msgType MsgType, msgLen int, err error) {
 	// For each message we first read outer protocol header to see if it's protobuf or data
 
 	var readBytes int
@@ -364,60 +361,82 @@ func (flowConn *tapdanceFlowConn) readHeader() (msgType MsgType, msgLen int, err
 }
 
 // Allows scheduling/doing reconnects in the middle of reads
-func (flowConn *tapdanceFlowConn) actOnReadError(readErr error) (err error) {
+func (flowConn *TapdanceFlowConn) actOnReadError(err error) error {
 	if err == nil {
 		return nil
 	}
 
-	// Timeout is used as a signal to schedule reconnect, as reconnect is indeed time dependent.
-	// One can also SetDeadline(NOW) to schedule deadline NOW.
-	// After EXPECT_RECONNECT and FIN are sent, deadline is used to signal that flow timed out
-	// waiting for FIN back.
+	willScheduleReconnect := false
 	if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-
-		Logger().Infoln(flowConn.tdRaw.idStr() + " scheduling reconnect")
-		if flowConn.finSent {
-			// timeout is hit another time before reconnect
-			return errors.New("reconnect scheduling: timed out waiting for FIN back")
-		}
-		flowConn.tdRaw.tlsConn.SetReadDeadline(
-			time.Now().Add(time.Millisecond * time.Duration(waitForFINDie)))
-		_, err = flowConn.tdRaw.writeTransition(C2S_Transition_C2S_EXPECT_RECONNECT)
-		if err != nil {
-			return errors.New("reconnect scheduling: failed to send \"expect reconnect\": " +
-				err.Error())
-		}
-		err = flowConn.tdRaw.closeWrite()
-		if err != nil {
-			Logger().Infoln(flowConn.tdRaw.idStr() + " reconnect scheduling:" +
-				"failed to send FIN: " + err.Error() +
-				". Closing roughly and moving on.")
-			flowConn.tdRaw.Close()
-		}
-		flowConn.finSent = true
+		// Timeout is used as a signal to schedule reconnect, as reconnect is indeed time dependent.
+		// One can also SetDeadline(NOW) to schedule deadline NOW.
+		// After EXPECT_RECONNECT and FIN are sent, deadline is used to signal that flow timed out
+		// waiting for FIN back.
+		willScheduleReconnect = true
 	}
 
 	// "EOF is the error returned by Read when no more input is available. Functions should
 	// return EOF only to signal a graceful end of input." (e.g. FIN was received)
 	// "ErrUnexpectedEOF means that EOF was encountered in the middle of reading a fixed-size
 	// block or data structure."
-	if err == io.EOF || err == io.ErrUnexpectedEOF {
-		Logger().Infoln(flowConn.tdRaw.idStr() + " reconnecting")
-		if !flowConn.finSent || err == io.ErrUnexpectedEOF {
-			Logger().Infoln(flowConn.tdRaw.idStr() + " reconnect: FIN is unexpected")
+	willReconnect := (err == io.EOF || err == io.ErrUnexpectedEOF)
+
+	if willScheduleReconnect {
+		Logger().Infoln(flowConn.tdRaw.idStr() + " scheduling reconnect")
+		if flowConn.finSent {
+			// timeout is hit another time before reconnect
+			return errors.New("reconnect scheduling: timed out waiting for FIN back")
 		}
-		if flowConn.flowType != FlowReadOnly {
+		if flowConn.flowType != flowReadOnly {
 			// notify writer, if needed
 			select {
 			case <-flowConn.closed:
-				return errors.New("reconnect: closed while notifiyng writer")
+				return errors.New("reconnect scheduling: closed while notifiyng writer")
 			case flowConn.reconnectStarted <- struct{}{}:
 			}
 		}
+
+		transition := C2S_Transition_C2S_EXPECT_RECONNECT
+		if flowConn.flowType == flowUpload {
+			transition = C2S_Transition_C2S_EXPECT_UPLOADONLY_RECONN
+		}
+		_, err = flowConn.tdRaw.writeTransition(transition)
+		if err != nil {
+			return errors.New("reconnect scheduling: failed to send " +
+				transition.String() + ": " + err.Error())
+		}
+
+		if flowConn.flowType == flowUpload {
+			// for upload-only flows we reconnect right away
+			willReconnect = true
+		} else {
+			flowConn.tdRaw.tlsConn.SetReadDeadline(
+				time.Now().Add(time.Millisecond * time.Duration(waitForFINDie)))
+			err = flowConn.tdRaw.closeWrite()
+			if err != nil {
+				Logger().Infoln(flowConn.tdRaw.idStr() + " reconnect scheduling:" +
+					"failed to send FIN: " + err.Error() +
+					". Closing roughly and moving on.")
+				flowConn.tdRaw.Close()
+			}
+			flowConn.finSent = true
+			return nil
+		}
+	}
+
+	if willReconnect {
+		Logger().Infoln(flowConn.tdRaw.idStr() + " reconnecting")
+		if (flowConn.flowType != flowUpload && !flowConn.finSent) ||
+			err == io.ErrUnexpectedEOF {
+			Logger().Infoln(flowConn.tdRaw.idStr() + " reconnect: FIN is unexpected")
+		}
 		err = flowConn.tdRaw.Redial()
-		if flowConn.flowType != FlowReadOnly {
+		if flowConn.flowType != flowReadOnly {
 			// wake up writer engine
-			flowConn.reconnectSuccess <- (err == nil)
+			select {
+			case <-flowConn.closed:
+			case flowConn.reconnectSuccess <- (err == nil):
+			}
 		}
 		if err != nil {
 			return errors.New("reconnect: failed to Redial: " + err.Error())
@@ -440,18 +459,18 @@ func (flowConn *tapdanceFlowConn) actOnReadError(readErr error) (err error) {
 	return io.ErrUnexpectedEOF
 }
 
-func (flowConn *tapdanceFlowConn) updateReadDeadline() {
+// Sets read deadline to {when raw connection was establihsed} + {timeout} - {small random value}
+func (flowConn *TapdanceFlowConn) updateReadDeadline() {
 	amortizationVal := 0.9
 	const minSubtrahend = 50
 	const maxSubtrahend = 9500
 	deadline := flowConn.tdRaw.establishedAt.Add(time.Millisecond *
 		time.Duration(int(float64(flowConn.tdRaw.decoySpec.GetTimeout())*amortizationVal)-
 			getRandInt(minSubtrahend, maxSubtrahend)))
-	deadline = flowConn.tdRaw.establishedAt.Add(time.Second * 20) // fair enough
 	flowConn.tdRaw.tlsConn.SetReadDeadline(deadline)
 }
 
-func (flowConn *tapdanceFlowConn) AcquireYield() error {
+func (flowConn *TapdanceFlowConn) acquireUpload() error {
 	_, err := flowConn.tdRaw.writeTransition(C2S_Transition_C2S_ACQUIRE_UPLOAD)
 	if err != nil {
 		Logger().Infoln(flowConn.idStr() + " Failed attempt to acquire upload:" + err.Error())
@@ -461,7 +480,7 @@ func (flowConn *tapdanceFlowConn) AcquireYield() error {
 	return err
 }
 
-func (flowConn *tapdanceFlowConn) YieldUpload() error {
+func (flowConn *TapdanceFlowConn) yieldUpload() error {
 	_, err := flowConn.tdRaw.writeTransition(C2S_Transition_C2S_YIELD_UPLOAD)
 	if err != nil {
 		Logger().Infoln(flowConn.idStr() + " Failed attempt to yield upload:" + err.Error())
@@ -473,7 +492,7 @@ func (flowConn *tapdanceFlowConn) YieldUpload() error {
 
 // TODO: implement on station, currently unused
 // wait for rConn to confirm that flow was noticed
-func (flowConn *tapdanceFlowConn) WaitForYieldConfirmation() error {
+func (flowConn *TapdanceFlowConn) waitForYieldConfirmation() error {
 	// camouflage issue
 	timeout := time.After(20 * time.Second)
 	select {
@@ -489,7 +508,7 @@ func (flowConn *tapdanceFlowConn) WaitForYieldConfirmation() error {
 }
 
 // Closes connection, channel and sets error ONCE, e.g. error won't be overwritten
-func (flowConn *tapdanceFlowConn) closeWithErrorOnce(err error) error {
+func (flowConn *TapdanceFlowConn) closeWithErrorOnce(err error) error {
 	if err == nil {
 		// safeguard, shouldn't happen
 		err = errors.New("closed with nil error!")
@@ -498,6 +517,7 @@ func (flowConn *tapdanceFlowConn) closeWithErrorOnce(err error) error {
 	flowConn.closeOnce.Do(func() {
 		Logger().Infoln(flowConn.idStr() + " closed with error " + err.Error())
 		flowConn.closeErr = errors.New(flowConn.idStr() + " " + err.Error())
+		flowConn.bsbuf.Unblock()
 		close(flowConn.closed)
 		errOut = flowConn.tdRaw.Close()
 	})
@@ -506,15 +526,15 @@ func (flowConn *tapdanceFlowConn) closeWithErrorOnce(err error) error {
 
 // Close closes the connection.
 // Any blocked Read or Write operations will be unblocked and return errors.
-func (flowConn *tapdanceFlowConn) Close() error {
+func (flowConn *TapdanceFlowConn) Close() error {
 	return flowConn.closeWithErrorOnce(errors.New("closed by application layer"))
 }
 
-func (flowConn *tapdanceFlowConn) idStr() string {
+func (flowConn *TapdanceFlowConn) idStr() string {
 	return flowConn.tdRaw.idStr()
 }
 
-func (flowConn *tapdanceFlowConn) processProto(msg StationToClient) error {
+func (flowConn *TapdanceFlowConn) processProto(msg StationToClient) error {
 	handleConfigInfo := func(conf *ClientConf) {
 		currGen := Assets().GetGeneration()
 		if conf.GetGeneration() < currGen {
@@ -534,7 +554,7 @@ func (flowConn *tapdanceFlowConn) processProto(msg StationToClient) error {
 				"Could not save SetClientConf():" + _err.Error())
 		}
 	}
-	Logger().Infoln(flowConn.idStr() + " processing incoming protobuf: " + msg.String())
+	Logger().Debugln(flowConn.idStr() + " processing incoming protobuf: " + msg.String())
 	// handle ConfigInfo
 	if confInfo := msg.ConfigInfo; confInfo != nil {
 		handleConfigInfo(confInfo)
@@ -582,17 +602,17 @@ func (flowConn *tapdanceFlowConn) processProto(msg StationToClient) error {
 }
 
 // LocalAddr returns the local network address.
-func (flowConn *tapdanceFlowConn) LocalAddr() net.Addr {
+func (flowConn *TapdanceFlowConn) LocalAddr() net.Addr {
 	// not sure if this function is meaningful in TapDance context
 	return flowConn.tdRaw.tlsConn.LocalAddr()
 }
 
 // RemoteAddr returns the remote network address.
-func (flowConn *tapdanceFlowConn) RemoteAddr() net.Addr {
+func (flowConn *TapdanceFlowConn) RemoteAddr() net.Addr {
 	return flowConn.tdRaw.tlsConn.RemoteAddr()
 }
 
-func (flowConn *tapdanceFlowConn) NetworkConn() net.Conn {
+func (flowConn *TapdanceFlowConn) NetworkConn() net.Conn {
 	return flowConn.tdRaw.tcpConn
 }
 
@@ -610,13 +630,13 @@ func (flowConn *tapdanceFlowConn) NetworkConn() net.Conn {
 // the deadline after successful Read or Write calls.
 //
 // A zero value for t means I/O operations will not time out.
-func (flowConn *tapdanceFlowConn) SetDeadline(t time.Time) error {
+func (flowConn *TapdanceFlowConn) SetDeadline(t time.Time) error {
 	return flowConn.tdRaw.tlsConn.SetDeadline(t)
 }
 
 // SetReadDeadline sets the deadline for future Read calls.
 // A zero value for t means Read will not time out.
-func (flowConn *tapdanceFlowConn) SetReadDeadline(t time.Time) error {
+func (flowConn *TapdanceFlowConn) SetReadDeadline(t time.Time) error {
 	return flowConn.tdRaw.tlsConn.SetReadDeadline(t)
 }
 
@@ -624,6 +644,6 @@ func (flowConn *tapdanceFlowConn) SetReadDeadline(t time.Time) error {
 // Even if write times out, it may return n > 0, indicating that
 // some of the data was successfully written.
 // A zero value for t means Write will not time out.
-func (flowConn *tapdanceFlowConn) SetWriteDeadline(t time.Time) error {
+func (flowConn *TapdanceFlowConn) SetWriteDeadline(t time.Time) error {
 	return flowConn.tdRaw.tlsConn.SetWriteDeadline(t)
 }

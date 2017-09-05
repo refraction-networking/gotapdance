@@ -38,7 +38,7 @@ type tdRawConn struct {
 
 	failedDecoys []string
 	initialMsg   StationToClient
-	tagType      TdTagType
+	tagType      tdTagType
 
 	UploadLimit int // used only in POST-based tags
 
@@ -59,10 +59,10 @@ func (ds *TLSDecoySpec) GetIpv4AddrStr() string {
 	}
 }
 
-func makeTdRaw(handshakeType TdTagType,
+func makeTdRaw(handshakeType tdTagType,
 	stationPubkey []byte,
-	remoteConnId []byte) tdRawConn {
-	tdRaw := tdRawConn{tagType: handshakeType,
+	remoteConnId []byte) *tdRawConn {
+	tdRaw := &tdRawConn{tagType: handshakeType,
 		stationPubkey: stationPubkey,
 		remoteConnId:  remoteConnId}
 	tdRaw.flowId = 0
@@ -197,7 +197,7 @@ func (tdRaw *tdRawConn) tryDialOnce(expectedTransition S2C_Transition) (err erro
 	}
 
 	switch tdRaw.tagType {
-	case HTTP_GET_INCOMPLETE:
+	case tagHttpGetIncomplete:
 		tdRaw.initialMsg, err = tdRaw.readProto()
 		if err != nil {
 			str_err := err.Error()
@@ -231,7 +231,7 @@ func (tdRaw *tdRawConn) tryDialOnce(expectedTransition S2C_Transition) (err erro
 		} else {
 			Logger().Infoln(tdRaw.idStr() + " Successfully connected to TapDance Station")
 		}
-	case HTTP_POST_INCOMPLETE:
+	case tagHttpPostIncomplete:
 		// don't wait for response
 	default:
 		panic("Unsupported td handshake type:" + tdRaw.tagType.Str())
@@ -318,7 +318,7 @@ func (tdRaw *tdRawConn) closeWrite() error {
 	return tdRaw.tcpConn.CloseWrite()
 }
 
-func (tdRaw *tdRawConn) prepareTDRequest(handshakeType TdTagType) (string, error) {
+func (tdRaw *tdRawConn) prepareTDRequest(handshakeType tdTagType) (string, error) {
 	// Generate initial TapDance request
 	buf := new(bytes.Buffer) // What we have to encrypt with the shared secret using AES
 
@@ -326,7 +326,7 @@ func (tdRaw *tdRawConn) prepareTDRequest(handshakeType TdTagType) (string, error
 
 	// write flags
 	flags := tdFlagUseTIL
-	if tdRaw.tagType == HTTP_POST_INCOMPLETE {
+	if tdRaw.tagType == tagHttpPostIncomplete {
 		flags |= tdFlagUploadOnly
 	}
 	if err := binary.Write(buf, binary.BigEndian, flags); err != nil {
@@ -349,9 +349,9 @@ func (tdRaw *tdRawConn) genHTTP1Tag(tag []byte) (string, error) {
 	var httpTag string
 	switch tdRaw.tagType {
 	// for complete copy http generator of golang
-	case HTTP_GET_COMPLETE:
+	case tagHttpGetComplete:
 		fallthrough
-	case HTTP_GET_INCOMPLETE:
+	case tagHttpGetIncomplete:
 		tdRaw.UploadLimit = int(tdRaw.decoySpec.GetTcpwin()) - getRandInt(1, 1045)
 		httpTag = `GET / HTTP/1.1
 Host: ` + tdRaw.decoySpec.GetHostname() + `
@@ -359,7 +359,7 @@ User-Agent: TapDance/1.2 (+https://tapdance.team/info)
 Accept-Encoding: None
 X-Ignore: ` + getRandPadding(7, 612, 10)
 		httpTag = strings.Replace(httpTag, "\n", "\r\n", -1)
-	case HTTP_POST_INCOMPLETE:
+	case tagHttpPostIncomplete:
 		ContentLength := getRandInt(900000, 1045000)
 		tdRaw.UploadLimit = ContentLength - 1
 		httpTag = `POST / HTTP/1.1
@@ -385,7 +385,7 @@ Content-Disposition: form-data; name=\"td.zip\"
 	keystreamAtTag := whole_keystream[keystreamOffset:]
 
 	httpTag += reverseEncrypt(tag, keystreamAtTag)
-	if tdRaw.tagType == HTTP_GET_COMPLETE {
+	if tdRaw.tagType == tagHttpGetComplete {
 		httpTag += "\r\n\r\n"
 	}
 	Logger().Debugf("Generated HTTP TAG:\n%s\n", httpTag)
@@ -482,7 +482,9 @@ func (tdRaw *tdRawConn) writeTransition(transition C2S_Transition) (n int, err e
 	currGen := Assets().GetGeneration()
 	msg := ClientToStation{Padding: []byte(getRandPadding(150, 900, 10)),
 		DecoyListGeneration: &currGen,
-		StateTransition:     &transition}
+		StateTransition:     &transition,
+		UploadSync:          new(uint64)} // TODO: remove
+
 	msgBytes, err := proto.Marshal(&msg)
 	if err != nil {
 		return

@@ -45,7 +45,7 @@ func initTLSDecoySpec(ip string, sni string) *TLSDecoySpec {
 
 // First call to Assets or AssetsFromDir sets the path.
 func Assets() *assets {
-	_initAssets := func() {initAssets("./assets/")}
+	_initAssets := func() { initAssets("./assets/") }
 	assetsOnce.Do(_initAssets)
 	return assetsInstance
 }
@@ -53,7 +53,7 @@ func Assets() *assets {
 // First call to Assets or AssetsFromDir sets the path.
 // Thus, It is safe to access assets via default Assets() function afterwards.
 func AssetsFromDir(path string) *assets {
-	_initAssets := func() {initAssets(path)}
+	_initAssets := func() { initAssets(path) }
 	assetsOnce.Do(_initAssets)
 	return assetsInstance
 }

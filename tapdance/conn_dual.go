@@ -29,33 +29,33 @@ type TransportConn interface {
 
 type DualConn struct {
 	net.Conn
-	writerConn *tapdanceFlowConn
-	readerConn *tapdanceFlowConn
+	writerConn *TapdanceFlowConn
+	readerConn *TapdanceFlowConn
 
 	sessionId uint64 // constant for logging
 }
 
 // returns TapDance connection that utilizes 2 flows underneath: reader and writer
-func dialSplitFlow(customDialer func(string, string) (net.Conn, error),
-	id uint64) (net.Conn, error) {
-	dualConn := DualConn{sessionId: id}
+func dialSplitFlow(customDialer func(string, string) (net.Conn, error)) (net.Conn, error) {
+	dualConn := DualConn{sessionId: sessionsTotal.GetAndInc()}
 	stationPubkey := Assets().GetPubkey()
 
 	remoteConnId := make([]byte, 16)
 	rand.Read(remoteConnId[:])
 
-	rawRConn := makeTdRaw(HTTP_GET_INCOMPLETE,
+	rawRConn := makeTdRaw(tagHttpGetIncomplete,
 		stationPubkey[:],
 		remoteConnId[:])
 	rawRConn.customDialer = customDialer
-	rawRConn.sessionId = id
+	rawRConn.sessionId = dualConn.sessionId
 	rawRConn.strIdSuffix = "R"
 
-	err := rawRConn.Dial()
+	var err error
+	dualConn.readerConn, err = makeTdFlow(flowReadOnly, rawRConn)
 	if err != nil {
 		return nil, err
 	}
-	dualConn.readerConn, err = makeTdFlow(FlowReadOnly, &rawRConn)
+	err = dualConn.readerConn.Dial()
 	if err != nil {
 		return nil, err
 	}
@@ -65,32 +65,33 @@ func dialSplitFlow(customDialer func(string, string) (net.Conn, error),
 
 	// TODO: traffic fingerprinting issue
 	// TODO: fundamental issue of observable dependency between 2 flows
-	err = dualConn.readerConn.YieldUpload()
+	err = dualConn.readerConn.yieldUpload()
 	if err != nil {
 		dualConn.readerConn.closeWithErrorOnce(err)
 		return nil, err
 	}
 
-	rawWConn := makeTdRaw(HTTP_POST_INCOMPLETE,
+	rawWConn := makeTdRaw(tagHttpPostIncomplete,
 		stationPubkey[:],
 		remoteConnId[:])
 	rawWConn.customDialer = customDialer
-	rawWConn.sessionId = id
+	rawWConn.sessionId = dualConn.sessionId
 	rawWConn.strIdSuffix = "W"
 	rawWConn.decoySpec = rawRConn.decoySpec
 	rawWConn.pinDecoySpec = true
 
-	err = rawWConn.Dial()
+	dualConn.writerConn, err = makeTdFlow(flowUpload, rawWConn)
 	if err != nil {
 		dualConn.readerConn.closeWithErrorOnce(err)
 		return nil, err
 	}
-	dualConn.writerConn, err = makeTdFlow(FlowUpload, &rawWConn)
+	err = dualConn.writerConn.Dial()
 	if err != nil {
 		dualConn.readerConn.closeWithErrorOnce(err)
 		return nil, err
 	}
-	err = dualConn.writerConn.AcquireYield()
+
+	err = dualConn.writerConn.acquireUpload()
 	if err != nil {
 		dualConn.readerConn.closeWithErrorOnce(err)
 		dualConn.writerConn.closeWithErrorOnce(err)
@@ -132,4 +133,9 @@ func (tdConn *DualConn) Write(b []byte) (int, error) {
 
 func (tdConn *DualConn) idStr() string {
 	return "[Session " + strconv.FormatUint(tdConn.sessionId, 10) + "]"
+}
+
+// makes little sense, since there are 2 underlying NetworkConns
+func (tdConn *DualConn) NetworkConn() net.Conn {
+	return tdConn.readerConn.NetworkConn()
 }

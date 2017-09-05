@@ -1,7 +1,3 @@
-SHORT TERM:
-chunking
-go vet is unhappy
-
 MED-LONG-NEVER TERM:
 redo bandwidth tracking
 redo tmp backoff

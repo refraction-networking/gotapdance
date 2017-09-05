@@ -1,9 +1,9 @@
 package tapdance
 
 import (
+	"fmt"
 	"github.com/Sirupsen/logrus"
 	"sync"
-	"fmt"
 )
 
 // implements interface logrus.Formatter

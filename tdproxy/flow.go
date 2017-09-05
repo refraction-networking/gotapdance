@@ -19,8 +19,8 @@ type tapDanceFlow struct {
 	// reference to global proxy
 	proxy *TapDanceProxy
 
-	servConn net.Conn // can cast to tapdance.Conn but don't need to
-	userConn net.Conn
+	servConn   net.Conn // can cast to tapdance.Conn but don't need to
+	userConn   net.Conn
 	splitFlows bool
 }
 
@@ -39,14 +39,9 @@ func makeTapDanceFlow(proxy *TapDanceProxy, id uint64, splitFlows bool) *tapDanc
 }
 
 func (TDstate *tapDanceFlow) redirect() error {
-	dialer := tapdance.Dialer{}
+	dialer := tapdance.Dialer{SplitFlows: TDstate.splitFlows}
 	var err error
-	if TDstate.splitFlows {
-		TDstate.servConn, err = dialer.DialSOCKSSplitFlow()
-	} else {
-		TDstate.servConn, err = dialer.DialSOCKS()
-
-	}
+	TDstate.servConn, err = dialer.DialProxy()
 	if err != nil {
 		TDstate.userConn.Close()
 		return err
@@ -59,7 +54,8 @@ func (TDstate *tapDanceFlow) redirect() error {
 	}()
 
 	forwardFromServerToClient := func() {
-		n, _err := io.Copy(TDstate.userConn, TDstate.servConn)
+		buf := make([]byte, 65536)
+		n, _err := io.CopyBuffer(TDstate.userConn, TDstate.servConn, buf)
 		Logger.Debugf("{tapDanceFlow} forwardFromServerToClient returns, bytes sent: " +
 			strconv.FormatUint(uint64(n), 10))
 		if _err == nil {
@@ -70,7 +66,8 @@ func (TDstate *tapDanceFlow) redirect() error {
 	}
 
 	forwardFromClientToServer := func() {
-		n, _err := io.Copy(TDstate.servConn, TDstate.userConn)
+		buf := make([]byte, 65536)
+		n, _err := io.CopyBuffer(TDstate.servConn, TDstate.userConn, buf)
 		Logger.Debugf("{tapDanceFlow} forwardFromClientToServer returns, bytes sent: " +
 			strconv.FormatUint(uint64(n), 10))
 		if _err == nil {

@@ -36,18 +36,8 @@ type Dialer struct {
 	// https://medium.com/@cep21/how-to-correctly-use-context-context-in-go-1-7-8f2c0fafdf39
 	// TODO: add various modes, e.g. non read flows and other dialing options
 	// TODO: include a factory of raw async TapDance connections that can be used on demand?
-	tcpDialer func(string, string) (net.Conn, error)
-}
-
-// TODO: add following functions:
-//  * func Dial(network, address string) (Conn, error)
-//  * func DialWithCustomDialer(network, address string, customDialer func(string, string) (net.Conn, error)) (Conn, error) ?
-// which would set up proxy to target website _directly_
-
-func DialSOCKSWithCustomDialer(customDialer func(string, string) (net.Conn, error)) (net.Conn, error) {
-	var d Dialer
-	d.tcpDialer = customDialer
-	return d.DialSOCKS()
+	SplitFlows bool
+	TcpDialer  func(string, string) (net.Conn, error)
 }
 
 func Dial(address string) TransportConn {
@@ -66,15 +56,20 @@ func (d *Dialer) Dial(address string) (TransportConn, error) {
 }
 
 // Does not connect directly, users are expected to do CONNECT HTTP request
-func DialSOCKS() (net.Conn, error) {
+func DialProxy() (net.Conn, error) {
 	var d Dialer
-	return d.DialSOCKS()
+	return d.DialProxy()
 }
 
-func (d *Dialer) DialSOCKS() (net.Conn, error) {
-	return dialBidirectional(d.tcpDialer, sessionsTotal.GetAndInc())
-}
-
-func (d *Dialer) DialSOCKSSplitFlow() (net.Conn, error) {
-	return dialSplitFlow(d.tcpDialer, sessionsTotal.GetAndInc())
+func (d *Dialer) DialProxy() (net.Conn, error) {
+	if !d.SplitFlows {
+		flow, err := makeTdFlow(flowBidirectional, nil)
+		if err != nil {
+			return nil, err
+		}
+		flow.tdRaw.customDialer = d.TcpDialer
+		return flow, flow.Dial()
+	} else {
+		return dialSplitFlow(d.TcpDialer)
+	}
 }
