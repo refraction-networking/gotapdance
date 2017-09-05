@@ -6,19 +6,20 @@ import (
 	"github.com/Sirupsen/logrus"
 	"io"
 
+	"github.com/SergeyFrolov/gotapdance/tdproxy"
 	"github.com/SergeyFrolov/gotapdance/tapdance"
 )
 
-var td_proxy *tapdance.TapdanceProxy
+var td_proxy *tdproxy.TapDanceProxy
 var buffer bytes.Buffer
 var b = make([]byte, 1048576)
 
 func NewDecoyProxy(listenPort int) (err error) {
 
-	tapdance.Logger.Out = &buffer
-	tapdance.Logger.Level = logrus.InfoLevel
-	tapdance.Logger.Formatter = new(logrus.JSONFormatter)
-	td_proxy = tapdance.NewTapdanceProxy(listenPort)
+	tapdance.Logger().Out = &buffer
+	tapdance.Logger().Level = logrus.InfoLevel
+	tapdance.Logger().Formatter = new(logrus.JSONFormatter)
+	td_proxy = tdproxy.NewTapDanceProxy(listenPort)
 	if td_proxy == nil {
 		err = errors.New("Unable to initialize Proxy")
 	}
@@ -41,7 +42,7 @@ func Listen() (err error) {
 	if td_proxy == nil {
 		err = errors.New("Proxy is not initialized")
 	} else {
-		err = td_proxy.Listen()
+		err = td_proxy.ListenAndServe()
 	}
 	return
 }
@@ -68,7 +69,7 @@ func IsListening() (listening bool) {
 	if td_proxy == nil {
 		listening = false
 	} else {
-		if td_proxy.State == tapdance.TD_LISTENING {
+		if td_proxy.State == tdproxy.ProxyStateListening {
 			listening = true
 		} else {
 			listening = false

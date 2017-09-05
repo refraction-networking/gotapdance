@@ -1,3 +1,5 @@
+// +build darwin linux windows
+
 package main
 
 import (
@@ -7,7 +9,7 @@ import (
 	"golang.org/x/mobile/exp/sprite"
 	"golang.org/x/mobile/exp/sprite/clock"
 
-	"github.com/SergeyFrolov/gotapdance/tapdance"
+	"github.com/SergeyFrolov/gotapdance/tdproxy"
 )
 
 const (
@@ -117,8 +119,8 @@ func (s *MainScene) OnTouch(event_x float32, event_y float32) {
 			tapdanceProxy = nil
 		} else {
 			proxyLaunched = true
-			tapdanceProxy = tapdance.NewTapdanceProxy(10500)
-			go tapdanceProxy.Listen()
+			tapdanceProxy = tdproxy.NewTapDanceProxy(10500)
+			go tapdanceProxy.ListenAndServe()
 		}
 	} else if event_x > s.infoButtonX && event_x < s.infoButtonX+iconWidth &&
 		event_y > s.infoButtonY && event_y < s.infoButtonY+iconHeight {

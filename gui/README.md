@@ -1,9 +1,7 @@
 # This subpackage is garbage
 Here be dragons.
-This subpackage is not updated and kept here for history:
-pure Golang GUI is not a viable option as of 2016.
-It would've had bugs, if it worked.
-You were warned.
+This subpackage is not maintain and kept here for history:
+pure Golang GUI is not a viable option as of 2016.  
 # Whatever, how do I build the garbage?
 ## Install egl libraries:
 On Ubuntu:

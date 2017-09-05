@@ -1,5 +1,3 @@
-// TODO: copyright
-
 // +build darwin linux windows
 
 package main
@@ -23,7 +21,7 @@ import (
 	"golang.org/x/mobile/exp/sprite/clock"
 	"golang.org/x/mobile/exp/sprite/glsprite"
 
-	"github.com/SergeyFrolov/gotapdance/tapdance"
+	"github.com/SergeyFrolov/gotapdance/tdproxy"
 )
 
 var (
@@ -47,7 +45,7 @@ var (
 	textLoremTex      sprite.SubTex
 
 	proxyLaunched bool
-	tapdanceProxy *tapdance.TapdanceProxy
+	tapdanceProxy *tdproxy.TapDanceProxy
 )
 
 type arrangerFunc func(e sprite.Engine, n *sprite.Node, t clock.Time)
