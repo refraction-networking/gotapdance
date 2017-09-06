@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/SergeyFrolov/gotapdance.svg?branch=master)](https://travis-ci.org/sergeyfrolov/gotapdance)
+[![Build Status](https://travis-ci.org/sergeyfrolov/gotapdance.svg?branch=master)
 # Build
 ## Download Golang and TapDance and dependencies
 1. Install [Golang](https://golang.org/dl/) (tested against 1.7 versions), set GOPATH:
