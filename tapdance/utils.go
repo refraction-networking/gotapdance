@@ -240,9 +240,9 @@ func printHex(byteArray []byte, name string) {
 	fmt.Println("]")
 }
 
-func maxInt(a, b int) int {
+func minInt(a, b int) int {
 	if a > b {
-		return a
+		return b
 	}
-	return b
+	return a
 }

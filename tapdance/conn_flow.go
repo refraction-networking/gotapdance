@@ -176,7 +176,7 @@ func (flowConn *TapdanceFlowConn) spawnWriterEngine() {
 				}
 				Logger().Debugf("%s WriterEngine: writing\n%s", flowConn.idStr(), hex.Dump(b))
 
-				if cs := maxInt(canSend(), int(^int16(0))); idxToSend-bytesSent > cs {
+				if cs := minInt(canSend(), int(maxInt16)); idxToSend-bytesSent > cs {
 					// just reconnected and still can't send: time to chunk
 					idxToSend = bytesSent + cs
 				}
