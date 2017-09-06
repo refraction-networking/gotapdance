@@ -11,6 +11,7 @@ sudo: required
 dist: trusty
 
 install:
+  - go get -t ./...
   - go get github.com/golang/lint/golint
   # Install gometalinter and certain linters
   - go get github.com/alecthomas/gometalinter
