@@ -4,20 +4,60 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 )
 
+type TestRandReader struct{}
+
+func (z TestRandReader) Read(b []byte) (n int, err error) {
+	for i := range b {
+		b[i] = 4 // chosen by fair dice roll
+	}
+
+	return len(b), nil
+}
+
+var testRandReader TestRandReader
+
 func TestObfuscate(t *testing.T) {
-	for i := 0; i < 1; i++ {
-		var randStr []byte = make([]byte, 186)
-		rand.Read(randStr)
-		obfuscated, err := obfuscateTag(randStr, *Assets().GetPubkey())
-		if err != nil {
-			t.Fatalf("Error: %v\n", err)
-		} else {
-			printHex(obfuscated, "obfuscated")
+	tag := []byte{247, 20, 77, 35, 144, 14, 9, 150, 39, 129, 27, 186, 173, 52, 160, 245, 185,
+		104, 186, 237, 127, 61, 217, 235, 40, 126, 189, 122, 132, 22, 194, 228, 104, 246,
+		6, 227, 87, 154, 209, 142, 128, 28, 104, 119, 203, 156, 239, 202, 63, 158, 98, 72,
+		223, 122, 113, 220, 252, 30, 125, 11, 38, 240, 244, 39, 209, 221, 33, 42, 100, 50,
+		225, 8, 150, 249, 192, 189, 65, 52, 200, 217, 250, 134, 72, 94, 189, 14, 159, 222,
+		94, 91, 179, 98, 131, 228, 227, 86, 213, 43, 203, 11, 114, 9, 162, 33, 32, 242, 82,
+		216, 167, 113, 216, 200, 117, 178, 135, 208, 209, 205, 120, 67, 131, 125, 171, 54,
+		29, 90, 96, 52, 45, 202, 140, 64, 45, 130, 227, 56, 70, 131, 25, 169, 41, 101, 70,
+		120, 171, 130, 187, 108, 140, 250, 71, 179, 178, 189, 122, 165, 138, 12, 146, 112,
+		66, 71, 204, 45, 160, 115, 255, 249, 40, 123, 48, 96, 0, 202, 172, 248, 208, 229,
+		210, 91, 245, 125, 47, 38, 124, 8}
+	obfuscatedRef := []byte{3, 40, 135, 68, 129, 74, 207, 209, 133, 234, 68, 208, 180, 131, 4,
+		158, 228, 29, 180, 150, 39, 71, 210, 214, 44, 197, 31, 194, 58, 84, 103, 28, 165,
+		94, 112, 81, 194, 103, 215, 121, 19, 150, 133, 43, 212, 227, 153, 16, 29, 108, 102,
+		48, 131, 95, 104, 151, 38, 59, 84, 18, 59, 198, 35, 159, 181, 149, 139, 249, 237,
+		89, 205, 85, 109, 156, 130, 69, 164, 145, 184, 85, 61, 9, 30, 73, 186, 52, 201, 179,
+		170, 117, 225, 48, 122, 225, 121, 3, 71, 133, 40, 76, 17, 56, 41, 21, 173, 56, 134,
+		117, 25, 139, 123, 47, 182, 138, 252, 243, 239, 143, 127, 218, 203, 73, 75, 6, 79,
+		113, 217, 0, 44, 248, 226, 110, 81, 34, 69, 66, 15, 112, 133, 130, 118, 64, 217, 44,
+		19, 14, 34, 84, 124, 154, 65, 13, 118, 117, 160, 66, 56, 147, 18, 116, 153, 101, 90,
+		126, 107, 105, 5, 7, 109, 46, 127, 154, 255, 232, 97, 96, 192, 207, 94, 193, 56,
+		232, 66, 199, 189, 30, 51, 66, 133, 187, 173, 75, 216, 194, 59, 189, 78, 123, 79,
+		182, 177, 67, 92, 210, 96, 177, 142, 54, 182, 16, 58, 12, 106, 224, 28, 232, 241,
+		241, 228, 163, 211, 99, 83, 233, 176, 50, 166, 173, 106, 129, 52, 148, 188, 240}
+	pubkey := []byte{180, 112, 102, 188, 57, 13, 38, 5, 204, 19, 88, 28, 73, 110, 169, 149, 203,
+		140, 250, 223, 0, 166, 73, 5, 37, 9, 239, 74, 200, 165, 26, 7}
+
+	oldReader := rand.Reader
+	defer func() { rand.Reader = oldReader }()
+	rand.Reader = testRandReader
+	obfuscated, err := obfuscateTag(tag, pubkey)
+	if err != nil {
+		t.Fatalf("Error: %v\n", err)
+	}
+	for i, _ := range obfuscated {
+		if obfuscatedRef[i] != obfuscated[i] {
+			t.Fatalf("Obfuscated tag expected: %s. Got: %s\n", obfuscatedRef, obfuscated)
 		}
 	}
 }
@@ -34,24 +74,18 @@ func TestAES_GCM_EncryptDecrypt(t *testing.T) {
 	}
 	rePlaintext, err := AesGcmDecrypt(cryptotext, key, iv)
 
-	printHex(iv, "iv")
-	printHex(key, "key")
-	printHex(plaintext, "plaintext")
-	printHex(rePlaintext, "re_plaintext")
-	printHex(cryptotext, "cryptotext")
-
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
 
 	if strings.Compare(string(plaintext), string(rePlaintext)) != 0 {
-		fmt.Println("Decrypt(Encrypt(text)) != text")
-		t.Fail()
+		t.Fatalf("Decrypted text differs from original!\nDecrypt(Encrypt(text)): %s\ntext: %s\n",
+			hex.Dump(rePlaintext), hex.Dump(plaintext))
 	}
 
 	if strings.Compare(string(cryptotext), string(expectedCryptotext)) != 0 {
-		fmt.Println("Encrypt(text) != expected_cryptotext")
-		t.Fail()
+		t.Fatalf("Encrypted text differs from expected!\nExpected: %s\nGot: %s\n",
+			hex.Dump(expectedCryptotext), hex.Dump(cryptotext))
 	}
 
 }
@@ -62,15 +96,12 @@ func TestReverseEncrypt(t *testing.T) {
 	result := reverseEncrypt(tag, keystream)
 	expected_result := "FF^RrnxsSO|sHknCNA`pOpJ`OUN|@@pjEVygP{`SFJuQyNbakMFYXV[uJReyipbbKSO@EbDiCoqhWw\\jeE|`UuN^AkUJHgwYMUGCeOInHci{o]ITTrfyrg^ao\\ddCcNVbRK]Q}guYre~GHMftRlB_fJfCfz^HAklOgUPBRGnuZwvf_BcMxBz}IMv^bujvTfUfy~Ja_zSfSqCweileGpVbXE{}QvfugUCpgjA^EiylGVVE}owA}LrPdf"
 	if strings.Compare(expected_result, result) != 0 {
-		fmt.Println("expected_result != result")
-		fmt.Println("result: ", result)
-		fmt.Println("expected_result: ", expected_result)
-
-		t.Fail()
+		t.Fatalf("Expected encryption differs from result!\nExpected: %s\nGot: %s\n",
+			expected_result, result)
 	}
 }
 
-func TestGetRandInt(t *testing.T) {
+func dontTestGetRandInt(t *testing.T) {
 	n_values := 20000
 	results := make([]int, n_values)
 	fmt.Println("Generating", n_values, " values between 0 and 14")
@@ -82,10 +113,9 @@ func TestGetRandInt(t *testing.T) {
 	}
 	// fmt.Println("Values are:", results)
 	fmt.Println("Average:", float64(avg)/float64(n_values))
-
 }
 
-func TestRandString(t *testing.T) {
+func dontTestRandString(t *testing.T) {
 	const n_values = 20000
 	const stringsToPrint = 10
 	for i := 0; i < n_values; i++ {

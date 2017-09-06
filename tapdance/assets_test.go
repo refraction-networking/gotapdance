@@ -9,9 +9,20 @@ import (
 	"path"
 	"reflect"
 	"testing"
+	"bufio"
 )
 
 func TestAssets_Decoys(t *testing.T) {
+	var b bytes.Buffer
+	logHolder := bufio.NewWriter(&b)
+	oldLoggerOut := Logger().Out
+	Logger().Out = logHolder
+	defer func(){
+		Logger().Out = oldLoggerOut
+		if t.Failed() {
+			fmt.Printf("TapDance log was:\n%s\n", logHolder)
+		}
+	}()
 	oldpath := Assets().path
 	Assets().saveClientConf()
 	dir1, err := ioutil.TempDir("/tmp/", "decoy1")
@@ -41,7 +52,7 @@ func TestAssets_Decoys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !Assets().IsDecoyInList("19.21.23.42", "blahblahbl.ah") {
+	if !Assets().IsDecoyInList(*initTLSDecoySpec("19.21.23.42", "blahblahbl.ah")) {
 		t.Fatal("Decoy 19.21.23.42(blahblahbl.ah) is NOT in Decoy List!")
 	}
 	Assets().SetAssetsDir(dir2)
@@ -49,10 +60,10 @@ func TestAssets_Decoys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if Assets().IsDecoyInList("19.21.23.42", "blahblahbl.ah") {
+	if Assets().IsDecoyInList(*initTLSDecoySpec("19.21.23.42", "blahblahbl.ah")) {
 		t.Fatal("Decoy 19.21.23.42(blahblahbl.ah) is in Decoy List!")
 	}
-	if !Assets().IsDecoyInList("11.22.33.44", "what.is.up") {
+	if !Assets().IsDecoyInList(*initTLSDecoySpec("11.22.33.44", "what.is.up")) {
 		t.Fatal("Decoy 11.22.33.44(what.is.up) is NOT in Decoy List!")
 	}
 	if !reflect.DeepEqual(Assets().config.DecoyList.TlsDecoys, testDecoys2) {
@@ -92,10 +103,10 @@ func TestAssets_Decoys(t *testing.T) {
 		fmt.Println("testDecoys1:", testDecoys1)
 		t.Fail()
 	}
-	if !Assets().IsDecoyInList("19.21.23.42", "blahblahbl.ah") {
+	if !Assets().IsDecoyInList(*initTLSDecoySpec("19.21.23.42", "blahblahbl.ah")) {
 		t.Fatal("Decoy 19.21.23.42(blahblahbl.ah) is NOT in Decoy List!")
 	}
-	if Assets().IsDecoyInList("11.22.33.44", "what.is.up") {
+	if Assets().IsDecoyInList(*initTLSDecoySpec("11.22.33.44", "what.is.up")) {
 		t.Fatal("Decoy 11.22.33.44(what.is.up) is in Decoy List!")
 	}
 	for i := 0; i < 10; i++ {
@@ -117,10 +128,19 @@ func TestAssets_Decoys(t *testing.T) {
 	os.Remove(dir1)
 	os.Remove(dir2)
 	Assets().SetAssetsDir(oldpath)
-	fmt.Println("TestAssets_Decoys OK")
 }
 
 func TestAssets_Pubkey(t *testing.T) {
+	var b bytes.Buffer
+	logHolder := bufio.NewWriter(&b)
+	oldLoggerOut := Logger().Out
+	Logger().Out = logHolder
+	defer func(){
+		Logger().Out = oldLoggerOut
+		if t.Failed() {
+			fmt.Printf("TapDance log was:\n%s\n", logHolder)
+		}
+	}()
 	initPubKey := func(defaultKey []byte) PubKey {
 		defualtKeyType := KeyType_AES_GCM_128
 		return PubKey{Key: defaultKey, Type: &defualtKeyType}
@@ -173,5 +193,4 @@ func TestAssets_Pubkey(t *testing.T) {
 	os.Remove(dir1)
 	os.Remove(dir2)
 	Assets().SetAssetsDir(oldpath)
-	fmt.Println("TestAssets_Pubkey OK")
 }
