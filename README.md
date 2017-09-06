@@ -44,3 +44,13 @@ If you have outdated versions of libraries above you might want to do `go get -u
    * [Golang Bindings](proxybind)
 
  * [Pure Golang cross-platform GUI](gui) – ugly, not maintaed, lives as PoC. This code compiles virtually everywhere (tested on Ubuntu and Android, but supposed to work on iOS and Windows PC as well)
+ 
+ # Links
+ 
+ [Refraction Networking](https://refraction.network) is an umberlla term for the family of similarly working technnologies.
+ 
+ TapDance station code released for FOCI'17 on github: [refraction-networking/tapdance](https://github.com/refraction-networking/tapdance) 
+ 
+ Original 2014 paper: ["TapDance: End-to-Middle Anticensorship without Flow Blocking"](https://ericw.us/trow/tapdance-sec14.pdf)
+ 
+ Newer(2017) paper that shows TapDance working at high-scale: ["An ISP-Scale Deployment of TapDance"](https://sfrolov.io/papers/foci17-paper-frolov_0.pdf)
