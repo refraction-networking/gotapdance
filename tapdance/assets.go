@@ -152,7 +152,7 @@ func (a *assets) readConfigs() {
 	if err != nil {
 		Logger().Warningln("Failed to read root ca file: " + err.Error())
 	} else {
-		Logger().Infoln("X.509 root CAs succesfully read from " + rootsFilename)
+		Logger().Infoln("X.509 root CAs successfully read from " + rootsFilename)
 	}
 
 	clientConfFilename := path.Join(a.path, a.filenameClientConf)
@@ -160,7 +160,7 @@ func (a *assets) readConfigs() {
 	if err != nil {
 		Logger().Warningln("Failed to read ClientConf file: " + err.Error())
 	} else {
-		Logger().Infoln("Client config succesfully read from " + clientConfFilename)
+		Logger().Infoln("Client config successfully read from " + clientConfFilename)
 	}
 
 	pubkeyFilename := path.Join(a.path, a.filenameStationPubkey)
@@ -168,7 +168,7 @@ func (a *assets) readConfigs() {
 	if err != nil {
 		Logger().Debugln("Failed to read pubkey file: " + err.Error())
 	} else {
-		Logger().Infoln("Pubkey succesfully read from " + pubkeyFilename)
+		Logger().Infoln("Pubkey successfully read from " + pubkeyFilename)
 	}
 }
 

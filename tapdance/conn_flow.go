@@ -497,7 +497,7 @@ func (flowConn *TapdanceFlowConn) waitForYieldConfirmation() error {
 	timeout := time.After(20 * time.Second)
 	select {
 	case <-timeout:
-		return errors.New("yeild confirmation timeout")
+		return errors.New("yield confirmation timeout")
 	case <-flowConn.yieldConfirmed:
 		Logger().Infoln(flowConn.idStr() +
 			" Successfully received yield confirmation from reader flow!")

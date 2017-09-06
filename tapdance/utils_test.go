@@ -55,7 +55,7 @@ func TestObfuscate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error: %v\n", err)
 	}
-	for i, _ := range obfuscated {
+	for i := range obfuscated {
 		if obfuscatedRef[i] != obfuscated[i] {
 			t.Fatalf("Obfuscated tag expected: %s. Got: %s\n", obfuscatedRef, obfuscated)
 		}
@@ -131,4 +131,18 @@ func dontTestRandString(t *testing.T) {
 
 		}
 	}
+}
+
+func printHex(byteArray []byte, name string) {
+	fmt.Print(name, ": [")
+	for i := 0; i < len(byteArray); i++ {
+		if byteArray[i] >= 0x10 {
+			//fmt.Printf("%x", byte_array[i])
+			fmt.Printf("%v, ", byteArray[i])
+		} else {
+			//	fmt.Printf("0%x", byte_array[i])
+			fmt.Printf("%v, ", byteArray[i])
+		}
+	}
+	fmt.Println("]")
 }

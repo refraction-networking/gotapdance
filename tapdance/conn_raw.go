@@ -411,7 +411,6 @@ func (tdRaw *tdRawConn) readProto() (msg StationToClient, err error) {
 	var readBytes int
 	var readBytesTotal uint32 // both header and body
 	headerSize := uint32(2)
-	totalBytesToRead := headerSize // first -- just header, then +body
 
 	var msgLen uint32 // just the body(e.g. raw data or protobuf)
 	var outerProtoMsgType MsgType
@@ -452,10 +451,11 @@ func (tdRaw *tdRawConn) readProto() (msg StationToClient, err error) {
 		msgLen = binary.BigEndian.Uint32(headerBuffer[2:6])
 	}
 	if outerProtoMsgType == msg_raw_data {
-		err = errors.New("Recieved data message in uninitialized flow")
+		err = errors.New("Received data message in uninitialized flow")
+		return
 	}
 
-	totalBytesToRead = headerSize + msgLen
+	totalBytesToRead := headerSize + msgLen
 	read_buffer := make([]byte, msgLen)
 
 	// Get the message itself

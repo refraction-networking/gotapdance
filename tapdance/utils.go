@@ -9,8 +9,6 @@ import (
 	"golang.org/x/crypto/curve25519"
 	mrand "math/rand"
 
-	"fmt"
-
 	"bytes"
 	"encoding/binary"
 	"errors"
@@ -224,20 +222,6 @@ func reverseEncrypt(ciphertext []byte, keyStream []byte) (plaintext string) {
 		plaintext += string(pd)
 	}
 	return
-}
-
-func printHex(byteArray []byte, name string) {
-	fmt.Print(name, ": [")
-	for i := 0; i < len(byteArray); i++ {
-		if byteArray[i] >= 0x10 {
-			//fmt.Printf("%x", byte_array[i])
-			fmt.Printf("%v, ", byteArray[i])
-		} else {
-			//	fmt.Printf("0%x", byte_array[i])
-			fmt.Printf("%v, ", byteArray[i])
-		}
-	}
-	fmt.Println("]")
 }
 
 func minInt(a, b int) int {

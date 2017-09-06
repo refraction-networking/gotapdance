@@ -1,6 +1,7 @@
 package tapdance
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io/ioutil"
@@ -9,7 +10,6 @@ import (
 	"path"
 	"reflect"
 	"testing"
-	"bufio"
 )
 
 func TestAssets_Decoys(t *testing.T) {
@@ -17,10 +17,10 @@ func TestAssets_Decoys(t *testing.T) {
 	logHolder := bufio.NewWriter(&b)
 	oldLoggerOut := Logger().Out
 	Logger().Out = logHolder
-	defer func(){
+	defer func() {
 		Logger().Out = oldLoggerOut
 		if t.Failed() {
-			fmt.Printf("TapDance log was:\n%s\n", logHolder)
+			fmt.Printf("TapDance log was:\n%v\n", logHolder)
 		}
 	}()
 	oldpath := Assets().path
@@ -135,10 +135,10 @@ func TestAssets_Pubkey(t *testing.T) {
 	logHolder := bufio.NewWriter(&b)
 	oldLoggerOut := Logger().Out
 	Logger().Out = logHolder
-	defer func(){
+	defer func() {
 		Logger().Out = oldLoggerOut
 		if t.Failed() {
-			fmt.Printf("TapDance log was:\n%s\n", logHolder)
+			fmt.Printf("TapDance log was:\n%v\n", logHolder)
 		}
 	}()
 	initPubKey := func(defaultKey []byte) PubKey {
