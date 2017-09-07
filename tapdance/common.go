@@ -2,7 +2,7 @@ package tapdance
 
 import (
 	"errors"
-	"github.com/zmap/zcrypto/tls"
+	"github.com/refraction-networking/utls"
 	"math"
 	"strconv"
 	"time"
@@ -95,28 +95,38 @@ var (
 )
 
 // List of actually supported ciphers(not a list of offered ciphers!)
-// Essentially all AES GCM ciphers, except for ANON and PSK
-// ANON are too dangerous in our setting
-// PSK might actually work, but are out of scope
-// Maybe also get rid of DSS?
+// Essentially all working AES_GCM_128 ciphers
 var TDSupportedCiphers = []uint16{
 	tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-	tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-	tls.TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256,
-	tls.TLS_ECDH_ECDSA_WITH_AES_256_GCM_SHA384,
 	tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-	tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-	tls.TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256,
 	tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
-	tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
-	tls.TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
-	tls.TLS_DHE_RSA_WITH_AES_256_GCM_SHA384,
-	tls.TLS_DH_RSA_WITH_AES_128_GCM_SHA256,
-	tls.TLS_DH_RSA_WITH_AES_256_GCM_SHA384,
-	tls.TLS_DHE_DSS_WITH_AES_128_GCM_SHA256,
-	tls.TLS_DHE_DSS_WITH_AES_256_GCM_SHA384,
-	tls.TLS_DH_DSS_WITH_AES_128_GCM_SHA256,
-	tls.TLS_DH_DSS_WITH_AES_256_GCM_SHA384,
+}
+
+func forceSupportedCiphersFirst(suites []uint16) []uint16 {
+	swapSuites := func(i, j int) {
+		if i == j {
+			return
+		}
+		tmp := suites[j]
+		suites[j] = suites[i]
+		suites[i] = tmp
+	}
+	lastSupportedCipherIdx := 0
+	for i := range suites {
+		for _, supportedS := range TDSupportedCiphers {
+			if suites[i] == supportedS {
+				swapSuites(i, lastSupportedCipherIdx)
+				lastSupportedCipherIdx += 1
+			}
+		}
+	}
+	alwaysSuggestedSuite := tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+	for i := range suites {
+		if suites[i] == alwaysSuggestedSuite {
+			return suites
+		}
+	}
+	return append([]uint16{alwaysSuggestedSuite}, suites[lastSupportedCipherIdx:]...)
 }
 
 // How much time to sleep on trying to connect to decoys to prevent overwhelming them

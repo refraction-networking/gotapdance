@@ -2,18 +2,18 @@ package tapdance
 
 import (
 	"bytes"
-	"crypto/cipher"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
-	"github.com/golang/protobuf/proto"
-	"github.com/zmap/zcrypto/tls"
 	"io"
 	"net"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/golang/protobuf/proto"
+	"github.com/refraction-networking/utls"
 )
 
 // Simply establishes TLS and TapDance connection.
@@ -21,7 +21,7 @@ import (
 // Knows about but doesn't keep track of timeout and upload limit
 type tdRawConn struct {
 	tcpConn closeWriterConn
-	tlsConn *tls.Conn
+	tlsConn *tls.UConn
 
 	flowId      uint64
 	sessionId   uint64
@@ -165,9 +165,10 @@ func (tdRaw *tdRawConn) tryDialOnce(expectedTransition S2C_Transition) (err erro
 		return false
 	}
 	if !cipherIsSupported(tdRaw.tlsConn.ConnectionState().CipherSuite) {
-		Logger().Errorf(tdRaw.idStr() + " decoy " + tdRaw.decoySpec.GetHostname() +
-			", offered unsupported cipher #" +
-			strconv.FormatUint(uint64(tdRaw.tlsConn.ConnectionState().CipherSuite), 10))
+		Logger().Errorf("%s decoy %s offered unsupported cipher %d\n Client ciphers: %#v\n",
+			tdRaw.idStr(), tdRaw.decoySpec.GetHostname(),
+			tdRaw.tlsConn.ConnectionState().CipherSuite,
+			tdRaw.tlsConn.HandshakeState.Hello.CipherSuites)
 		err = errors.New("Unsupported cipher.")
 		tdRaw.tlsConn.Close()
 		return err
@@ -247,7 +248,6 @@ func (tdRaw *tdRawConn) tryDialOnce(expectedTransition S2C_Transition) (err erro
 }
 
 func (tdRaw *tdRawConn) establishTLStoDecoy() (err error) {
-	config := getZtlsConfig("Firefox50", tdRaw.decoySpec.GetHostname())
 	var dialConn net.Conn
 	if tdRaw.customDialer != nil {
 		dialConn, err = tdRaw.customDialer("tcp", tdRaw.decoySpec.GetIpv4AddrStr())
@@ -261,6 +261,7 @@ func (tdRaw *tdRawConn) establishTLStoDecoy() (err error) {
 			return err
 		}
 	}
+	config := tls.Config{ServerName: tdRaw.decoySpec.GetHostname()}
 	if config.ServerName == "" {
 		// if SNI is unset -- try IP
 		config.ServerName, _, err = net.SplitHostPort(tdRaw.decoySpec.GetIpv4AddrStr())
@@ -271,7 +272,19 @@ func (tdRaw *tdRawConn) establishTLStoDecoy() (err error) {
 		Logger().Infoln(tdRaw.idStr() + ": SNI was nil. Setting it to" +
 			config.ServerName)
 	}
-	tdRaw.tlsConn = tls.Client(dialConn, &config)
+	tdRaw.tlsConn = tls.UClient(dialConn, &config, tls.HelloRandomizedNoALPN)
+	err = tdRaw.tlsConn.BuildHandshakeState()
+	if err != nil {
+		dialConn.Close()
+		return
+	}
+	tdRaw.tlsConn.HandshakeState.Hello.CipherSuites =
+		forceSupportedCiphersFirst(tdRaw.tlsConn.HandshakeState.Hello.CipherSuites)
+	tdRaw.tlsConn.MarshalClientHello()
+	if err != nil {
+		dialConn.Close()
+		return
+	}
 	err = tdRaw.tlsConn.Handshake()
 	if err != nil {
 		dialConn.Close()
@@ -282,19 +295,6 @@ func (tdRaw *tdRawConn) establishTLStoDecoy() (err error) {
 		return errors.New("dialConn is not a closeWriter")
 	}
 	tdRaw.tcpConn = closeWriter
-	return
-}
-
-// get current state of cipher and encrypt zeros to get keystream
-func (tdRaw *tdRawConn) getKeystream(length int) (keystream []byte, err error) {
-	zeros := make([]byte, length)
-
-	if servConnCipher, ok := tdRaw.tlsConn.OutCipher().(cipher.AEAD); ok {
-		keystream = servConnCipher.Seal(nil, tdRaw.tlsConn.OutSeq(), zeros, nil)
-		return
-	} else {
-		err = errors.New("Could not convert tlsConn.OutCipher to cipher.AEAD")
-	}
 	return
 }
 
@@ -322,7 +322,7 @@ func (tdRaw *tdRawConn) prepareTDRequest(handshakeType tdTagType) (string, error
 	// Generate initial TapDance request
 	buf := new(bytes.Buffer) // What we have to encrypt with the shared secret using AES
 
-	master_key := tdRaw.tlsConn.GetHandshakeLog().KeyMaterial.MasterSecret.Value
+	master_key := tdRaw.tlsConn.HandshakeState.MasterSecret
 
 	// write flags
 	flags := tdFlagUseTIL
@@ -333,8 +333,8 @@ func (tdRaw *tdRawConn) prepareTDRequest(handshakeType tdTagType) (string, error
 		return "", err
 	}
 	buf.Write(master_key[:])
-	buf.Write(tdRaw.serverRandom())
-	buf.Write(tdRaw.clientRandom())
+	buf.Write(tdRaw.tlsConn.HandshakeState.ServerHello.Random)
+	buf.Write(tdRaw.tlsConn.HandshakeState.Hello.Random)
 	buf.Write(tdRaw.remoteConnId[:]) // connection id for persistence
 
 	tag, err := obfuscateTag(buf.Bytes(), tdRaw.stationPubkey) // What we encode into the ciphertext
@@ -378,7 +378,7 @@ Content-Disposition: form-data; name=\"td.zip\"
 
 	keystreamOffset := len(httpTag)
 	keystreamSize := (len(tag)/3+1)*4 + keystreamOffset // we can't use first 2 bits of every byte
-	whole_keystream, err := tdRaw.getKeystream(keystreamSize)
+	whole_keystream, err := tdRaw.tlsConn.GetOutKeystream(keystreamSize)
 	if err != nil {
 		return httpTag, err
 	}
@@ -395,14 +395,6 @@ Content-Disposition: form-data; name=\"td.zip\"
 func (tdRaw *tdRawConn) idStr() string {
 	return "[Session " + strconv.FormatUint(tdRaw.sessionId, 10) + ", " +
 		"Flow " + strconv.FormatUint(tdRaw.flowId, 10) + tdRaw.strIdSuffix + "]"
-}
-
-func (tdRaw *tdRawConn) clientRandom() []byte {
-	return tdRaw.tlsConn.GetHandshakeLog().ClientHello.Random
-}
-
-func (tdRaw *tdRawConn) serverRandom() []byte {
-	return tdRaw.tlsConn.GetHandshakeLog().ServerHello.Random
 }
 
 // Simply reads and returns protobuf
