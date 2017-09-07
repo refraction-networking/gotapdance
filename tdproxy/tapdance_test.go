@@ -6,14 +6,14 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"github.com/sergeyfrolov/gotapdance/tapdance"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/url"
 	"os/exec"
 	"testing"
 	"time"
-	"github.com/sergeyfrolov/gotapdance/tapdance"
-	"net"
 )
 
 func asTestHandshakeLaunchProxy(t *testing.T) {
@@ -43,7 +43,6 @@ func asTestHandshakeLaunchProxy(t *testing.T) {
 		t.Fail()
 	}
 }
-
 
 func TestSendSeq(t *testing.T) {
 	buf := new(bytes.Buffer)
