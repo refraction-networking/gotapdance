@@ -21,4 +21,5 @@ install:
 
 script:
  - go test -race -v ./tapdance/
+ - go test -race -v ./tdproxy/
  - gometalinter --disable-all -E vet -E gofmt -E misspell -E ineffassign -E deadcode --tests ./tapdance/
