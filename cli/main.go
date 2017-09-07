@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/SergeyFrolov/gotapdance/tdproxy"
+	"github.com/sergeyfrolov/gotapdance/tdproxy"
 	"github.com/pkg/profile"
 	"os"
 )

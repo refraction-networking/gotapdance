@@ -9,7 +9,7 @@ import (
 	"golang.org/x/mobile/exp/sprite"
 	"golang.org/x/mobile/exp/sprite/clock"
 
-	"github.com/SergeyFrolov/gotapdance/tdproxy"
+	"github.com/sergeyfrolov/gotapdance/tdproxy"
 )
 
 const (

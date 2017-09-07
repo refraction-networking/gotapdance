@@ -3,7 +3,7 @@
 package tdproxy
 
 import (
-	"github.com/SergeyFrolov/gotapdance/tapdance"
+	"github.com/sergeyfrolov/gotapdance/tapdance"
 	"net"
 	"strconv"
 	"sync"

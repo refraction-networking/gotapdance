@@ -18,7 +18,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
-	"github.com/SergeyFrolov/bsbuffer"
+	"github.com/sergeyfrolov/bsbuffer"
 	"github.com/golang/protobuf/proto"
 	"io"
 	"net"

@@ -21,7 +21,7 @@ import (
 	"golang.org/x/mobile/exp/sprite/clock"
 	"golang.org/x/mobile/exp/sprite/glsprite"
 
-	"github.com/SergeyFrolov/gotapdance/tdproxy"
+	"github.com/sergeyfrolov/gotapdance/tdproxy"
 )
 
 var (
