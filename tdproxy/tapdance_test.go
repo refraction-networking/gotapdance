@@ -12,6 +12,8 @@ import (
 	"os/exec"
 	"testing"
 	"time"
+	"github.com/sergeyfrolov/gotapdance/tapdance"
+	"net"
 )
 
 func asTestHandshakeLaunchProxy(t *testing.T) {
@@ -42,6 +44,7 @@ func asTestHandshakeLaunchProxy(t *testing.T) {
 	}
 }
 
+
 func TestSendSeq(t *testing.T) {
 	buf := new(bytes.Buffer)
 	for i := 0; i < 8192; i++ {
@@ -56,7 +59,22 @@ func TestSendSeq(t *testing.T) {
 
 	tapdanceProxy := NewTapDanceProxy(10600)
 	go tapdanceProxy.ListenAndServe()
-	time.Sleep(10 * time.Second)
+	time.Sleep(2 * time.Second)
+
+	tapdance.AssetsFromDir("../assets/")
+	err := tapdance.Assets().SetGeneration(100500)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	tapdance1Hostname := "tapdance1.freeaeskey.xyz"
+	tapdance1Ipv4 := binary.BigEndian.Uint32(net.ParseIP("192.122.190.104").To4())
+	tapdance1Decoy := tapdance.TLSDecoySpec{Hostname: &tapdance1Hostname,
+		Ipv4Addr: &tapdance1Ipv4}
+	err = tapdance.Assets().SetDecoys([]*tapdance.TLSDecoySpec{&tapdance1Decoy})
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+
 	proxyUrl, err := url.Parse("http://127.0.0.1:10600")
 	if err != nil {
 		t.Fatalf(err.Error())
