@@ -280,7 +280,7 @@ func (tdRaw *tdRawConn) establishTLStoDecoy() (err error) {
 	}
 	tdRaw.tlsConn.HandshakeState.Hello.CipherSuites =
 		forceSupportedCiphersFirst(tdRaw.tlsConn.HandshakeState.Hello.CipherSuites)
-	tdRaw.tlsConn.MarshalClientHello()
+	err = tdRaw.tlsConn.MarshalClientHello()
 	if err != nil {
 		dialConn.Close()
 		return
