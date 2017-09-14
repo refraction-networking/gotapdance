@@ -1,10 +1,10 @@
 package tapdance
 
 import (
+	"crypto/x509"
 	"encoding/binary"
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
-	"github.com/zmap/zcrypto/x509"
 	"io/ioutil"
 	"net"
 	"os"
