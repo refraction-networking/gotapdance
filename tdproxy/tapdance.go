@@ -53,7 +53,7 @@ func NewTapDanceProxy(listenPort int) *TapDanceProxy {
 	proxy.connections.m = make(map[uint64]*tapDanceFlow)
 	proxy.State = ProxyStateInitialized
 
-	Logger.Infof("Succesfully initialized new Tapdance Proxy")
+	Logger.Infof("Successfully initialized new Tapdance Proxy")
 	Logger.Debugf("%#v\n", proxy)
 
 	return proxy
