@@ -20,7 +20,8 @@ func TestAssets_Decoys(t *testing.T) {
 	defer func() {
 		Logger().Out = oldLoggerOut
 		if t.Failed() {
-			fmt.Printf("TapDance log was:\n%v\n", logHolder)
+			logHolder.Flush()
+			fmt.Printf("TapDance log was:\n%s\n", b.String())
 		}
 	}()
 	oldpath := Assets().path
@@ -138,7 +139,8 @@ func TestAssets_Pubkey(t *testing.T) {
 	defer func() {
 		Logger().Out = oldLoggerOut
 		if t.Failed() {
-			fmt.Printf("TapDance log was:\n%v\n", logHolder)
+			logHolder.Flush()
+			fmt.Printf("TapDance log was:\n%s\n", b.String())
 		}
 	}()
 	initPubKey := func(defaultKey []byte) PubKey {
