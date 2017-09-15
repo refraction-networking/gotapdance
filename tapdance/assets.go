@@ -43,15 +43,18 @@ func initTLSDecoySpec(ip string, sni string) *TLSDecoySpec {
 	return &tlsDecoy
 }
 
-// First call to Assets or AssetsFromDir sets the path.
+// Assets() is an access point to asset managing singleton.
+// First access to singleton sets path. Assets(), if called
+// before AssetsFromDir() sets path to "./assets/"
 func Assets() *assets {
 	_initAssets := func() { initAssets("./assets/") }
 	assetsOnce.Do(_initAssets)
 	return assetsInstance
 }
 
-// First call to Assets or AssetsFromDir sets the path.
-// Thus, It is safe to access assets via default Assets() function afterwards.
+// AssetsFromDir() is an access point to asset managing singleton.
+// First call to Assets() or AssetsFromDir() sets the path. Thus,
+// it is safe to access assets via default Assets() function afterwards.
 func AssetsFromDir(path string) *assets {
 	_initAssets := func() { initAssets(path) }
 	assetsOnce.Do(_initAssets)

@@ -12,7 +12,6 @@ var sessionsTotal CounterUint64
 type Dialer struct {
 	// TODO?: add Context support(not as a field, it has to "flow through program like river")
 	// https://medium.com/@cep21/how-to-correctly-use-context-context-in-go-1-7-8f2c0fafdf39
-	// TODO?: include a factory of raw async TapDance connections that can be used on demand?
 	SplitFlows bool
 	TcpDialer  func(string, string) (net.Conn, error)
 }

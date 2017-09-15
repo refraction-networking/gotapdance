@@ -85,11 +85,11 @@ func TestAssets_Decoys(t *testing.T) {
 
 	for i := 0; i < 10; i++ {
 		_sni, addr := Assets().GetDecoyAddress()
-		host_addr, _, err := net.SplitHostPort(addr)
+		hostAddr, _, err := net.SplitHostPort(addr)
 		if err != nil {
 			t.Fatal("Corrupted addr:", addr, ". Error:", err.Error())
 		}
-		decoyServ := initTLSDecoySpec(host_addr, _sni)
+		decoyServ := initTLSDecoySpec(hostAddr, _sni)
 		if !decoyInList(decoyServ, Assets().config.DecoyList.TlsDecoys) {
 			fmt.Println("decoyServ not in List!")
 			fmt.Println("decoyServ:", decoyServ)
@@ -112,11 +112,11 @@ func TestAssets_Decoys(t *testing.T) {
 	}
 	for i := 0; i < 10; i++ {
 		_sni, addr := Assets().GetDecoyAddress()
-		host_addr, _, err := net.SplitHostPort(addr)
+		hostAddr, _, err := net.SplitHostPort(addr)
 		if err != nil {
 			t.Fatal("Corrupted addr:", addr, ". Error:", err.Error())
 		}
-		decoyServ := initTLSDecoySpec(host_addr, _sni)
+		decoyServ := initTLSDecoySpec(hostAddr, _sni)
 		if !decoyInList(decoyServ, Assets().config.DecoyList.TlsDecoys) {
 			fmt.Println("decoyServ not in List!")
 			fmt.Println("decoyServ:", decoyServ)

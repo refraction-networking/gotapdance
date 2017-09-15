@@ -2,11 +2,14 @@ package tapdance
 
 import "sync"
 
+// Goroutine-safe uint64 counter.
+// Wraps, if underflows/overflows.
 type CounterUint64 struct {
 	sync.Mutex
 	value uint64
 }
 
+// Inc() increases the counter and returns resulting value
 func (c *CounterUint64) Inc() uint64 {
 	c.Lock()
 	defer c.Unlock()
@@ -19,6 +22,7 @@ func (c *CounterUint64) Inc() uint64 {
 	return c.value
 }
 
+// GetAndInc() returns current value and then increases the counter
 func (c *CounterUint64) GetAndInc() uint64 {
 	c.Lock()
 	defer c.Unlock()
@@ -31,6 +35,7 @@ func (c *CounterUint64) GetAndInc() uint64 {
 	return retVal
 }
 
+// Dec() decrements the counter and returns resulting value
 func (c *CounterUint64) Dec() uint64 {
 	c.Lock()
 	defer c.Unlock()
@@ -42,6 +47,7 @@ func (c *CounterUint64) Dec() uint64 {
 	return c.value
 }
 
+// Get() returns current counter value
 func (c *CounterUint64) Get() (value uint64) {
 	c.Lock()
 	defer c.Unlock()

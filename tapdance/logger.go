@@ -17,6 +17,7 @@ func (f *formatter) Format(entry *logrus.Entry) ([]byte, error) {
 var logrusLogger *logrus.Logger
 var initLoggerOnce sync.Once
 
+// Logger() is an access point for TapDance-wide logger
 func Logger() *logrus.Logger {
 	initLoggerOnce.Do(func() {
 		logrusLogger = logrus.New()

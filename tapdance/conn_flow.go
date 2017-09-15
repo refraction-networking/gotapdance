@@ -183,7 +183,7 @@ func (flowConn *TapdanceFlowConn) spawnWriterEngine() {
 
 				// TODO: outerProto limit on data size
 				bufToSend := b[bytesSent:idxToSend]
-				bufToSendWithHeader := getMsgWithHeader(msg_raw_data, bufToSend) // TODO: optimize!
+				bufToSendWithHeader := getMsgWithHeader(msgRawData, bufToSend) // TODO: optimize!
 				headerSize := len(bufToSendWithHeader) - len(bufToSend)
 
 				n, err := flowConn.tdRaw.tlsConn.Write(bufToSendWithHeader)
@@ -221,7 +221,7 @@ func (flowConn *TapdanceFlowConn) spawnReaderEngine() {
 			continue // wtf?
 		}
 		switch msgType {
-		case msg_raw_data:
+		case msgRawData:
 			buf, err := flowConn.readRawData(msgLen)
 			if err != nil {
 				flowConn.closeWithErrorOnce(err)
@@ -234,7 +234,7 @@ func (flowConn *TapdanceFlowConn) spawnReaderEngine() {
 				flowConn.closeWithErrorOnce(err)
 				return
 			}
-		case msg_protobuf:
+		case msgProtobuf:
 			msg, err := flowConn.readProtobuf(msgLen)
 			if err != nil {
 				flowConn.closeWithErrorOnce(err)
@@ -314,7 +314,7 @@ func (flowConn *TapdanceFlowConn) readProtobuf(msgLen int) (msg StationToClient,
 	return
 }
 
-func (flowConn *TapdanceFlowConn) readHeader() (msgType MsgType, msgLen int, err error) {
+func (flowConn *TapdanceFlowConn) readHeader() (msgType msgType, msgLen int, err error) {
 	// For each message we first read outer protocol header to see if it's protobuf or data
 
 	var readBytes int
@@ -334,16 +334,16 @@ func (flowConn *TapdanceFlowConn) readHeader() (msgType MsgType, msgLen int, err
 	}
 
 	// Get TIL
-	typeLen := Uint16toInt16(binary.BigEndian.Uint16(flowConn.headerBuf[0:2]))
+	typeLen := uint16toInt16(binary.BigEndian.Uint16(flowConn.headerBuf[0:2]))
 	if typeLen < 0 {
-		msgType = msg_raw_data
+		msgType = msgRawData
 		msgLen = int(-typeLen)
 	} else if typeLen > 0 {
-		msgType = msg_protobuf
+		msgType = msgProtobuf
 		msgLen = int(typeLen)
 	} else {
 		// protobuf with size over 32KB, not fitting into 2-byte TL
-		msgType = msg_protobuf
+		msgType = msgProtobuf
 		headerSize += 4
 		for readBytesTotal < headerSize {
 			readBytes, err = flowConn.tdRaw.tlsConn.Read(flowConn.headerBuf[readBytesTotal:headerSize])
@@ -612,6 +612,7 @@ func (flowConn *TapdanceFlowConn) RemoteAddr() net.Addr {
 	return flowConn.tdRaw.tlsConn.RemoteAddr()
 }
 
+// NetworkConn returns underlying tcp connection
 func (flowConn *TapdanceFlowConn) NetworkConn() net.Conn {
 	return flowConn.tdRaw.tcpConn
 }

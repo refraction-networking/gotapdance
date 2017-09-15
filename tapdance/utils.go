@@ -16,43 +16,24 @@ import (
 	"strings"
 )
 
-func AesGcmEncrypt(plaintext []byte, key []byte, iv []byte) (ciphertext []byte, err error) {
-	// The key argument should be the AES key, either 16 or 32 bytes
-	// to select AES-128 or AES-256.
+// The key argument should be the AES key, either 16 or 32 bytes
+// to select AES-128 or AES-256.
+func aesGcmEncrypt(plaintext []byte, key []byte, iv []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	aesGcmCipher, err := cipher.NewGCM(block)
 	if err != nil {
-		return
+		return nil, err
 	}
-	ciphertext = aesGcmCipher.Seal(nil, iv, plaintext, nil)
-	return
-}
-
-func AesGcmDecrypt(ciphertext []byte, key []byte, iv []byte) (plaintext []byte, err error) {
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return
-	}
-
-	aesGcmCipher, err := cipher.NewGCM(block)
-	if err != nil {
-		return
-	}
-
-	plaintext, err = aesGcmCipher.Open(nil, iv, ciphertext, nil)
-	if err != nil {
-		return
-	}
-	return
+	return aesGcmCipher.Seal(nil, iv, plaintext, nil), nil
 }
 
 // Tries to get crypto random int in range [min, max]
 // In case of crypto failure -- return insecure pseudorandom
-func getRandInt(min int, max int) (result int) {
+func getRandInt(min int, max int) int {
 	// I can't believe Golang is making me do that
 	// Flashback to awful C/C++ libraries
 	diff := max - min
@@ -105,8 +86,8 @@ func obfuscateTag(stegoPayload []byte, stationPubkey []byte) (tag []byte, err er
 	}
 	var sharedSecret, clientPrivate, clientPublic, representative [32]byte
 	for ok := false; ok != true; {
-		var slice_key_private []byte = clientPrivate[:]
-		rand.Read(slice_key_private)
+		var sliceKeyPrivate []byte = clientPrivate[:]
+		rand.Read(sliceKeyPrivate)
 
 		clientPrivate[0] &= 248
 		clientPrivate[31] &= 127
@@ -125,7 +106,7 @@ func obfuscateTag(stegoPayload []byte, stationPubkey []byte) (tag []byte, err er
 	aesKey := stationPubkeyHash[:16]
 	aesIv := stationPubkeyHash[16:28]
 
-	encryptedData, err := AesGcmEncrypt(stegoPayload, aesKey, aesIv)
+	encryptedData, err := aesGcmEncrypt(stegoPayload, aesKey, aesIv)
 	if err != nil {
 		return
 	}
@@ -136,14 +117,14 @@ func obfuscateTag(stegoPayload []byte, stationPubkey []byte) (tag []byte, err er
 	return
 }
 
-func getMsgWithHeader(msgType MsgType, msgBytes []byte) []byte {
+func getMsgWithHeader(msgType msgType, msgBytes []byte) []byte {
 	if len(msgBytes) == 0 {
 		return nil
 	}
 	bufSend := new(bytes.Buffer)
 	var err error
 	switch msgType {
-	case msg_protobuf:
+	case msgProtobuf:
 		if len(msgBytes) <= int(maxInt16) {
 			bufSend.Grow(2 + len(msgBytes)) // to avoid double allocation
 			err = binary.Write(bufSend, binary.BigEndian, int16(len(msgBytes)))
@@ -153,7 +134,7 @@ func getMsgWithHeader(msgType MsgType, msgBytes []byte) []byte {
 			bufSend.Write([]byte{0, 0})
 			err = binary.Write(bufSend, binary.BigEndian, int32(len(msgBytes)))
 		}
-	case msg_raw_data:
+	case msgRawData:
 		err = binary.Write(bufSend, binary.BigEndian, int16(-len(msgBytes)))
 	default:
 		panic("getMsgWithHeader() called with msgType: " + strconv.Itoa(int(msgType)))
@@ -168,7 +149,7 @@ func getMsgWithHeader(msgType MsgType, msgBytes []byte) []byte {
 	return bufSend.Bytes()
 }
 
-func Uint16toInt16(i uint16) int16 {
+func uint16toInt16(i uint16) int16 {
 	pos := int16(i & 32767)
 	neg := int16(0)
 	if i&32768 != 0 {
@@ -189,20 +170,20 @@ func reverseEncrypt(ciphertext []byte, keyStream []byte) (plaintext string) {
 	var pa, pb, pc, pd byte // plaintext bytes
 	var sa, sb, sc byte     // secret bytes
 
-	var tag_idx, keystream_idx int
+	var tagIdx, keystreamIdx int
 
-	for tag_idx < len(ciphertext) {
-		ka = keyStream[keystream_idx]
-		kb = keyStream[keystream_idx+1]
-		kc = keyStream[keystream_idx+2]
-		kd = keyStream[keystream_idx+3]
-		keystream_idx += 4
+	for tagIdx < len(ciphertext) {
+		ka = keyStream[keystreamIdx]
+		kb = keyStream[keystreamIdx+1]
+		kc = keyStream[keystreamIdx+2]
+		kd = keyStream[keystreamIdx+3]
+		keystreamIdx += 4
 
 		// read 3 bytes
-		sa = ciphertext[tag_idx]
-		sb = ciphertext[tag_idx+1]
-		sc = ciphertext[tag_idx+2]
-		tag_idx += 3
+		sa = ciphertext[tagIdx]
+		sb = ciphertext[tagIdx+1]
+		sc = ciphertext[tagIdx+2]
+		tagIdx += 3
 
 		// figure out what plaintext needs to be in base64 encode
 		ca = (ka & 0xc0) | ((sa & 0xfc) >> 2)                        // 6 bits sa

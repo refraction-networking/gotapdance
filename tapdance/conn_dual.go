@@ -7,26 +7,6 @@ import (
 	"strconv"
 )
 
-/* Pluggable Transports 2.0 Specification, Draft 2 */
-// The TransportConn interface represents a transport connection.
-// The primary function of a transport connection is to provide the
-// net.Conn interface.
-// This interface also exposes access to an underlying network connection,
-// which also implements net.Conn.
-// TransportConn implements the Connection​ abstract interface.
-type TransportConn interface {
-	// The TransportConn interface extends net.Conn, the standard Go
-	// interface for sockets.
-	// This line means that a TransportConn has all of the same methods as a
-	// normal Go socket.
-	// The transport-specific logic for obfuscating network traffic is
-	// implemented inside the methods inherited from net.Conn.
-	net.Conn
-
-	// Conn for the underlying network connection
-	NetworkConn() net.Conn
-}
-
 type DualConn struct {
 	net.Conn
 	writerConn *TapdanceFlowConn

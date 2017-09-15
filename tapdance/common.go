@@ -44,19 +44,19 @@ func (m *flowType) Str() string {
 	}
 }
 
-type MsgType int8
+type msgType int8
 
 const (
-	msg_raw_data MsgType = 1
-	msg_protobuf MsgType = 2
+	msgRawData  msgType = 1
+	msgProtobuf msgType = 2
 )
 
-func (m *MsgType) Str() string {
+func (m *msgType) Str() string {
 	switch *m {
-	case msg_raw_data:
-		return "msg_raw_data"
-	case msg_protobuf:
-		return "msg_protobuf"
+	case msgRawData:
+		return "msg raw_data"
+	case msgProtobuf:
+		return "msg protobuf"
 	default:
 		return strconv.Itoa(int(*m))
 	}
@@ -96,7 +96,7 @@ var (
 
 // List of actually supported ciphers(not a list of offered ciphers!)
 // Essentially all working AES_GCM_128 ciphers
-var TDSupportedCiphers = []uint16{
+var tapDanceSupportedCiphers = []uint16{
 	tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
 	tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
 	tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
@@ -113,7 +113,7 @@ func forceSupportedCiphersFirst(suites []uint16) []uint16 {
 	}
 	lastSupportedCipherIdx := 0
 	for i := range suites {
-		for _, supportedS := range TDSupportedCiphers {
+		for _, supportedS := range tapDanceSupportedCiphers {
 			if suites[i] == supportedS {
 				swapSuites(i, lastSupportedCipherIdx)
 				lastSupportedCipherIdx += 1

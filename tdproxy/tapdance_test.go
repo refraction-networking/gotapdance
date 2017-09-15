@@ -11,38 +11,9 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os/exec"
 	"testing"
 	"time"
 )
-
-func asTestHandshakeLaunchProxy(t *testing.T) {
-	// hangs, as it fails to read anything from nc
-	// TODO: check if got an expected result during a handshake
-	var errChan = make(chan error, 0)
-	go func() {
-		// exec, because has to be different process
-		time.Sleep(time.Second * 5)
-		grepCmd := exec.Command("wget", "-e", "use_proxy=yes", "-e", "127.0.0.1:10500", "https://twitter.com")
-		grepOut, _ := grepCmd.StdoutPipe()
-		grepCmd.Start()
-		grepBytes, err := ioutil.ReadAll(grepOut)
-		errChan <- err
-		grepCmd.Wait()
-		fmt.Println(grepBytes)
-	}()
-	tap_dance_proxy := NewTapDanceProxy(10500)
-	go func() {
-		err := tap_dance_proxy.ListenAndServe()
-		errChan <- err
-	}()
-	err := <-errChan
-	tap_dance_proxy.Stop()
-	if err != nil {
-		fmt.Println(err)
-		t.Fail()
-	}
-}
 
 func TestSendSeq(t *testing.T) {
 	buf := new(bytes.Buffer)

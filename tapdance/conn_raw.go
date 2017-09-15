@@ -54,9 +54,8 @@ func (ds *TLSDecoySpec) GetIpv4AddrStr() string {
 		// TODO: what checks need to be done, and what's guaranteed?
 		ipv4Str := ip.To4().String() + ":443"
 		return ipv4Str
-	} else {
-		return ""
 	}
+	return ""
 }
 
 func makeTdRaw(handshakeType tdTagType,
@@ -80,7 +79,7 @@ func (tdRaw *tdRawConn) Dial() error {
 }
 
 func (tdRaw *tdRawConn) dial(reconnect bool) error {
-	var connection_attempts int
+	var maxConnectionAttempts int
 	var err error
 
 	/*
@@ -91,15 +90,15 @@ func (tdRaw *tdRawConn) dial(reconnect bool) error {
 	*/
 	var expectedTransition S2C_Transition
 	if reconnect {
-		connection_attempts = 2
+		maxConnectionAttempts = 2
 		expectedTransition = S2C_Transition_S2C_CONFIRM_RECONNECT
 		tdRaw.tlsConn.Close()
 	} else {
-		connection_attempts = 6
+		maxConnectionAttempts = 6
 		expectedTransition = S2C_Transition_S2C_SESSION_INIT
 	}
 
-	for i := 0; i < connection_attempts; i++ {
+	for i := 0; i < maxConnectionAttempts; i++ {
 		if tdRaw.IsClosed() {
 			return errors.New("Closed")
 		}
@@ -127,10 +126,9 @@ func (tdRaw *tdRawConn) dial(reconnect bool) error {
 		err = tdRaw.tryDialOnce(expectedTransition)
 		if err == nil {
 			return err
-		} else {
-			tdRaw.failedDecoys = append(tdRaw.failedDecoys,
-				tdRaw.decoySpec.GetHostname()+" "+tdRaw.decoySpec.GetIpv4AddrStr())
 		}
+		tdRaw.failedDecoys = append(tdRaw.failedDecoys,
+			tdRaw.decoySpec.GetHostname()+" "+tdRaw.decoySpec.GetIpv4AddrStr())
 	}
 	return err
 }
@@ -144,10 +142,9 @@ func (tdRaw *tdRawConn) tryDialOnce(expectedTransition S2C_Transition) (err erro
 			tdRaw.decoySpec.GetHostname() + "," + tdRaw.decoySpec.GetIpv4AddrStr() +
 			") failed with " + err.Error())
 		return err
-	} else {
-		Logger().Infof(tdRaw.idStr() + " Connected to decoy " +
-			tdRaw.decoySpec.GetHostname() + " (" + tdRaw.decoySpec.GetIpv4AddrStr() + ")")
 	}
+	Logger().Infof(tdRaw.idStr() + " Connected to decoy " +
+		tdRaw.decoySpec.GetHostname() + " (" + tdRaw.decoySpec.GetIpv4AddrStr() + ")")
 
 	if tdRaw.IsClosed() {
 		// if connection was closed externally while in establishTLStoDecoy()
@@ -157,7 +154,7 @@ func (tdRaw *tdRawConn) tryDialOnce(expectedTransition S2C_Transition) (err erro
 
 	// Check if cipher is supported
 	cipherIsSupported := func(id uint16) bool {
-		for _, c := range TDSupportedCiphers {
+		for _, c := range tapDanceSupportedCiphers {
 			if c == id {
 				return true
 			}
@@ -201,8 +198,8 @@ func (tdRaw *tdRawConn) tryDialOnce(expectedTransition S2C_Transition) (err erro
 	case tagHttpGetIncomplete:
 		tdRaw.initialMsg, err = tdRaw.readProto()
 		if err != nil {
-			str_err := err.Error()
-			if strings.Contains(str_err, ": i/o timeout") || // client timed out
+			strErr := err.Error()
+			if strings.Contains(strErr, ": i/o timeout") || // client timed out
 				err.Error() == "EOF" {
 				// decoy timed out
 				/*
@@ -211,7 +208,7 @@ func (tdRaw *tdRawConn) tryDialOnce(expectedTransition S2C_Transition) (err erro
 					Make sure it ends with "/r/n/r/n", send it and forget(don't close!)
 					On the wire this will look like spurious retransmission
 				*/
-				err = errors.New("TapDance station didn't pick up the request: " + str_err)
+				err = errors.New("TapDance station didn't pick up the request: " + strErr)
 				Logger().Errorf(tdRaw.idStr() + " " + err.Error())
 			} else {
 				// any other error will be fatal
@@ -322,7 +319,7 @@ func (tdRaw *tdRawConn) prepareTDRequest(handshakeType tdTagType) (string, error
 	// Generate initial TapDance request
 	buf := new(bytes.Buffer) // What we have to encrypt with the shared secret using AES
 
-	master_key := tdRaw.tlsConn.HandshakeState.MasterSecret
+	masterKey := tdRaw.tlsConn.HandshakeState.MasterSecret
 
 	// write flags
 	flags := tdFlagUseTIL
@@ -332,7 +329,7 @@ func (tdRaw *tdRawConn) prepareTDRequest(handshakeType tdTagType) (string, error
 	if err := binary.Write(buf, binary.BigEndian, flags); err != nil {
 		return "", err
 	}
-	buf.Write(master_key[:])
+	buf.Write(masterKey[:])
 	buf.Write(tdRaw.tlsConn.HandshakeState.ServerHello.Random)
 	buf.Write(tdRaw.tlsConn.HandshakeState.Hello.Random)
 	buf.Write(tdRaw.remoteConnId[:]) // connection id for persistence
@@ -378,11 +375,11 @@ Content-Disposition: form-data; name=\"td.zip\"
 
 	keystreamOffset := len(httpTag)
 	keystreamSize := (len(tag)/3+1)*4 + keystreamOffset // we can't use first 2 bits of every byte
-	whole_keystream, err := tdRaw.tlsConn.GetOutKeystream(keystreamSize)
+	wholeKeystream, err := tdRaw.tlsConn.GetOutKeystream(keystreamSize)
 	if err != nil {
 		return httpTag, err
 	}
-	keystreamAtTag := whole_keystream[keystreamOffset:]
+	keystreamAtTag := wholeKeystream[keystreamOffset:]
 
 	httpTag += reverseEncrypt(tag, keystreamAtTag)
 	if tdRaw.tagType == tagHttpGetComplete {
@@ -405,7 +402,7 @@ func (tdRaw *tdRawConn) readProto() (msg StationToClient, err error) {
 	headerSize := uint32(2)
 
 	var msgLen uint32 // just the body(e.g. raw data or protobuf)
-	var outerProtoMsgType MsgType
+	var outerProtoMsgType msgType
 
 	headerBuffer := make([]byte, 6) // TODO: allocate once at higher level?
 
@@ -418,16 +415,16 @@ func (tdRaw *tdRawConn) readProto() (msg StationToClient, err error) {
 	}
 
 	// Get TIL
-	typeLen := Uint16toInt16(binary.BigEndian.Uint16(headerBuffer[0:2]))
+	typeLen := uint16toInt16(binary.BigEndian.Uint16(headerBuffer[0:2]))
 	if typeLen < 0 {
-		outerProtoMsgType = msg_raw_data
+		outerProtoMsgType = msgRawData
 		msgLen = uint32(-typeLen)
 	} else if typeLen > 0 {
-		outerProtoMsgType = msg_protobuf
+		outerProtoMsgType = msgProtobuf
 		msgLen = uint32(typeLen)
 	} else {
 		// protobuf with size over 32KB, not fitting into 2-byte TL
-		outerProtoMsgType = msg_protobuf
+		outerProtoMsgType = msgProtobuf
 		headerSize += 4
 		for readBytesTotal < headerSize {
 			readBytes, err = tdRaw.tlsConn.Read(headerBuffer[readBytesTotal:headerSize])
@@ -442,17 +439,17 @@ func (tdRaw *tdRawConn) readProto() (msg StationToClient, err error) {
 		}
 		msgLen = binary.BigEndian.Uint32(headerBuffer[2:6])
 	}
-	if outerProtoMsgType == msg_raw_data {
+	if outerProtoMsgType == msgRawData {
 		err = errors.New("Received data message in uninitialized flow")
 		return
 	}
 
 	totalBytesToRead := headerSize + msgLen
-	read_buffer := make([]byte, msgLen)
+	readBuffer := make([]byte, msgLen)
 
 	// Get the message itself
 	for readBytesTotal < totalBytesToRead {
-		readBytes, err = tdRaw.tlsConn.Read(read_buffer[readBytesTotal-headerSize : msgLen])
+		readBytes, err = tdRaw.tlsConn.Read(readBuffer[readBytesTotal-headerSize : msgLen])
 		readBytesTotal += uint32(readBytes)
 
 		if err != nil {
@@ -460,7 +457,7 @@ func (tdRaw *tdRawConn) readProto() (msg StationToClient, err error) {
 		}
 	}
 
-	err = proto.Unmarshal(read_buffer[:], &msg)
+	err = proto.Unmarshal(readBuffer[:], &msg)
 	if err != nil {
 		return
 	}
@@ -483,7 +480,7 @@ func (tdRaw *tdRawConn) writeTransition(transition C2S_Transition) (n int, err e
 	}
 
 	Logger().Infoln(tdRaw.idStr()+" sending transition: ", msg.String())
-	b := getMsgWithHeader(msg_protobuf, msgBytes)
+	b := getMsgWithHeader(msgProtobuf, msgBytes)
 	n, err = tdRaw.tlsConn.Write(b)
 	return
 }
