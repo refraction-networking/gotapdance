@@ -7,6 +7,9 @@ import (
 	"strconv"
 )
 
+// DualConn is composed of 2 separate TapdanceFlowConn.
+// Allows to achieve substantially higher upload speed
+// and slightly higher download speed.
 type DualConn struct {
 	net.Conn
 	writerConn *TapdanceFlowConn
@@ -115,7 +118,8 @@ func (tdConn *DualConn) idStr() string {
 	return "[Session " + strconv.FormatUint(tdConn.sessionId, 10) + "]"
 }
 
-// makes little sense, since there are 2 underlying NetworkConns
+// NetworkConn makes little sense, since there are 2 underlying NetworkConns.
+// Currently, returns the readerConn.NetworkConn()
 func (tdConn *DualConn) NetworkConn() net.Conn {
 	return tdConn.readerConn.NetworkConn()
 }

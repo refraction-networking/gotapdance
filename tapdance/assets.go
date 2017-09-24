@@ -32,7 +32,7 @@ type assets struct {
 var assetsInstance *assets
 var assetsOnce sync.Once
 
-// Assets() is an access point to asset managing singleton.
+// Assets is an access point to asset managing singleton.
 // First access to singleton sets path. Assets(), if called
 // before AssetsFromDir() sets path to "./assets/"
 func Assets() *assets {
@@ -41,7 +41,7 @@ func Assets() *assets {
 	return assetsInstance
 }
 
-// AssetsFromDir() is an access point to asset managing singleton.
+// AssetsFromDir is an access point to asset managing singleton.
 // First call to Assets() or AssetsFromDir() sets the path. Thus,
 // it is safe to access assets via default Assets() function afterwards.
 func AssetsFromDir(path string) *assets {
@@ -103,9 +103,8 @@ func (a *assets) readConfigs() {
 		ok := roots.AppendCertsFromPEM(rootCerts)
 		if !ok {
 			return errors.New("Failed to parse root certificates")
-		} else {
-			a.roots = roots
 		}
+		a.roots = roots
 		return nil
 	}
 

@@ -2,14 +2,7 @@
 TODO: It probably should have read flow that reads messages and says STAAAHP to channel when read
 TODO: here we actually can avoid reconnecting if idle for too long
 TODO: confirm that all writes are recorded towards data limit
-
- _______________________TapdanceFlowConn Mode Chart ____________________________
-|FlowType     |Default Tag|Diff from old-school bidirectional  | Engines spawned|
-|-------------|-----------|------------------------------------|----------------|
-|Bidirectional| HTTP GET  |                                    | Writer, Reader |
-|Upload       | HTTP POST |acquires upload                     | Writer, Reader |
-|ReadOnly     | HTTP GET  |yields upload, writer sync ignored  | Reader         |
-\_____________|___________|____________________________________|_______________*/
+*/
 
 package tapdance
 
@@ -27,7 +20,7 @@ import (
 	"time"
 )
 
-// Represents single tapdance flow
+// TapdanceFlowConn represents single TapDance flow.
 type TapdanceFlowConn struct {
 	tdRaw *tdRawConn
 
@@ -39,7 +32,7 @@ type TapdanceFlowConn struct {
 	writeResultChan   chan ioOpResult
 	writtenBytesTotal int
 
-	yieldConfirmed chan struct{} // used by rConn to signal that flow was picked up
+	yieldConfirmed chan struct{} // used by flowConn to signal that flow was picked up
 
 	readOnly         bool // if readOnly -- we don't need to wait for write engine to stop
 	reconnectSuccess chan bool
@@ -54,7 +47,15 @@ type TapdanceFlowConn struct {
 	flowType flowType
 }
 
-// Returns TapDance connection, that is ready to be Dial'd
+/*______________________TapdanceFlowConn Mode Chart _____________________________
+|FlowType     |Default Tag|Diff from old-school bidirectional  | Engines spawned|
+|-------------|-----------|------------------------------------|----------------|
+|Bidirectional| HTTP GET  |                                    | Writer, Reader |
+|Upload       | HTTP POST |acquires upload                     | Writer, Reader |
+|ReadOnly     | HTTP GET  |yields upload, writer sync ignored  | Reader         |
+\_____________|___________|____________________________________|_______________*/
+
+// NewTapDanceConn returns TapDance connection, that is ready to be Dial'd
 func NewTapDanceConn() (net.Conn, error) {
 	return makeTdFlow(flowBidirectional, nil)
 }
@@ -79,6 +80,8 @@ func makeTdFlow(flow flowType, tdRaw *tdRawConn) (*TapdanceFlowConn, error) {
 	return flowConn, nil
 }
 
+// Dial establishes direct connection to TapDance station proxy.
+// Users are expected to send HTTP CONNECT request next.
 func (flowConn *TapdanceFlowConn) Dial() error {
 	if flowConn.tdRaw.tlsConn == nil {
 		// if still hasn't dialed
@@ -275,25 +278,25 @@ func (flowConn *TapdanceFlowConn) Read(b []byte) (int, error) {
 	return flowConn.bsbuf.Read(b)
 }
 
-func (rConn *TapdanceFlowConn) readRawData(msgLen int) ([]byte, error) {
-	if cap(rConn.recvbuf) < msgLen {
-		rConn.recvbuf = make([]byte, msgLen)
+func (flowConn *TapdanceFlowConn) readRawData(msgLen int) ([]byte, error) {
+	if cap(flowConn.recvbuf) < msgLen {
+		flowConn.recvbuf = make([]byte, msgLen)
 	}
 	var err error
 	var readBytes int
 	var readBytesTotal int // both header and body
 	// Get the message itself
 	for readBytesTotal < msgLen {
-		readBytes, err = rConn.tdRaw.tlsConn.Read(rConn.recvbuf[readBytesTotal:])
+		readBytes, err = flowConn.tdRaw.tlsConn.Read(flowConn.recvbuf[readBytesTotal:])
 		readBytesTotal += int(readBytes)
 		if err != nil {
-			err = rConn.actOnReadError(err)
+			err = flowConn.actOnReadError(err)
 			if err != nil {
-				return rConn.recvbuf[:readBytesTotal], err
+				return flowConn.recvbuf[:readBytesTotal], err
 			}
 		}
 	}
-	return rConn.recvbuf[:readBytesTotal], err
+	return flowConn.recvbuf[:readBytesTotal], err
 }
 
 func (flowConn *TapdanceFlowConn) readProtobuf(msgLen int) (msg pb.StationToClient, err error) {
@@ -492,7 +495,7 @@ func (flowConn *TapdanceFlowConn) yieldUpload() error {
 }
 
 // TODO: implement on station, currently unused
-// wait for rConn to confirm that flow was noticed
+// wait for flowConn to confirm that flow was noticed
 func (flowConn *TapdanceFlowConn) waitForYieldConfirmation() error {
 	// camouflage issue
 	timeout := time.After(20 * time.Second)
@@ -618,10 +621,12 @@ func (flowConn *TapdanceFlowConn) NetworkConn() net.Conn {
 	return flowConn.tdRaw.tcpConn
 }
 
-// TODO: Deadlines should probably behave differently. No idea how.
-// SetDeadline sets the read and write deadlines associated
-// with the connection. It is equivalent to calling both
-// SetReadDeadline and SetWriteDeadline.
+// SetDeadline is supposed to set the read and write deadlines
+// associated with the connection. It is equivalent to calling
+// both SetReadDeadline and SetWriteDeadline.
+//
+// TODO: In reality, SetDeadline doesn't do that yet, but
+// existence of this function is mandatory to implement net.Conn
 //
 // A deadline is an absolute time after which I/O operations
 // fail with a timeout (see type Error) instead of
@@ -632,6 +637,7 @@ func (flowConn *TapdanceFlowConn) NetworkConn() net.Conn {
 // the deadline after successful Read or Write calls.
 //
 // A zero value for t means I/O operations will not time out.
+//
 func (flowConn *TapdanceFlowConn) SetDeadline(t time.Time) error {
 	return flowConn.tdRaw.tlsConn.SetDeadline(t)
 }

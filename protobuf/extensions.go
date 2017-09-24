@@ -7,6 +7,8 @@ import (
 	"net"
 )
 
+// InitTLSDecoySpec creates TLSDecoySpec from ip address and server name.
+// Other feilds, such as Pubkey, Timeout and Tcpwin are left unset.
 func InitTLSDecoySpec(ip string, sni string) *TLSDecoySpec {
 	ip4 := net.ParseIP(ip)
 	var ipUint32 uint32
@@ -19,6 +21,7 @@ func InitTLSDecoySpec(ip string, sni string) *TLSDecoySpec {
 	return &tlsDecoy
 }
 
+// GetIpv4AddrStr returns IP address of TLSDecoySpec as a string.
 func (ds *TLSDecoySpec) GetIpv4AddrStr() string {
 	if ds.Ipv4Addr != nil {
 		ip := make(net.IP, 4)

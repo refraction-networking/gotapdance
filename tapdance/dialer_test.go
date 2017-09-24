@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -41,7 +40,7 @@ func TestTapDanceDial(t *testing.T) {
 		dial func(network, address string) (net.Conn, error)) (string, error) {
 		conn, err := dial("tcp", url.Hostname()+":"+url.Port())
 		if err != nil {
-			return "", errors.New(fmt.Sprintf("dial failed: %v", err))
+			return "", fmt.Errorf("dial failed: %v", err)
 		}
 		if url.Scheme == "https" {
 			conn = tls.Client(conn, &tls.Config{ServerName: url.Hostname()})
@@ -50,22 +49,22 @@ func TestTapDanceDial(t *testing.T) {
 		req, err := http.NewRequest("GET", url.String(), nil)
 		req.Host = url.Hostname()
 		if err != nil {
-			return "", errors.New(fmt.Sprintf("http.NewRequest failed: %v", err))
+			return "", fmt.Errorf("http.NewRequest failed: %v", err)
 		}
 
 		err = req.Write(conn)
 		if err != nil {
-			return "", errors.New(fmt.Sprintf("Write failed: %v", err))
+			return "", fmt.Errorf("Write failed: %v", err)
 		}
 
 		resp, err := http.ReadResponse(bufio.NewReader(conn), req)
 		if err != nil {
-			return "", errors.New(fmt.Sprintf("http.ReadResponse failed: %v", err))
+			return "", fmt.Errorf("http.ReadResponse failed: %v", err)
 		}
 
 		responseBody, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			return "", errors.New(fmt.Sprintf("ioutil.ReadAll failed: %v", err))
+			return "", fmt.Errorf("ioutil.ReadAll failed: %v", err)
 		}
 		return string(responseBody), nil
 	}

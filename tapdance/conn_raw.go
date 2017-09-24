@@ -215,9 +215,8 @@ func (tdRaw *tdRawConn) tryDialOnce(expectedTransition pb.S2C_Transition) (err e
 				" Expected: " + expectedTransition.String())
 			// this exceptional error implies that station has lost state, thus is fatal
 			return err
-		} else {
-			Logger().Infoln(tdRaw.idStr() + " Successfully connected to TapDance Station")
 		}
+		Logger().Infoln(tdRaw.idStr() + " Successfully connected to TapDance Station")
 	case tagHttpPostIncomplete:
 		// don't wait for response
 	default:

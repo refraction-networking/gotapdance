@@ -9,6 +9,7 @@ import (
 
 var sessionsTotal CounterUint64
 
+// Dialer contains options for establishing TapDance connection.
 type Dialer struct {
 	// TODO?: add Context support(not as a field, it has to "flow through program like river")
 	// https://medium.com/@cep21/how-to-correctly-use-context-context-in-go-1-7-8f2c0fafdf39
@@ -74,14 +75,14 @@ func (d *Dialer) Dial(network, address string) (net.Conn, error) {
 	return flow, nil
 }
 
-// Establishes direct connection to TapDance station proxy.
+// DialProxy establishes direct connection to TapDance station proxy.
 // Users are expected to send HTTP CONNECT request next.
 func DialProxy() (net.Conn, error) {
 	var d Dialer
 	return d.DialProxy()
 }
 
-// Establishes direct connection to TapDance station proxy.
+// DialProxy establishes direct connection to TapDance station proxy.
 // Users are expected to send HTTP CONNECT request next.
 func (d *Dialer) DialProxy() (net.Conn, error) {
 	if !d.SplitFlows {
@@ -91,7 +92,6 @@ func (d *Dialer) DialProxy() (net.Conn, error) {
 		}
 		flow.tdRaw.customDialer = d.TcpDialer
 		return flow, flow.Dial()
-	} else {
-		return dialSplitFlow(d.TcpDialer)
 	}
+	return dialSplitFlow(d.TcpDialer)
 }
