@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	pb "github.com/SergeyFrolov/gotapdance/protobuf"
 	"io"
 	"net"
 	"strconv"
@@ -29,7 +30,7 @@ type tdRawConn struct {
 
 	customDialer func(string, string) (net.Conn, error)
 
-	decoySpec     TLSDecoySpec
+	decoySpec     pb.TLSDecoySpec
 	establishedAt time.Time
 	pinDecoySpec  bool // don't ever change decoy (still changeable from outside)
 
@@ -37,25 +38,13 @@ type tdRawConn struct {
 	stationPubkey []byte
 
 	failedDecoys []string
-	initialMsg   StationToClient
+	initialMsg   pb.StationToClient
 	tagType      tdTagType
 
 	UploadLimit int // used only in POST-based tags
 
 	closed    chan struct{}
 	closeOnce sync.Once
-}
-
-// TODO: move to assets?
-func (ds *TLSDecoySpec) GetIpv4AddrStr() string {
-	if ds.Ipv4Addr != nil {
-		ip := make(net.IP, 4)
-		binary.BigEndian.PutUint32(ip, ds.GetIpv4Addr())
-		// TODO: what checks need to be done, and what's guaranteed?
-		ipv4Str := ip.To4().String() + ":443"
-		return ipv4Str
-	}
-	return ""
 }
 
 func makeTdRaw(handshakeType tdTagType,
@@ -88,14 +77,14 @@ func (tdRaw *tdRawConn) dial(reconnect bool) error {
 		tdConn.maxSend -= transitionMsgSize // reserve space for transition msg
 		tdConn.maxSend -= 2                 // reserve 2 bytes for transition msg header
 	*/
-	var expectedTransition S2C_Transition
+	var expectedTransition pb.S2C_Transition
 	if reconnect {
 		maxConnectionAttempts = 2
-		expectedTransition = S2C_Transition_S2C_CONFIRM_RECONNECT
+		expectedTransition = pb.S2C_Transition_S2C_CONFIRM_RECONNECT
 		tdRaw.tlsConn.Close()
 	} else {
 		maxConnectionAttempts = 6
-		expectedTransition = S2C_Transition_S2C_SESSION_INIT
+		expectedTransition = pb.S2C_Transition_S2C_SESSION_INIT
 	}
 
 	for i := 0; i < maxConnectionAttempts; i++ {
@@ -133,7 +122,7 @@ func (tdRaw *tdRawConn) dial(reconnect bool) error {
 	return err
 }
 
-func (tdRaw *tdRawConn) tryDialOnce(expectedTransition S2C_Transition) (err error) {
+func (tdRaw *tdRawConn) tryDialOnce(expectedTransition pb.S2C_Transition) (err error) {
 	Logger().Infoln(tdRaw.idStr() + " Attempting to connect to decoy " +
 		tdRaw.decoySpec.GetHostname() + " (" + tdRaw.decoySpec.GetIpv4AddrStr() + ")")
 	err = tdRaw.establishTLStoDecoy()
@@ -396,7 +385,7 @@ func (tdRaw *tdRawConn) idStr() string {
 
 // Simply reads and returns protobuf
 // Returns error if it's not a protobuf
-func (tdRaw *tdRawConn) readProto() (msg StationToClient, err error) {
+func (tdRaw *tdRawConn) readProto() (msg pb.StationToClient, err error) {
 	var readBytes int
 	var readBytesTotal uint32 // both header and body
 	headerSize := uint32(2)
@@ -467,9 +456,9 @@ func (tdRaw *tdRawConn) readProto() (msg StationToClient, err error) {
 
 // Generates padding and stuff
 // Currently guaranteed to be less than 1024 bytes long
-func (tdRaw *tdRawConn) writeTransition(transition C2S_Transition) (n int, err error) {
+func (tdRaw *tdRawConn) writeTransition(transition pb.C2S_Transition) (n int, err error) {
 	currGen := Assets().GetGeneration()
-	msg := ClientToStation{Padding: []byte(getRandPadding(150, 900, 10)),
+	msg := pb.ClientToStation{Padding: []byte(getRandPadding(150, 900, 10)),
 		DecoyListGeneration: &currGen,
 		StateTransition:     &transition,
 		UploadSync:          new(uint64)} // TODO: remove

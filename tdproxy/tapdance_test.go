@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	pb "github.com/sergeyfrolov/gotapdance/protobuf"
 	"github.com/sergeyfrolov/gotapdance/tapdance"
 	"io/ioutil"
 	"net"
@@ -38,9 +39,9 @@ func TestSendSeq(t *testing.T) {
 	}
 	tapdance1Hostname := "tapdance1.freeaeskey.xyz"
 	tapdance1Ipv4 := binary.BigEndian.Uint32(net.ParseIP("192.122.190.104").To4())
-	tapdance1Decoy := tapdance.TLSDecoySpec{Hostname: &tapdance1Hostname,
+	tapdance1Decoy := pb.TLSDecoySpec{Hostname: &tapdance1Hostname,
 		Ipv4Addr: &tapdance1Ipv4}
-	err = tapdance.Assets().SetDecoys([]*tapdance.TLSDecoySpec{&tapdance1Decoy})
+	err = tapdance.Assets().SetDecoys([]*pb.TLSDecoySpec{&tapdance1Decoy})
 	if err != nil {
 		t.Fatalf(err.Error())
 	}

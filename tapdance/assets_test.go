@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	pb "github.com/SergeyFrolov/gotapdance/protobuf"
 	"io/ioutil"
 	"net"
 	"os"
@@ -36,16 +37,16 @@ func TestAssets_Decoys(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var testDecoys1 = []*TLSDecoySpec{
-		initTLSDecoySpec("4.8.15.16", "ericw.us"),
-		initTLSDecoySpec("19.21.23.42", "blahblahbl.ah"),
+	var testDecoys1 = []*pb.TLSDecoySpec{
+		pb.InitTLSDecoySpec("4.8.15.16", "ericw.us"),
+		pb.InitTLSDecoySpec("19.21.23.42", "blahblahbl.ah"),
 	}
 
-	var testDecoys2 = []*TLSDecoySpec{
-		initTLSDecoySpec("0.1.2.3", "whatever.cn"),
-		initTLSDecoySpec("255.254.253.252", "particular.ir"),
-		initTLSDecoySpec("11.22.33.44", "what.is.up"),
-		initTLSDecoySpec("8.255.255.8", "heh.meh"),
+	var testDecoys2 = []*pb.TLSDecoySpec{
+		pb.InitTLSDecoySpec("0.1.2.3", "whatever.cn"),
+		pb.InitTLSDecoySpec("255.254.253.252", "particular.ir"),
+		pb.InitTLSDecoySpec("11.22.33.44", "what.is.up"),
+		pb.InitTLSDecoySpec("8.255.255.8", "heh.meh"),
 	}
 
 	Assets().SetAssetsDir(dir1)
@@ -53,7 +54,7 @@ func TestAssets_Decoys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !Assets().IsDecoyInList(*initTLSDecoySpec("19.21.23.42", "blahblahbl.ah")) {
+	if !Assets().IsDecoyInList(*pb.InitTLSDecoySpec("19.21.23.42", "blahblahbl.ah")) {
 		t.Fatal("Decoy 19.21.23.42(blahblahbl.ah) is NOT in Decoy List!")
 	}
 	Assets().SetAssetsDir(dir2)
@@ -61,10 +62,10 @@ func TestAssets_Decoys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if Assets().IsDecoyInList(*initTLSDecoySpec("19.21.23.42", "blahblahbl.ah")) {
+	if Assets().IsDecoyInList(*pb.InitTLSDecoySpec("19.21.23.42", "blahblahbl.ah")) {
 		t.Fatal("Decoy 19.21.23.42(blahblahbl.ah) is in Decoy List!")
 	}
-	if !Assets().IsDecoyInList(*initTLSDecoySpec("11.22.33.44", "what.is.up")) {
+	if !Assets().IsDecoyInList(*pb.InitTLSDecoySpec("11.22.33.44", "what.is.up")) {
 		t.Fatal("Decoy 11.22.33.44(what.is.up) is NOT in Decoy List!")
 	}
 	if !reflect.DeepEqual(Assets().config.DecoyList.TlsDecoys, testDecoys2) {
@@ -74,7 +75,7 @@ func TestAssets_Decoys(t *testing.T) {
 		t.Fail()
 	}
 
-	decoyInList := func(d *TLSDecoySpec, decoyList []*TLSDecoySpec) bool {
+	decoyInList := func(d *pb.TLSDecoySpec, decoyList []*pb.TLSDecoySpec) bool {
 		for _, elem := range decoyList {
 			if reflect.DeepEqual(elem, d) {
 				return true
@@ -89,7 +90,7 @@ func TestAssets_Decoys(t *testing.T) {
 		if err != nil {
 			t.Fatal("Corrupted addr:", addr, ". Error:", err.Error())
 		}
-		decoyServ := initTLSDecoySpec(hostAddr, _sni)
+		decoyServ := pb.InitTLSDecoySpec(hostAddr, _sni)
 		if !decoyInList(decoyServ, Assets().config.DecoyList.TlsDecoys) {
 			fmt.Println("decoyServ not in List!")
 			fmt.Println("decoyServ:", decoyServ)
@@ -104,10 +105,10 @@ func TestAssets_Decoys(t *testing.T) {
 		fmt.Println("testDecoys1:", testDecoys1)
 		t.Fail()
 	}
-	if !Assets().IsDecoyInList(*initTLSDecoySpec("19.21.23.42", "blahblahbl.ah")) {
+	if !Assets().IsDecoyInList(*pb.InitTLSDecoySpec("19.21.23.42", "blahblahbl.ah")) {
 		t.Fatal("Decoy 19.21.23.42(blahblahbl.ah) is NOT in Decoy List!")
 	}
-	if Assets().IsDecoyInList(*initTLSDecoySpec("11.22.33.44", "what.is.up")) {
+	if Assets().IsDecoyInList(*pb.InitTLSDecoySpec("11.22.33.44", "what.is.up")) {
 		t.Fatal("Decoy 11.22.33.44(what.is.up) is in Decoy List!")
 	}
 	for i := 0; i < 10; i++ {
@@ -116,7 +117,7 @@ func TestAssets_Decoys(t *testing.T) {
 		if err != nil {
 			t.Fatal("Corrupted addr:", addr, ". Error:", err.Error())
 		}
-		decoyServ := initTLSDecoySpec(hostAddr, _sni)
+		decoyServ := pb.InitTLSDecoySpec(hostAddr, _sni)
 		if !decoyInList(decoyServ, Assets().config.DecoyList.TlsDecoys) {
 			fmt.Println("decoyServ not in List!")
 			fmt.Println("decoyServ:", decoyServ)
@@ -143,9 +144,9 @@ func TestAssets_Pubkey(t *testing.T) {
 			fmt.Printf("TapDance log was:\n%s\n", b.String())
 		}
 	}()
-	initPubKey := func(defaultKey []byte) PubKey {
-		defualtKeyType := KeyType_AES_GCM_128
-		return PubKey{Key: defaultKey, Type: &defualtKeyType}
+	initPubKey := func(defaultKey []byte) pb.PubKey {
+		defualtKeyType := pb.KeyType_AES_GCM_128
+		return pb.PubKey{Key: defaultKey, Type: &defualtKeyType}
 	}
 
 	oldpath := Assets().path

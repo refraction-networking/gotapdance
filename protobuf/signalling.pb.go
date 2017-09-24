@@ -3,7 +3,7 @@
 // DO NOT EDIT!
 
 /*
-Package tapdance is a generated protocol buffer package.
+Package tdproto is a generated protocol buffer package.
 
 It is generated from these files:
 	signalling.proto
@@ -16,7 +16,7 @@ It has these top-level messages:
 	StationToClient
 	ClientToStation
 */
-package tapdance
+package tdproto
 
 import proto "github.com/golang/protobuf/proto"
 import fmt "fmt"

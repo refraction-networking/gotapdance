@@ -20,6 +20,7 @@ import (
 	"errors"
 	"github.com/golang/protobuf/proto"
 	"github.com/sergeyfrolov/bsbuffer"
+	pb "github.com/sergeyfrolov/gotapdance/protobuf"
 	"io"
 	"net"
 	"sync"
@@ -295,7 +296,7 @@ func (rConn *TapdanceFlowConn) readRawData(msgLen int) ([]byte, error) {
 	return rConn.recvbuf[:readBytesTotal], err
 }
 
-func (flowConn *TapdanceFlowConn) readProtobuf(msgLen int) (msg StationToClient, err error) {
+func (flowConn *TapdanceFlowConn) readProtobuf(msgLen int) (msg pb.StationToClient, err error) {
 	rbuf := make([]byte, msgLen)
 	var readBytes int
 	var readBytesTotal int // both header and body
@@ -396,9 +397,9 @@ func (flowConn *TapdanceFlowConn) actOnReadError(err error) error {
 			}
 		}
 
-		transition := C2S_Transition_C2S_EXPECT_RECONNECT
+		transition := pb.C2S_Transition_C2S_EXPECT_RECONNECT
 		if flowConn.flowType == flowUpload {
-			transition = C2S_Transition_C2S_EXPECT_UPLOADONLY_RECONN
+			transition = pb.C2S_Transition_C2S_EXPECT_UPLOADONLY_RECONN
 		}
 		_, err = flowConn.tdRaw.writeTransition(transition)
 		if err != nil {
@@ -471,7 +472,7 @@ func (flowConn *TapdanceFlowConn) updateReadDeadline() {
 }
 
 func (flowConn *TapdanceFlowConn) acquireUpload() error {
-	_, err := flowConn.tdRaw.writeTransition(C2S_Transition_C2S_ACQUIRE_UPLOAD)
+	_, err := flowConn.tdRaw.writeTransition(pb.C2S_Transition_C2S_ACQUIRE_UPLOAD)
 	if err != nil {
 		Logger().Infoln(flowConn.idStr() + " Failed attempt to acquire upload:" + err.Error())
 	} else {
@@ -481,7 +482,7 @@ func (flowConn *TapdanceFlowConn) acquireUpload() error {
 }
 
 func (flowConn *TapdanceFlowConn) yieldUpload() error {
-	_, err := flowConn.tdRaw.writeTransition(C2S_Transition_C2S_YIELD_UPLOAD)
+	_, err := flowConn.tdRaw.writeTransition(pb.C2S_Transition_C2S_YIELD_UPLOAD)
 	if err != nil {
 		Logger().Infoln(flowConn.idStr() + " Failed attempt to yield upload:" + err.Error())
 	} else {
@@ -534,8 +535,8 @@ func (flowConn *TapdanceFlowConn) idStr() string {
 	return flowConn.tdRaw.idStr()
 }
 
-func (flowConn *TapdanceFlowConn) processProto(msg StationToClient) error {
-	handleConfigInfo := func(conf *ClientConf) {
+func (flowConn *TapdanceFlowConn) processProto(msg pb.StationToClient) error {
+	handleConfigInfo := func(conf *pb.ClientConf) {
 		currGen := Assets().GetGeneration()
 		if conf.GetGeneration() < currGen {
 			Logger().Infoln(flowConn.idStr()+" not appliying new config due"+
@@ -551,7 +552,7 @@ func (flowConn *TapdanceFlowConn) processProto(msg StationToClient) error {
 		_err := Assets().SetClientConf(conf)
 		if _err != nil {
 			Logger().Errorln(flowConn.idStr() +
-				"Could not save SetClientConf():" + _err.Error())
+				"Could not save Setpb.ClientConf():" + _err.Error())
 		}
 	}
 	Logger().Debugln(flowConn.idStr() + " processing incoming protobuf: " + msg.String())
@@ -576,20 +577,20 @@ func (flowConn *TapdanceFlowConn) processProto(msg StationToClient) error {
 	// note that flowConn don't see first-message transitions, such as INIT or RECONNECT
 	stateTransition := msg.GetStateTransition()
 	switch stateTransition {
-	case S2C_Transition_S2C_NO_CHANGE:
+	case pb.S2C_Transition_S2C_NO_CHANGE:
 	// carry on
-	case S2C_Transition_S2C_SESSION_CLOSE:
+	case pb.S2C_Transition_S2C_SESSION_CLOSE:
 		Logger().Infof(flowConn.idStr() + " received MSG_CLOSE")
 		return errMsgClose
-	case S2C_Transition_S2C_ERROR:
+	case pb.S2C_Transition_S2C_ERROR:
 		err := errors.New("message from station:" +
 			msg.GetErrReason().String())
 		Logger().Errorln(flowConn.idStr() + " " + err.Error())
 		flowConn.closeWithErrorOnce(err)
 		return err
-	case S2C_Transition_S2C_CONFIRM_RECONNECT:
+	case pb.S2C_Transition_S2C_CONFIRM_RECONNECT:
 		fallthrough
-	case S2C_Transition_S2C_SESSION_INIT:
+	case pb.S2C_Transition_S2C_SESSION_INIT:
 		fallthrough
 	default:
 		err := errors.New("Unexpected StateTransition " +

@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
+	pb "github.com/sergeyfrolov/gotapdance/protobuf"
 	"io/ioutil"
 	"net"
 	"os"
@@ -19,7 +20,7 @@ type assets struct {
 	once sync.Once
 	path string
 
-	config ClientConf
+	config pb.ClientConf
 
 	roots *x509.CertPool
 
@@ -30,18 +31,6 @@ type assets struct {
 
 var assetsInstance *assets
 var assetsOnce sync.Once
-
-func initTLSDecoySpec(ip string, sni string) *TLSDecoySpec {
-	ip4 := net.ParseIP(ip)
-	var ipUint32 uint32
-	if ip4 != nil {
-		ipUint32 = binary.BigEndian.Uint32(net.ParseIP(ip).To4())
-	} else {
-		ipUint32 = 0
-	}
-	tlsDecoy := TLSDecoySpec{Hostname: &sni, Ipv4Addr: &ipUint32}
-	return &tlsDecoy
-}
 
 // Assets() is an access point to asset managing singleton.
 // First access to singleton sets path. Assets(), if called
@@ -62,20 +51,20 @@ func AssetsFromDir(path string) *assets {
 }
 
 func initAssets(path string) {
-	var defaultDecoys = []*TLSDecoySpec{
-		initTLSDecoySpec("192.122.190.104", "tapdance1.freeaeskey.xyz"),
-		initTLSDecoySpec("192.122.190.105", "tapdance2.freeaeskey.xyz"),
-		initTLSDecoySpec("192.122.190.106", "tapdance3.freeaeskey.xyz"),
+	var defaultDecoys = []*pb.TLSDecoySpec{
+		pb.InitTLSDecoySpec("192.122.190.104", "tapdance1.freeaeskey.xyz"),
+		pb.InitTLSDecoySpec("192.122.190.105", "tapdance2.freeaeskey.xyz"),
+		pb.InitTLSDecoySpec("192.122.190.106", "tapdance3.freeaeskey.xyz"),
 	}
 
 	defaultKey := []byte{81, 88, 104, 190, 127, 69, 171, 111, 49, 10, 254, 212, 178, 41, 183,
 		164, 121, 252, 159, 222, 85, 61, 234, 76, 205, 179, 105, 171, 24, 153, 231, 12}
 
-	defualtKeyType := KeyType_AES_GCM_128
-	defaultPubKey := PubKey{Key: defaultKey, Type: &defualtKeyType}
+	defualtKeyType := pb.KeyType_AES_GCM_128
+	defaultPubKey := pb.PubKey{Key: defaultKey, Type: &defualtKeyType}
 	defaultGeneration := uint32(0)
-	defaultDecoyList := DecoyList{TlsDecoys: defaultDecoys}
-	defaultClientConf := ClientConf{DecoyList: &defaultDecoyList,
+	defaultDecoyList := pb.DecoyList{TlsDecoys: defaultDecoys}
+	defaultClientConf := pb.ClientConf{DecoyList: &defaultDecoyList,
 		DefaultPubkey: &defaultPubKey,
 		Generation:    &defaultGeneration}
 
@@ -125,7 +114,7 @@ func (a *assets) readConfigs() {
 		if err != nil {
 			return err
 		}
-		clientConf := ClientConf{}
+		clientConf := pb.ClientConf{}
 		err = proto.Unmarshal(buf, &clientConf)
 		if err != nil {
 			return err
@@ -196,12 +185,12 @@ func (a *assets) GetDecoyAddress() (sni string, addr string) {
 
 // gets randomDecoyAddress. sni stands for subject name indication.
 // addr is in format ipv4:port
-func (a *assets) GetDecoy() TLSDecoySpec {
+func (a *assets) GetDecoy() pb.TLSDecoySpec {
 	a.RLock()
 	defer a.RUnlock()
 
 	decoys := a.config.DecoyList.TlsDecoys
-	chosenDecoy := TLSDecoySpec{}
+	chosenDecoy := pb.TLSDecoySpec{}
 	if len(decoys) == 0 {
 		return chosenDecoy
 	}
@@ -255,7 +244,7 @@ func (a *assets) SetGeneration(gen uint32) (err error) {
 }
 
 // Set Public key in persistent way (e.g. store to disk)
-func (a *assets) SetPubkey(pubkey PubKey) (err error) {
+func (a *assets) SetPubkey(pubkey pb.PubKey) (err error) {
 	a.Lock()
 	defer a.Unlock()
 
@@ -265,7 +254,7 @@ func (a *assets) SetPubkey(pubkey PubKey) (err error) {
 	return
 }
 
-func (a *assets) SetClientConf(conf *ClientConf) (err error) {
+func (a *assets) SetClientConf(conf *pb.ClientConf) (err error) {
 	a.Lock()
 	defer a.Unlock()
 
@@ -275,7 +264,7 @@ func (a *assets) SetClientConf(conf *ClientConf) (err error) {
 }
 
 // Set decoys in persistent way (e.g. store to disk)
-func (a *assets) SetDecoys(decoys []*TLSDecoySpec) (err error) {
+func (a *assets) SetDecoys(decoys []*pb.TLSDecoySpec) (err error) {
 	a.Lock()
 	defer a.Unlock()
 
@@ -284,7 +273,7 @@ func (a *assets) SetDecoys(decoys []*TLSDecoySpec) (err error) {
 	return
 }
 
-func (a *assets) IsDecoyInList(decoy TLSDecoySpec) bool {
+func (a *assets) IsDecoyInList(decoy pb.TLSDecoySpec) bool {
 	ipv4str := decoy.GetIpv4AddrStr()
 	hostname := decoy.GetHostname()
 	for _, d := range a.config.GetDecoyList().GetTlsDecoys() {
