@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	pb "github.com/SergeyFrolov/gotapdance/protobuf"
+	pb "github.com/sergeyfrolov/gotapdance/protobuf"
 	"io/ioutil"
 	"net"
 	"os"

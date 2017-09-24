@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
-	pb "github.com/SergeyFrolov/gotapdance/protobuf"
+	pb "github.com/sergeyfrolov/gotapdance/protobuf"
 	"io"
 	"net"
 	"strconv"
