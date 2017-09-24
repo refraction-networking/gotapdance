@@ -29,11 +29,11 @@ Ignore the "no buildable Go source files" warning.
 
 If you have outdated versions of libraries above you might want to do `go get -u all`
 
-## Build specific version
+## Usage
 
- There are 3 versions of TapDance client:
+ There are several ways to use TapDance:
 
- * [Command Line Interface](cli)
+ * [Command Line Interface client](cli)
 
  * Mobile: native applications in Java/Objective C for Android or iOS. Golang bindings are used as a shared library.
 
@@ -41,10 +41,39 @@ If you have outdated versions of libraries above you might want to do `go get -u
     
    * iOS version: coming ~~soon~~ eventually
 
-   * [Golang Bindings](proxybind)
-
- * [Pure Golang cross-platform GUI](gui) – ugly, not maintaed, lives as PoC. This code compiles virtually everywhere (tested on Ubuntu and Android, but supposed to work on iOS and Windows PC as well)
+   * [Golang Bindings](gobind)
  
+ * Use tapdance directly from other Golang program:
+
+```Golang
+package main
+
+import (
+	"github.com/sergeyfrolov/gotapdance/tapdance"
+	"fmt"
+)
+
+func main() {
+	tdConn, err := tapdance.Dial("tcp", "censoredsite.com:80")
+	if err != nil {
+		fmt.Printf("tapdance.Dial() failed: %+v\n", err)
+		return
+	}
+	// tdConn implements standard net.Conn, allowing to use it like any other Golang conn with
+	// Write(), Read(), Close() etc. It also allows to pass tdConn to functions that expect
+	// net.Conn, such as tls.Client() making it easy to do tls handshake over TapDance conn.
+	_, err = tdConn.Write([]byte("GET / HTTP/1.1\nHost: censoredsite.com\n\n"))
+	if err != nil {
+		fmt.Printf("tdConn.Write() failed: %+v\n", err)
+		return
+	}
+	buf := make([]byte, 16384)
+	_, err = tdConn.Read(buf)
+	// ...
+}
+```
+
+
  # Links
  
  [Refraction Networking](https://refraction.network) is an umberlla term for the family of similarly working technnologies.
