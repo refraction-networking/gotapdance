@@ -188,26 +188,27 @@ func (tdRaw *tdRawConn) tryDialOnce(expectedTransition pb.S2C_Transition) (err e
 	case tagHttpGetIncomplete:
 		tdRaw.initialMsg, err = tdRaw.readProto()
 		if err != nil {
-			strErr := err.Error()
-			if strings.Contains(strErr, ": i/o timeout") || // client timed out
-				err.Error() == "EOF" {
-				// decoy timed out
-				/*
-					TODO: to fix https://github.com/SergeyFrolov/gotapdance/issues/38
-					Generate ascii-range message with same length as tdRequest
-					Make sure it ends with "/r/n/r/n", send it and forget(don't close!)
-					On the wire this will look like spurious retransmission
-				*/
-				err = errors.New("TapDance station didn't pick up the request: " + strErr)
-				Logger().Errorf(tdRaw.idStr() + " " + err.Error())
+			if errIsTimeout(err) {
+				Logger().Errorf("%s %s: %v", tdRaw.idStr(),
+					"TapDance station didn't pick up the request", err)
+
+				// lame fix for issue #38 with abrupt drop of not picked up flows
+				tdRaw.tlsConn.SetDeadline(time.Now().Add(
+					getRandomDuration(deadlineTCPtoDecoyMin,
+						deadlineTCPtoDecoyMax)))
+				tdRaw.tlsConn.Write([]byte(getRandPadding(456, 789, 5) + "\r\n" +
+					"Connection: close\r\n\r\n"))
+				go readAndClose(tdRaw.tlsConn,
+					getRandomDuration(deadlineTCPtoDecoyMin,
+						deadlineTCPtoDecoyMax))
 			} else {
 				// any other error will be fatal
 				Logger().Errorf(tdRaw.idStr() +
 					" fatal error reading from TapDance station: " +
 					err.Error())
+				tdRaw.tlsConn.Close()
 				return
 			}
-			tdRaw.tlsConn.Close()
 			return
 		}
 		if tdRaw.initialMsg.GetStateTransition() != expectedTransition {

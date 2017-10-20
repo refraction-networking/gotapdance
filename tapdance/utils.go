@@ -218,3 +218,20 @@ func minInt(a, b int) int {
 	}
 	return a
 }
+
+func readAndClose(c net.Conn, readDeadline time.Duration) {
+	tinyBuf := []byte{0}
+	c.SetReadDeadline(time.Now().Add(readDeadline))
+	c.Read(tinyBuf)
+	c.Close()
+}
+
+func errIsTimeout(err error) bool {
+	if err != nil {
+		if strings.Contains(err.Error(), ": i/o timeout") || // client timed out
+			err.Error() == "EOF" { // decoy timed out
+			return true
+		}
+	}
+	return false
+}
