@@ -616,11 +616,6 @@ func (flowConn *TapdanceFlowConn) RemoteAddr() net.Addr {
 	return flowConn.tdRaw.tlsConn.RemoteAddr()
 }
 
-// NetworkConn returns underlying tcp connection
-func (flowConn *TapdanceFlowConn) NetworkConn() net.Conn {
-	return flowConn.tdRaw.tcpConn
-}
-
 // SetDeadline is supposed to set the read and write deadlines
 // associated with the connection. It is equivalent to calling
 // both SetReadDeadline and SetWriteDeadline.

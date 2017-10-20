@@ -117,9 +117,3 @@ func (tdConn *DualConn) Write(b []byte) (int, error) {
 func (tdConn *DualConn) idStr() string {
 	return "[Session " + strconv.FormatUint(tdConn.sessionId, 10) + "]"
 }
-
-// NetworkConn makes little sense, since there are 2 underlying NetworkConns.
-// Currently, returns the readerConn.NetworkConn()
-func (tdConn *DualConn) NetworkConn() net.Conn {
-	return tdConn.readerConn.NetworkConn()
-}
