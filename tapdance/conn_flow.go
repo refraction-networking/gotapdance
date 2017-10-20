@@ -607,11 +607,11 @@ func (flowConn *TapdanceFlowConn) processProto(msg pb.StationToClient) error {
 
 // LocalAddr returns the local network address.
 func (flowConn *TapdanceFlowConn) LocalAddr() net.Addr {
-	// not sure if this function is meaningful in TapDance context
 	return flowConn.tdRaw.tlsConn.LocalAddr()
 }
 
-// RemoteAddr returns the remote network address.
+// RemoteAddr returns the address of current decoy.
+// Not goroutine-safe, mostly here to satisfy net.Conn
 func (flowConn *TapdanceFlowConn) RemoteAddr() net.Addr {
 	return flowConn.tdRaw.tlsConn.RemoteAddr()
 }
