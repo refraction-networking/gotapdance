@@ -14,11 +14,17 @@ const timeoutMin = 20000
 const sendLimitMax = 15614
 const sendLimitMin = 14400
 
-const deadlineConnectTDStation = 15 // timeout for sending TD request and getting a response
-const deadlineTCPtoDecoy = 10       // deadline to establish TCP connection to decoy
+// timeout for sending TD request and getting a response
+const deadlineConnectTDStationMin = 11175
+const deadlineConnectTDStationMax = 14231
 
-// during reconnects we send FIN to server and wait until we get FIN back:
-const waitForFINDie = 22000 // time to wait before crashing
+// deadline to establish TCP connection to decoy
+const deadlineTCPtoDecoyMin = deadlineConnectTDStationMin
+const deadlineTCPtoDecoyMax = deadlineConnectTDStationMax
+
+// during reconnects we send FIN to server and wait until we get FIN back
+const waitForFINDieMin = 2 * deadlineConnectTDStationMin
+const waitForFINDieMax = 2 * deadlineConnectTDStationMax
 
 const maxInt16 = int16(^uint16(0) >> 1) // max msg size -> might have to chunk
 //const minInt16 = int16(-maxInt16 - 1)

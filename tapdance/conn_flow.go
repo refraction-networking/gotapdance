@@ -415,7 +415,8 @@ func (flowConn *TapdanceFlowConn) actOnReadError(err error) error {
 			willReconnect = true
 		} else {
 			flowConn.tdRaw.tlsConn.SetReadDeadline(
-				time.Now().Add(time.Millisecond * time.Duration(waitForFINDie)))
+				time.Now().Add(time.Millisecond *
+					time.Duration(getRandInt(waitForFINDieMin, waitForFINDieMax))))
 			err = flowConn.tdRaw.closeWrite()
 			if err != nil {
 				Logger().Infoln(flowConn.tdRaw.idStr() + " reconnect scheduling:" +
@@ -615,7 +616,6 @@ func (flowConn *TapdanceFlowConn) LocalAddr() net.Addr {
 func (flowConn *TapdanceFlowConn) RemoteAddr() net.Addr {
 	return flowConn.tdRaw.tlsConn.RemoteAddr()
 }
-
 
 // SetDeadline is supposed to set the read and write deadlines
 // associated with the connection. It is equivalent to calling
