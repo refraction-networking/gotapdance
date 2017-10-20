@@ -22,7 +22,7 @@ GOPATH="${HOME}/go/"
  ```bash
 go get github.com/sergeyfrolov/gotapdance github.com/Sirupsen/logrus \
            github.com/agl/ed25519/extra25519 golang.org/x/crypto/curve25519 \
-           github.com/refraction-networking/utls  \
+           github.com/refraction-networking/utls github.com/sergeyfrolov/bsbuffer \
            github.com/golang/protobuf/proto
 ```
 Ignore the "no buildable Go source files" warning.
