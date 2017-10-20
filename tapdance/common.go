@@ -63,6 +63,7 @@ func (m *msgType) Str() string {
 }
 
 var errMsgClose = errors.New("MSG CLOSE")
+var errNotImplemented = errors.New("Not implemented")
 
 type tdTagType int8
 

@@ -616,6 +616,7 @@ func (flowConn *TapdanceFlowConn) RemoteAddr() net.Addr {
 	return flowConn.tdRaw.tlsConn.RemoteAddr()
 }
 
+
 // SetDeadline is supposed to set the read and write deadlines
 // associated with the connection. It is equivalent to calling
 // both SetReadDeadline and SetWriteDeadline.
@@ -634,13 +635,13 @@ func (flowConn *TapdanceFlowConn) RemoteAddr() net.Addr {
 // A zero value for t means I/O operations will not time out.
 //
 func (flowConn *TapdanceFlowConn) SetDeadline(t time.Time) error {
-	return flowConn.tdRaw.tlsConn.SetDeadline(t)
+	return errNotImplemented
 }
 
 // SetReadDeadline sets the deadline for future Read calls.
 // A zero value for t means Read will not time out.
 func (flowConn *TapdanceFlowConn) SetReadDeadline(t time.Time) error {
-	return flowConn.tdRaw.tlsConn.SetReadDeadline(t)
+	return errNotImplemented
 }
 
 // SetWriteDeadline sets the deadline for future Write calls.
@@ -648,5 +649,5 @@ func (flowConn *TapdanceFlowConn) SetReadDeadline(t time.Time) error {
 // some of the data was successfully written.
 // A zero value for t means Write will not time out.
 func (flowConn *TapdanceFlowConn) SetWriteDeadline(t time.Time) error {
-	return flowConn.tdRaw.tlsConn.SetWriteDeadline(t)
+	return errNotImplemented
 }
