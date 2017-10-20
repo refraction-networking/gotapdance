@@ -12,8 +12,10 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"net"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // The key argument should be the AES key, either 16 or 32 bytes
@@ -54,6 +56,11 @@ func getRandInt(min int, max int) int {
 		v = mrand.Int63()
 	}
 	return min + int(v%int64(diff+1))
+}
+
+// returns random duration between min and max in milliseconds
+func getRandomDuration(min int, max int) time.Duration {
+	return time.Millisecond * time.Duration(getRandInt(min, max))
 }
 
 // Get padding of length [minLen, maxLen).

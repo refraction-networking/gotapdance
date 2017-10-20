@@ -160,8 +160,8 @@ func (tdRaw *tdRawConn) tryDialOnce(expectedTransition pb.S2C_Transition) (err e
 		return err
 	}
 
-	tdRaw.tlsConn.SetDeadline(time.Now().Add(time.Millisecond *
-		time.Duration(getRandInt(deadlineConnectTDStationMin, deadlineConnectTDStationMax))))
+	tdRaw.tlsConn.SetDeadline(time.Now().Add(
+		getRandomDuration(deadlineConnectTDStationMin, deadlineConnectTDStationMax)))
 
 	var tdRequest string
 	tdRequest, err = tdRaw.prepareTDRequest(tdRaw.tagType)
@@ -242,8 +242,7 @@ func (tdRaw *tdRawConn) establishTLStoDecoy() (err error) {
 		}
 	} else {
 		dialConn, err = net.DialTimeout("tcp", tdRaw.decoySpec.GetIpv4AddrStr(),
-			time.Millisecond*
-				time.Duration(getRandInt(deadlineTCPtoDecoyMin, deadlineTCPtoDecoyMax)))
+			getRandomDuration(deadlineTCPtoDecoyMin, deadlineTCPtoDecoyMax))
 		if err != nil {
 			return err
 		}

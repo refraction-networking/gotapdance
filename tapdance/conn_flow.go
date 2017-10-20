@@ -414,9 +414,8 @@ func (flowConn *TapdanceFlowConn) actOnReadError(err error) error {
 			// for upload-only flows we reconnect right away
 			willReconnect = true
 		} else {
-			flowConn.tdRaw.tlsConn.SetReadDeadline(
-				time.Now().Add(time.Millisecond *
-					time.Duration(getRandInt(waitForFINDieMin, waitForFINDieMax))))
+			flowConn.tdRaw.tlsConn.SetReadDeadline(time.Now().Add(
+				getRandomDuration(waitForFINDieMin, waitForFINDieMax)))
 			err = flowConn.tdRaw.closeWrite()
 			if err != nil {
 				Logger().Infoln(flowConn.tdRaw.idStr() + " reconnect scheduling:" +
