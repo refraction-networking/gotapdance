@@ -54,10 +54,10 @@ func (d *Dialer) Dial(network, address string) (net.Conn, error) {
 	}
 
 	req, err := http.NewRequest(http.MethodConnect, address, nil)
-	req.Host = address
 	if err != nil {
 		return nil, err
 	}
+	req.Host = address
 
 	err = req.Write(flow)
 	if err != nil {
