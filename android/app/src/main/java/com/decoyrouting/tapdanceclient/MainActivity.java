@@ -13,7 +13,7 @@ import android.widget.TextView;
 import java.io.IOException;
 import java.io.InputStream;
 
-import go.proxybind.Proxybind;
+import go.gobind.*;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -40,15 +40,15 @@ public class MainActivity extends AppCompatActivity {
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
-                                String stats = Proxybind.getStats();
-                                Boolean isListening = Proxybind.isListening();
+                                String stats = gobind.Gobind.getStats();
+                                Boolean isListening = gobind.Gobind.isListening();
                                 tvState.setText(stats);
                                 if (isListening) {
                                     launchButton.setText("Stop");
                                 } else {
                                     launchButton.setText("Launch");
                                 }
-                                stdout_tv.append(Proxybind.getLog().toString());
+                                stdout_tv.append(gobind.Gobind.getLog().toString());
                             }
                         });
                     }
@@ -63,10 +63,10 @@ public class MainActivity extends AppCompatActivity {
                 new Thread(new Runnable() {
                     public void run() {
                             try {
-                                if (Proxybind.isListening()) {
-                                    Proxybind.stop();
+                                if (gobind.Gobind.isListening()) {
+                                    gobind.Gobind.stop();
                                 } else {
-                                    Proxybind.listen();
+                                    gobind.Gobind.listen();
                                 }
                             } catch (final Exception ex) {
                                 runOnUiThread(new Runnable() {
@@ -85,7 +85,7 @@ public class MainActivity extends AppCompatActivity {
         });
 
         try {
-            Proxybind.newDecoyProxy(10500);
+            gobind.Gobind.newDecoyProxy(10500);
         } catch (Exception ex) {
             System.out.println(ex);
         }

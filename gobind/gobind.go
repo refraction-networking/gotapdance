@@ -1,4 +1,4 @@
-package proxybind
+package gobind
 
 import (
 	"bytes"
