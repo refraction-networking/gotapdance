@@ -3,6 +3,7 @@ package tapdance
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 )
@@ -48,23 +49,19 @@ func (d *Dialer) Dial(network, address string) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	flow, err := d.DialProxy()
 	if err != nil {
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodConnect, address, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Host = address
-
-	err = req.Write(flow)
+	_, err = fmt.Fprintf(flow, "CONNECT %s HTTP/1.1\r\nHost: %s\r\nX-Padding:%s\r\n\r\n",
+		address, address, getRandPadding(450, 780, 5))
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := http.ReadResponse(bufio.NewReader(flow), req)
+	resp, err := http.ReadResponse(bufio.NewReader(flow), nil)
 	if err != nil {
 		return nil, err
 	}
