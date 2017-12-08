@@ -11,13 +11,14 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
-	"github.com/golang/protobuf/proto"
-	"github.com/sergeyfrolov/bsbuffer"
-	pb "github.com/sergeyfrolov/gotapdance/protobuf"
 	"io"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/golang/protobuf/proto"
+	"github.com/sergeyfrolov/bsbuffer"
+	pb "github.com/sergeyfrolov/gotapdance/protobuf"
 )
 
 // TapdanceFlowConn represents single TapDance flow.
@@ -80,6 +81,41 @@ func makeTdFlow(flow flowType, tdRaw *tdRawConn) (*TapdanceFlowConn, error) {
 	return flowConn, nil
 }
 
+func (flowConn *TapdanceFlowConn) hardcodedResources() {
+	resources := []string{
+		"/favicon.ico",
+		"/merlijnhoek1.jpg",
+		"/merlijnhoek2.jpg",
+		"/merlijnhoek3.jpg",
+		"/gattou1.jpg",
+		"/feralindeed1.jpg",
+		"/elekesmagdi1.jpg",
+		"/Ncfc0721.jpg",
+		"/tigerweet1.jpg",
+		"/tigerweet2.jpg",
+		"/elekesmagdi1.jpg",
+		"/mandy_pantz1.jpg",
+		"/netzanette1.jpg",
+		"/guerson1.jpg",
+	}
+	leaf := true
+	msg := pb.ClientToStation{} //OvertUrl: []*pb.DupOvUrl{}
+	for i, _ := range resources {
+		msg.OvertUrl = append(msg.OvertUrl,
+			&pb.DupOvUrl{OvertUrl: &resources[i], IsLeaf: &leaf})
+	}
+
+	msgBytes, err := proto.Marshal(&msg)
+	if err != nil {
+		return
+	}
+	Logger().Infoln(flowConn.tdRaw.idStr()+" sending hardcoded resources: ", msg.String())
+	b := getMsgWithHeader(msgProtobuf, msgBytes)
+	_, err = flowConn.tdRaw.tlsConn.Write(b)
+	return
+
+}
+
 // Dial establishes direct connection to TapDance station proxy.
 // Users are expected to send HTTP CONNECT request next.
 func (flowConn *TapdanceFlowConn) Dial() error {
@@ -109,6 +145,7 @@ func (flowConn *TapdanceFlowConn) Dial() error {
 		flowConn.writeSliceChan = make(chan []byte)
 		flowConn.writeResultChan = make(chan ioOpResult)
 		go flowConn.spawnWriterEngine()
+		flowConn.hardcodedResources()
 		return nil
 	case flowReadOnly:
 		go flowConn.spawnReaderEngine()
