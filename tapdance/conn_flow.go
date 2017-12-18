@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/prometheus/common/log"
 	"github.com/sergeyfrolov/bsbuffer"
 	pb "github.com/sergeyfrolov/gotapdance/protobuf"
 )
@@ -83,20 +84,20 @@ func makeTdFlow(flow flowType, tdRaw *tdRawConn) (*TapdanceFlowConn, error) {
 
 func (flowConn *TapdanceFlowConn) hardcodedResources() {
 	resources := []string{
-		"/favicon.ico",
-		"/merlijnhoek1.jpg",
-		"/merlijnhoek2.jpg",
-		"/merlijnhoek3.jpg",
-		"/gattou1.jpg",
-		"/feralindeed1.jpg",
-		"/elekesmagdi1.jpg",
-		"/Ncfc0721.jpg",
-		"/tigerweet1.jpg",
-		"/tigerweet2.jpg",
-		"/elekesmagdi1.jpg",
-		"/mandy_pantz1.jpg",
-		"/netzanette1.jpg",
-		"/guerson1.jpg",
+		"GET /favicon.ico HTTP/1.1\r\nHost: tapdance1.freeaeskey.xyz\r\n\r\n",
+		"GET /merlijnhoek1.jpg HTTP/1.1\r\nHost: tapdance1.freeaeskey.xyz\r\n\r\n",
+		"GET /merlijnhoek2.jpg HTTP/1.1\r\nHost: tapdance1.freeaeskey.xyz\r\n\r\n",
+		"GET /merlijnhoek3.jpg HTTP/1.1\r\nHost: tapdance1.freeaeskey.xyz\r\n\r\n",
+		"GET /gattou1.jpg HTTP/1.1\r\nHost: tapdance1.freeaeskey.xyz\r\n\r\n",
+		"GET /feralindeed1.jpg HTTP/1.1\r\nHost: tapdance1.freeaeskey.xyz\r\n\r\n",
+		"GET /elekesmagdi1.jpg HTTP/1.1\r\nHost: tapdance1.freeaeskey.xyz\r\n\r\n",
+		"GET /Ncfc0721.jpg HTTP/1.1\r\nHost: tapdance1.freeaeskey.xyz\r\n\r\n",
+		"GET /tigerweet1.jpg HTTP/1.1\r\nHost: tapdance1.freeaeskey.xyz\r\n\r\n",
+		"GET /tigerweet2.jpg HTTP/1.1\r\nHost: tapdance1.freeaeskey.xyz\r\n\r\n",
+		"GET /elekesmagdi1.jpg HTTP/1.1\r\nHost: tapdance1.freeaeskey.xyz\r\n\r\n",
+		"GET /mandy_pantz1.jpg HTTP/1.1\r\nHost: tapdance1.freeaeskey.xyz\r\n\r\n",
+		"GET /netzanette1.jpg HTTP/1.1\r\nHost: tapdance1.freeaeskey.xyz\r\n\r\n",
+		"GET /guerson1.jpg HTTP/1.1\r\nHost: tapdance1.freeaeskey.xyz\r\n\r\n",
 	}
 	leaf := true
 	msg := pb.ClientToStation{} //OvertUrl: []*pb.DupOvUrl{}
@@ -107,11 +108,16 @@ func (flowConn *TapdanceFlowConn) hardcodedResources() {
 
 	msgBytes, err := proto.Marshal(&msg)
 	if err != nil {
+		log.Warn(err.String())
 		return
 	}
 	Logger().Infoln(flowConn.tdRaw.idStr()+" sending hardcoded resources: ", msg.String())
 	b := getMsgWithHeader(msgProtobuf, msgBytes)
 	_, err = flowConn.tdRaw.tlsConn.Write(b)
+	if err != nil {
+		log.Warn(err.String())
+		return
+	}
 	return
 
 }
@@ -128,7 +134,8 @@ func (flowConn *TapdanceFlowConn) Dial() error {
 	}
 	// don't lose initial msg from station
 	// strip off state transition and push protobuf up for processing
-	flowConn.tdRaw.initialMsg.StateTransition = nil
+	// benvds: removed this to allow action on dial from process proto
+	// flowConn.tdRaw.initialMsg.StateTransition = nil
 	err := flowConn.processProto(flowConn.tdRaw.initialMsg)
 	if err != nil {
 		flowConn.closeWithErrorOnce(err)
@@ -145,7 +152,6 @@ func (flowConn *TapdanceFlowConn) Dial() error {
 		flowConn.writeSliceChan = make(chan []byte)
 		flowConn.writeResultChan = make(chan ioOpResult)
 		go flowConn.spawnWriterEngine()
-		flowConn.hardcodedResources()
 		return nil
 	case flowReadOnly:
 		go flowConn.spawnReaderEngine()
@@ -616,6 +622,7 @@ func (flowConn *TapdanceFlowConn) processProto(msg pb.StationToClient) error {
 
 	// note that flowConn don't see first-message transitions, such as INIT or RECONNECT
 	stateTransition := msg.GetStateTransition()
+	Logger().Infof("Just got state transition: %s", stateTransition.String())
 	switch stateTransition {
 	case pb.S2C_Transition_S2C_NO_CHANGE:
 	// carry on
@@ -628,9 +635,10 @@ func (flowConn *TapdanceFlowConn) processProto(msg pb.StationToClient) error {
 		Logger().Errorln(flowConn.idStr() + " " + err.Error())
 		flowConn.closeWithErrorOnce(err)
 		return err
-	case pb.S2C_Transition_S2C_CONFIRM_RECONNECT:
-		fallthrough
 	case pb.S2C_Transition_S2C_SESSION_INIT:
+		Logger().Infof("Just got session init, sending resources\n")
+		flowConn.hardcodedResources()
+	case pb.S2C_Transition_S2C_CONFIRM_RECONNECT:
 		fallthrough
 	default:
 		err := errors.New("Unexpected StateTransition " +
