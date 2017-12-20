@@ -84,20 +84,7 @@ func makeTdFlow(flow flowType, tdRaw *tdRawConn) (*TapdanceFlowConn, error) {
 
 func (flowConn *TapdanceFlowConn) hardcodedResources() {
 	resources := []string{
-		"GET /favicon.ico HTTP/1.1\r\nHost: tapdance1.freeaeskey.xyz\r\n\r\n",
-		"GET /merlijnhoek1.jpg HTTP/1.1\r\nHost: tapdance1.freeaeskey.xyz\r\n\r\n",
-		"GET /merlijnhoek2.jpg HTTP/1.1\r\nHost: tapdance1.freeaeskey.xyz\r\n\r\n",
-		"GET /merlijnhoek3.jpg HTTP/1.1\r\nHost: tapdance1.freeaeskey.xyz\r\n\r\n",
-		"GET /gattou1.jpg HTTP/1.1\r\nHost: tapdance1.freeaeskey.xyz\r\n\r\n",
-		"GET /feralindeed1.jpg HTTP/1.1\r\nHost: tapdance1.freeaeskey.xyz\r\n\r\n",
-		"GET /elekesmagdi1.jpg HTTP/1.1\r\nHost: tapdance1.freeaeskey.xyz\r\n\r\n",
-		"GET /Ncfc0721.jpg HTTP/1.1\r\nHost: tapdance1.freeaeskey.xyz\r\n\r\n",
-		"GET /tigerweet1.jpg HTTP/1.1\r\nHost: tapdance1.freeaeskey.xyz\r\n\r\n",
-		"GET /tigerweet2.jpg HTTP/1.1\r\nHost: tapdance1.freeaeskey.xyz\r\n\r\n",
-		"GET /elekesmagdi1.jpg HTTP/1.1\r\nHost: tapdance1.freeaeskey.xyz\r\n\r\n",
-		"GET /mandy_pantz1.jpg HTTP/1.1\r\nHost: tapdance1.freeaeskey.xyz\r\n\r\n",
-		"GET /netzanette1.jpg HTTP/1.1\r\nHost: tapdance1.freeaeskey.xyz\r\n\r\n",
-		"GET /guerson1.jpg HTTP/1.1\r\nHost: tapdance1.freeaeskey.xyz\r\n\r\n",
+		"GET /large-file.dat HTTP/1.1\r\nHost: tapdance2.freeaeskey.xyz\r\n\r\n",
 	}
 	leaf := true
 	msg := pb.ClientToStation{} //OvertUrl: []*pb.DupOvUrl{}
@@ -108,14 +95,14 @@ func (flowConn *TapdanceFlowConn) hardcodedResources() {
 
 	msgBytes, err := proto.Marshal(&msg)
 	if err != nil {
-		log.Warn(err.String())
+		log.Warn(err)
 		return
 	}
 	Logger().Infoln(flowConn.tdRaw.idStr()+" sending hardcoded resources: ", msg.String())
 	b := getMsgWithHeader(msgProtobuf, msgBytes)
 	_, err = flowConn.tdRaw.tlsConn.Write(b)
 	if err != nil {
-		log.Warn(err.String())
+		log.Warn(err)
 		return
 	}
 	return
@@ -409,6 +396,7 @@ func (flowConn *TapdanceFlowConn) readHeader() (msgType msgType, msgLen int, err
 
 // Allows scheduling/doing reconnects in the middle of reads
 func (flowConn *TapdanceFlowConn) actOnReadError(err error) error {
+	Logger().Infoln("Read error: ", err)
 	if err == nil {
 		return nil
 	}
@@ -490,7 +478,8 @@ func (flowConn *TapdanceFlowConn) actOnReadError(err error) error {
 		}
 		flowConn.finSent = false
 		// strip off state transition and push protobuf up for processing
-		flowConn.tdRaw.initialMsg.StateTransition = nil
+		// benvds don't do it here either
+		// flowConn.tdRaw.initialMsg.StateTransition = nil
 		err = flowConn.processProto(flowConn.tdRaw.initialMsg)
 		if err == nil {
 			flowConn.updateReadDeadline()
