@@ -87,7 +87,8 @@ func (flowConn *TapdanceFlowConn) hardcodedResources() {
 		"GET /large-file.dat HTTP/1.1\r\nHost: tapdance2.freeaeskey.xyz\r\n\r\n",
 	}
 	leaf := true
-	msg := pb.ClientToStation{} //OvertUrl: []*pb.DupOvUrl{}
+	currGen := Assets().GetGeneration()
+	msg := pb.ClientToStation{DecoyListGeneration: &currGen} //OvertUrl: []*pb.DupOvUrl{}
 	for i, _ := range resources {
 		msg.OvertUrl = append(msg.OvertUrl,
 			&pb.DupOvUrl{OvertUrl: &resources[i], IsLeaf: &leaf})
@@ -261,7 +262,7 @@ func (flowConn *TapdanceFlowConn) spawnReaderEngine() {
 				flowConn.closeWithErrorOnce(err)
 				return
 			}
-			Logger().Debugf("%s ReaderEngine: read\n%s",
+			Logger().Debugf("%s ReaderEngine: read data\n%s",
 				flowConn.idStr(), hex.Dump(buf))
 			_, err = flowConn.bsbuf.Write(buf)
 			if err != nil {
@@ -591,6 +592,7 @@ func (flowConn *TapdanceFlowConn) processProto(msg pb.StationToClient) error {
 		}
 	}
 	Logger().Debugln(flowConn.idStr() + " processing incoming protobuf: " + msg.String())
+	Logger().Debugf(flowConn.idStr()+" processing protobuf with padding: %d\n", len(msg.Padding))
 	// handle ConfigInfo
 	if confInfo := msg.ConfigInfo; confInfo != nil {
 		handleConfigInfo(confInfo)
