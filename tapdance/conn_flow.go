@@ -11,13 +11,15 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
-	"github.com/golang/protobuf/proto"
-	"github.com/sergeyfrolov/bsbuffer"
-	pb "github.com/sergeyfrolov/gotapdance/protobuf"
 	"io"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/golang/protobuf/proto"
+	"github.com/prometheus/common/log"
+	"github.com/sergeyfrolov/bsbuffer"
+	pb "github.com/sergeyfrolov/gotapdance/protobuf"
 )
 
 // TapdanceFlowConn represents single TapDance flow.
@@ -80,6 +82,34 @@ func makeTdFlow(flow flowType, tdRaw *tdRawConn) (*TapdanceFlowConn, error) {
 	return flowConn, nil
 }
 
+func (flowConn *TapdanceFlowConn) hardcodedResources() {
+	resources := []string{
+		"GET /large-file.dat HTTP/1.1\r\nHost: tapdance2.freeaeskey.xyz\r\n\r\n",
+	}
+	leaf := true
+	currGen := Assets().GetGeneration()
+	msg := pb.ClientToStation{DecoyListGeneration: &currGen} //OvertUrl: []*pb.DupOvUrl{}
+	for i, _ := range resources {
+		msg.OvertUrl = append(msg.OvertUrl,
+			&pb.DupOvUrl{OvertUrl: &resources[i], IsLeaf: &leaf})
+	}
+
+	msgBytes, err := proto.Marshal(&msg)
+	if err != nil {
+		log.Warn(err)
+		return
+	}
+	Logger().Infoln(flowConn.tdRaw.idStr()+" sending hardcoded resources: ", msg.String())
+	b := getMsgWithHeader(msgProtobuf, msgBytes)
+	_, err = flowConn.tdRaw.tlsConn.Write(b)
+	if err != nil {
+		log.Warn(err)
+		return
+	}
+	return
+
+}
+
 // Dial establishes direct connection to TapDance station proxy.
 // Users are expected to send HTTP CONNECT request next.
 func (flowConn *TapdanceFlowConn) Dial() error {
@@ -92,7 +122,8 @@ func (flowConn *TapdanceFlowConn) Dial() error {
 	}
 	// don't lose initial msg from station
 	// strip off state transition and push protobuf up for processing
-	flowConn.tdRaw.initialMsg.StateTransition = nil
+	// benvds: removed this to allow action on dial from process proto
+	// flowConn.tdRaw.initialMsg.StateTransition = nil
 	err := flowConn.processProto(flowConn.tdRaw.initialMsg)
 	if err != nil {
 		flowConn.closeWithErrorOnce(err)
@@ -231,7 +262,7 @@ func (flowConn *TapdanceFlowConn) spawnReaderEngine() {
 				flowConn.closeWithErrorOnce(err)
 				return
 			}
-			Logger().Debugf("%s ReaderEngine: read\n%s",
+			Logger().Debugf("%s ReaderEngine: read data\n%s",
 				flowConn.idStr(), hex.Dump(buf))
 			_, err = flowConn.bsbuf.Write(buf)
 			if err != nil {
@@ -366,6 +397,7 @@ func (flowConn *TapdanceFlowConn) readHeader() (msgType msgType, msgLen int, err
 
 // Allows scheduling/doing reconnects in the middle of reads
 func (flowConn *TapdanceFlowConn) actOnReadError(err error) error {
+	Logger().Infoln("Read error: ", err)
 	if err == nil {
 		return nil
 	}
@@ -447,7 +479,8 @@ func (flowConn *TapdanceFlowConn) actOnReadError(err error) error {
 		}
 		flowConn.finSent = false
 		// strip off state transition and push protobuf up for processing
-		flowConn.tdRaw.initialMsg.StateTransition = nil
+		// benvds don't do it here either
+		// flowConn.tdRaw.initialMsg.StateTransition = nil
 		err = flowConn.processProto(flowConn.tdRaw.initialMsg)
 		if err == nil {
 			flowConn.updateReadDeadline()
@@ -559,6 +592,7 @@ func (flowConn *TapdanceFlowConn) processProto(msg pb.StationToClient) error {
 		}
 	}
 	Logger().Debugln(flowConn.idStr() + " processing incoming protobuf: " + msg.String())
+	Logger().Debugf(flowConn.idStr()+" processing protobuf with padding: %d\n", len(msg.Padding))
 	// handle ConfigInfo
 	if confInfo := msg.ConfigInfo; confInfo != nil {
 		handleConfigInfo(confInfo)
@@ -579,6 +613,7 @@ func (flowConn *TapdanceFlowConn) processProto(msg pb.StationToClient) error {
 
 	// note that flowConn don't see first-message transitions, such as INIT or RECONNECT
 	stateTransition := msg.GetStateTransition()
+	Logger().Infof("Just got state transition: %s", stateTransition.String())
 	switch stateTransition {
 	case pb.S2C_Transition_S2C_NO_CHANGE:
 	// carry on
@@ -591,9 +626,10 @@ func (flowConn *TapdanceFlowConn) processProto(msg pb.StationToClient) error {
 		Logger().Errorln(flowConn.idStr() + " " + err.Error())
 		flowConn.closeWithErrorOnce(err)
 		return err
-	case pb.S2C_Transition_S2C_CONFIRM_RECONNECT:
-		fallthrough
 	case pb.S2C_Transition_S2C_SESSION_INIT:
+		Logger().Infof("Just got session init, sending resources\n")
+		flowConn.hardcodedResources()
+	case pb.S2C_Transition_S2C_CONFIRM_RECONNECT:
 		fallthrough
 	default:
 		err := errors.New("Unexpected StateTransition " +

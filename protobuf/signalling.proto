@@ -105,6 +105,7 @@ enum S2C_Transition {
     S2C_CONFIRM_RECONNECT = 2;
     S2C_SESSION_CLOSE = 3;
     // TODO should probably also allow EXPECT_RECONNECT here, for DittoTap
+
     S2C_ERROR = 255;
 }
 
@@ -139,6 +140,13 @@ message StationToClient {
     // Signals client to stop connecting for following amount of seconds
     optional uint32 tmp_backoff = 5;
 
+	optional bool nonleaf_complete = 14;
+    optional bytes nonleaf_contents = 15;
+    // TODO: implement this, or remove this placeholder
+    // Specifies what type of lossless compression was used. None if field is
+    // not filled. The lossy compression is left implicit.
+    // optional CompressionType compressed_with = 16;
+
     // Random-sized junk to defeat packet size fingerprinting.
     optional bytes padding = 100;
 }
@@ -162,5 +170,27 @@ message ClientToStation {
 
     // Random-sized junk to defeat packet size fingerprinting.
     optional bytes padding = 100;
+
+    // (DittoTap-only)
+    // Item(s) the station should add to its to-dup-overt-download queue. These
+    // are assumed to be to the same decoy webserver as this session started on,
+    // so rather than full URL, it should just be the path:
+    // "/foo.html" instead of "https://a.b.com/foo.html", or
+    // "/bar.png"  instead of "https://a.b.com/bar.png"
+    repeated DupOvUrl overt_url = 101;
+
+    // (DittoTap-only)
+    // The HTTP Host field to use. The client only needs to specify this once,
+    // at the beginning. (If we start getting the initial nonleaf URL from the
+    // incomplete HTTP request, we can get this from there and drop this field).
+    optional string overt_host = 102;
 }
 
+message DupOvUrl {
+	// This should be the resource requested by the client for traffic shaping:
+	//     e.g. "/", "/images/kittens.jpg"
+    optional string overt_url = 1;
+	// This is a boolean specifying if the client wants the data from this 
+	// resource or not.
+    optional bool is_leaf = 2;
+}

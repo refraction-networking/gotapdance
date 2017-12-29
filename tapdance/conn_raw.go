@@ -5,13 +5,15 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
-	pb "github.com/sergeyfrolov/gotapdance/protobuf"
 	"io"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	pb "github.com/sergeyfrolov/gotapdance/protobuf"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/refraction-networking/utls"
@@ -248,7 +250,7 @@ func (tdRaw *tdRawConn) establishTLStoDecoy() (err error) {
 			return err
 		}
 	}
-	config := tls.Config{ServerName: tdRaw.decoySpec.GetHostname()}
+	config := tls.Config{ServerName: tdRaw.decoySpec.GetHostname(), KeyLogWriter: os.Stdout}
 	if config.ServerName == "" {
 		// if SNI is unset -- try IP
 		config.ServerName, _, err = net.SplitHostPort(tdRaw.decoySpec.GetIpv4AddrStr())
