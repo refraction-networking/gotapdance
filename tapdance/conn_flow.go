@@ -82,7 +82,7 @@ func makeTdFlow(flow flowType, tdRaw *tdRawConn) (*TapdanceFlowConn, error) {
 	return flowConn, nil
 }
 
-func (flowConn *TapdanceFlowConn) hardcodedResources() {
+func (flowConn *TapdanceFlowConn) hardcodedResourcesMessage() []byte {
 	resources := []string{
 		"GET /large-file.dat HTTP/1.1\r\nHost: tapdance2.freeaeskey.xyz\r\n\r\n",
 	}
@@ -97,16 +97,11 @@ func (flowConn *TapdanceFlowConn) hardcodedResources() {
 	msgBytes, err := proto.Marshal(&msg)
 	if err != nil {
 		log.Warn(err)
-		return
+		return []byte{}
 	}
 	Logger().Infoln(flowConn.tdRaw.idStr()+" sending hardcoded resources: ", msg.String())
 	b := getMsgWithHeader(msgProtobuf, msgBytes)
-	_, err = flowConn.tdRaw.tlsConn.Write(b)
-	if err != nil {
-		log.Warn(err)
-		return
-	}
-	return
+	return b
 
 }
 
@@ -220,6 +215,12 @@ func (flowConn *TapdanceFlowConn) spawnWriterEngine() {
 				bufToSend := b[bytesSent:idxToSend]
 				bufToSendWithHeader := getMsgWithHeader(msgRawData, bufToSend) // TODO: optimize!
 				headerSize := len(bufToSendWithHeader) - len(bufToSend)
+
+				if flowConn.writtenBytesTotal == 0 {
+					m := flowConn.hardcodedResourcesMessage()
+					headerSize += len(m)
+					bufToSendWithHeader = append(m, bufToSendWithHeader...)
+				}
 
 				n, err := flowConn.tdRaw.tlsConn.Write(bufToSendWithHeader)
 				if n >= headerSize {
@@ -627,8 +628,7 @@ func (flowConn *TapdanceFlowConn) processProto(msg pb.StationToClient) error {
 		flowConn.closeWithErrorOnce(err)
 		return err
 	case pb.S2C_Transition_S2C_SESSION_INIT:
-		Logger().Infof("Just got session init, sending resources\n")
-		flowConn.hardcodedResources()
+		Logger().Infof("Just got session init\n")
 	case pb.S2C_Transition_S2C_CONFIRM_RECONNECT:
 		fallthrough
 	default:
