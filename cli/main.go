@@ -2,22 +2,24 @@ package main
 
 import (
 	"flag"
+	"os"
+	"strings"
+
 	"github.com/pkg/profile"
 	"github.com/sergeyfrolov/gotapdance/tapdance"
 	"github.com/sergeyfrolov/gotapdance/tdproxy"
-	"os"
 )
 
 func main() {
 	defer profile.Start().Stop()
 
-	var port = flag.Int("port", 10500, "TapDance will listen for connections on this port.")
-	var assets_location = flag.String("assetsdir", "./assets/", "Folder to read assets from.")
-	flag.Parse()
+	portPtr := flag.Int("p", 10500, "HTTP proxy port")
+	hostPtr := flag.String("h", "tapdance2.freeaeskey.xyz", "overt host to request resources from")
+	resourcesPtr := flag.String("r", "/large-file.dat", "comma separated list of resources to request")
 
-	tapdance.AssetsFromDir(*assets_location)
-
-	tapdanceProxy := tdproxy.NewTapDanceProxy(*port)
+	tapdanceProxy := tdproxy.NewTapDanceProxy(*portPtr)
+	tapdance.OvertHost = *hostPtr
+	tapdance.OvertResources = strings.Split(*resourcesPtr, ",")
 	err := tapdanceProxy.ListenAndServe()
 	if err != nil {
 		tdproxy.Logger.Errorf("Failed to ListenAndServe(): %v\n", err)
