@@ -17,6 +17,8 @@ func main() {
 	hostPtr := flag.String("h", "tapdance2.freeaeskey.xyz", "overt host to request resources from")
 	resourcesPtr := flag.String("r", "/large-file.dat", "comma separated list of resources to request")
 
+	flag.Parse()
+
 	tapdanceProxy := tdproxy.NewTapDanceProxy(*portPtr)
 	tapdance.OvertHost = *hostPtr
 	tapdance.OvertResources = strings.Split(*resourcesPtr, ",")
