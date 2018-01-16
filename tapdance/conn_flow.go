@@ -83,12 +83,11 @@ func makeTdFlow(flow flowType, tdRaw *tdRawConn) (*TapdanceFlowConn, error) {
 }
 
 func (flowConn *TapdanceFlowConn) hardcodedResourcesMessage() []byte {
-	resources := []string{
-		"GET /large-file.dat HTTP/1.1\r\nHost: tapdance2.freeaeskey.xyz\r\n\r\n",
-	}
+	resources := OvertResources
 	leaf := true
 	currGen := Assets().GetGeneration()
 	msg := pb.ClientToStation{DecoyListGeneration: &currGen} //OvertUrl: []*pb.DupOvUrl{}
+	msg.OvertHost = &OvertHost
 	for i, _ := range resources {
 		msg.OvertUrl = append(msg.OvertUrl,
 			&pb.DupOvUrl{OvertUrl: &resources[i], IsLeaf: &leaf})
