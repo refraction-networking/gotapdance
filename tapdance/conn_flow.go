@@ -20,6 +20,12 @@ import (
 	"github.com/prometheus/common/log"
 	"github.com/sergeyfrolov/bsbuffer"
 	pb "github.com/sergeyfrolov/gotapdance/protobuf"
+
+	"fmt"
+	"net/http"
+	"strings"
+
+    mrand "math/rand"
 )
 
 // TapdanceFlowConn represents single TapDance flow.
@@ -47,6 +53,17 @@ type TapdanceFlowConn struct {
 	closeErr  error
 
 	flowType flowType
+
+	resourceRequestMutex sync.Mutex
+	resourceRequestState int
+	resourceRequestPath string
+	resourceRequestLeaf bool
+	resourceRequestResponse string
+
+	writeMutex sync.Mutex
+	firstLeafSent bool
+	flowClosed bool
+	flowReconnect bool
 }
 
 /*______________________TapdanceFlowConn Mode Chart _____________________________
@@ -104,6 +121,105 @@ func (flowConn *TapdanceFlowConn) hardcodedResourcesMessage() []byte {
 
 }
 
+func (flowConn *TapdanceFlowConn) genResourcesMessage() ([]byte, bool) {
+	var resources []string
+	var leaf []bool
+
+	leafRequested := false
+
+	flowConn.resourceRequestMutex.Lock()
+
+	if flowConn.resourceRequestState == 1 {
+		resources = append(resources, flowConn.resourceRequestPath)
+		leaf = append(leaf, flowConn.resourceRequestLeaf)
+
+		flowConn.resourceRequestState = 2
+		if flowConn.resourceRequestLeaf {
+			flowConn.resourceRequestState = 0
+			leafRequested = true
+		}
+	}
+
+	flowConn.resourceRequestMutex.Unlock()
+
+	if len(resources) == 0 { return []byte{}, leafRequested }
+	Logger().Infoln(flowConn.tdRaw.idStr()+" received resource request for: ", resources)
+
+	currGen := Assets().GetGeneration()
+	msg := pb.ClientToStation{DecoyListGeneration: &currGen}
+	msg.OvertHost = &OvertHost
+	for i, _ := range resources {
+		msg.OvertUrl = append(msg.OvertUrl,
+			&pb.DupOvUrl{OvertUrl: &resources[i], IsLeaf: &leaf[i]})
+	}
+
+	msgBytes, err := proto.Marshal(&msg)
+	if err != nil {
+		log.Warn(err)
+		return []byte{}, leafRequested
+	}
+
+	b := getMsgWithHeader(msgProtobuf, msgBytes)
+
+	Logger().Infoln(flowConn.tdRaw.idStr()+" sending resource request to station: ", msg.String())
+	return b, leafRequested
+}
+
+func (flowConn *TapdanceFlowConn) resourceRequest(req *http.Request) (string, error) {
+	path := req.URL.Path
+
+	leaf := false
+	if strings.HasSuffix(path, ".jpg") || strings.HasSuffix(path, ".JPG") ||
+		strings.HasSuffix(path, ".png") || strings.HasSuffix(path, ".PNG") ||
+		strings.HasSuffix(path, ".gif") || strings.HasSuffix(path, ".GIF") ||
+		strings.HasSuffix(path, ".svg") || strings.HasSuffix(path, ".SVG") ||
+		strings.HasSuffix(path, ".ico") || strings.HasSuffix(path, ".ICO") ||
+		strings.HasSuffix(path, ".dat") || strings.HasSuffix(path, ".DAT") {
+		leaf = true
+	}
+
+	Logger().Infoln(flowConn.tdRaw.idStr()+" sending resource request for: ", path)
+
+	for {
+		flowConn.resourceRequestMutex.Lock()
+
+		if flowConn.resourceRequestState == 0 {
+			flowConn.resourceRequestPath = path
+			flowConn.resourceRequestLeaf = leaf
+
+			flowConn.resourceRequestState = 1
+
+			flowConn.resourceRequestMutex.Unlock()
+			break
+		}
+
+		flowConn.resourceRequestMutex.Unlock()
+	}
+
+	if leaf {
+		return "HTTP/1.1 200 OK\r\n\r\n", nil
+	} else {
+		var res string
+
+		for {
+			flowConn.resourceRequestMutex.Lock()
+
+			if flowConn.resourceRequestState == 3 {
+				res = flowConn.resourceRequestResponse
+
+				flowConn.resourceRequestState = 0
+
+				flowConn.resourceRequestMutex.Unlock()
+				break
+			}
+
+			flowConn.resourceRequestMutex.Unlock()
+		}
+
+		return fmt.Sprintf("HTTP/1.1 200 OK\r\n\r\n%s", res), nil
+	}
+}
+
 // Dial establishes direct connection to TapDance station proxy.
 // Users are expected to send HTTP CONNECT request next.
 func (flowConn *TapdanceFlowConn) Dial() error {
@@ -134,6 +250,7 @@ func (flowConn *TapdanceFlowConn) Dial() error {
 		flowConn.writeSliceChan = make(chan []byte)
 		flowConn.writeResultChan = make(chan ioOpResult)
 		go flowConn.spawnWriterEngine()
+		go flowConn.spawnResourceEngine()
 		return nil
 	case flowReadOnly:
 		go flowConn.spawnReaderEngine()
@@ -166,6 +283,41 @@ func (flowConn *TapdanceFlowConn) awaitReconnect() bool {
 	}
 }
 
+func (flowConn *TapdanceFlowConn) spawnResourceEngine() {
+	mrand.Seed(time.Now().UnixNano())
+
+	go flowConn.Browse(OvertHost + OvertResources[mrand.Intn(len(OvertResources))])
+
+	for {
+		m, l := flowConn.genResourcesMessage()
+
+		if len(m) == 0 { continue }
+
+		if flowConn.flowClosed { break }
+
+		for flowConn.flowReconnect {}
+
+		flowConn.writeMutex.Lock()
+
+		n, err := flowConn.tdRaw.tlsConn.Write(m)
+
+		flowConn.writtenBytesTotal += n
+
+		if (err != nil) {
+			log.Warn(err)
+
+			flowConn.writeMutex.Unlock()
+			continue
+		}
+
+		if l { flowConn.firstLeafSent = true }
+
+		flowConn.writeMutex.Unlock()
+
+		Logger().Infoln(flowConn.tdRaw.idStr()+" sent resource request to station: ", m)
+	}
+}
+
 // Write writes data to the connection.
 // Write can be made to time out and return an Error with Timeout() == true
 // after a fixed time limit; see SetDeadline and SetWriteDeadline.
@@ -174,10 +326,14 @@ func (flowConn *TapdanceFlowConn) spawnWriterEngine() {
 	for {
 		select {
 		case <-flowConn.reconnectStarted:
+			flowConn.flowReconnect = true
 			if !flowConn.awaitReconnect() {
 				return
+			} else {
+				flowConn.flowReconnect = false
 			}
 		case <-flowConn.closed:
+			flowConn.flowClosed = true
 			return
 		case b := <-flowConn.writeSliceChan:
 			ioResult := ioOpResult{}
@@ -215,10 +371,11 @@ func (flowConn *TapdanceFlowConn) spawnWriterEngine() {
 				bufToSendWithHeader := getMsgWithHeader(msgRawData, bufToSend) // TODO: optimize!
 				headerSize := len(bufToSendWithHeader) - len(bufToSend)
 
-				if flowConn.writtenBytesTotal == 0 {
-					m := flowConn.hardcodedResourcesMessage()
-					headerSize += len(m)
-					bufToSendWithHeader = append(m, bufToSendWithHeader...)
+				flowConn.writeMutex.Lock()
+
+				for !flowConn.firstLeafSent {
+					flowConn.writeMutex.Unlock()
+					flowConn.writeMutex.Lock()
 				}
 
 				n, err := flowConn.tdRaw.tlsConn.Write(bufToSendWithHeader)
@@ -231,12 +388,17 @@ func (flowConn *TapdanceFlowConn) spawnWriterEngine() {
 				flowConn.writtenBytesTotal += len(bufToSendWithHeader)
 				if err != nil {
 					ioResult.err = err
+
+					flowConn.writeMutex.Unlock()
 					break
 				}
+
+				flowConn.writeMutex.Unlock()
 			}
 			select {
 			case flowConn.writeResultChan <- ioResult:
 			case <-flowConn.closed:
+				flowConn.flowClosed = true
 				return
 			}
 		}
@@ -637,6 +799,23 @@ func (flowConn *TapdanceFlowConn) processProto(msg pb.StationToClient) error {
 		flowConn.closeWithErrorOnce(err)
 		return err
 	}
+
+	if msg.NonleafContents != nil {
+		Logger().Infoln(flowConn.tdRaw.idStr()+" received non-leaf contents: \n", string(msg.NonleafContents))
+
+		flowConn.resourceRequestMutex.Lock()
+
+		if flowConn.resourceRequestState == 2 {
+			Logger().Infoln(flowConn.tdRaw.idStr()+" forwarding non-leaf contents: \n", string(msg.NonleafContents))
+
+			flowConn.resourceRequestResponse = string(msg.NonleafContents)
+
+			flowConn.resourceRequestState = 3
+		}
+
+		flowConn.resourceRequestMutex.Unlock()
+	}
+
 	return nil
 }
 

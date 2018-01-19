@@ -148,3 +148,6 @@ func sleepBeforeConnect(attempt int) (waitTime <-chan time.Time) {
 
 var OvertHost = ""
 var OvertResources = []string{}
+
+var HeadlessHost = ""
+var HeadlessPort = 0
