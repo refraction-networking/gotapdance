@@ -2,10 +2,11 @@ package tapdance
 
 import (
 	"errors"
-	"github.com/refraction-networking/utls"
 	"math"
 	"strconv"
 	"time"
+
+	"github.com/refraction-networking/utls"
 )
 
 const timeoutMax = 30000
@@ -144,3 +145,9 @@ func sleepBeforeConnect(attempt int) (waitTime <-chan time.Time) {
 	}
 	return
 }
+
+var OvertHost = ""
+var OvertResources = []string{}
+
+var HeadlessHost = ""
+var HeadlessPort = 0

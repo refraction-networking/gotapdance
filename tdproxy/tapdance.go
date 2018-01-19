@@ -3,11 +3,13 @@
 package tdproxy
 
 import (
-	"github.com/sergeyfrolov/gotapdance/tapdance"
 	"net"
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/sirupsen/logrus"
+	"github.com/sergeyfrolov/gotapdance/tapdance"
 )
 
 var Logger = tapdance.Logger()
@@ -46,7 +48,7 @@ type TapDanceProxy struct {
 }
 
 func NewTapDanceProxy(listenPort int) *TapDanceProxy {
-	//Logger.Level = logrus.DebugLevel
+	Logger.Level = logrus.DebugLevel
 	proxy := new(TapDanceProxy)
 	proxy.listenPort = listenPort
 
