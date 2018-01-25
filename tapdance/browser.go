@@ -4,8 +4,11 @@ import (
     "github.com/wirepair/gcd"
     "github.com/wirepair/gcd/gcdapi"
 
+    "bytes"
     "encoding/base64"
     "encoding/json"
+    "fmt"
+    "io/ioutil"
     "math"
     "math/rand"
     "net/http"
@@ -26,6 +29,8 @@ func (flowConn *TapdanceFlowConn) Browse(overt_host string) {
         overt = make(map[*gcd.ChromeTarget]string)
         current_url = make(map[*gcd.ChromeTarget]string)
     }
+
+    if flowConn.perDomainInflight == nil { flowConn.perDomainInflight = make(map[string]int) }
 
     // TODO: Get platform-specific exePath or use ConnectToInstance
     debugger := gcd.NewChromeDebugger()
@@ -141,7 +146,7 @@ func requestIntercepted(target *gcd.ChromeTarget, event []byte) {
     err = json.Unmarshal(event, eventUnmarshal)
     if err != nil { Logger().Warnln(conn[target].tdRaw.idStr()+" error unmarshalling request: ", err) }
 
-    Logger().Infoln(conn[target].tdRaw.idStr()+" intercepted request to ", eventUnmarshal.Params.Request.Url)
+    Logger().Infoln(conn[target].tdRaw.idStr()+" intercepted request to: ", eventUnmarshal.Params.Request.Url)
 
     request, err := http.NewRequest(eventUnmarshal.Params.Request.Method, eventUnmarshal.Params.Request.Url, strings.NewReader(eventUnmarshal.Params.Request.PostData))
     if err != nil { Logger().Warnln(conn[target].tdRaw.idStr()+" error creating request: ", err) }
@@ -150,12 +155,76 @@ func requestIntercepted(target *gcd.ChromeTarget, event []byte) {
         request.Header.Add(k, v.(string))
     }
 
+    var direct bool
+
+    var direct_response *http.Response
     var response string
 
     // TODO: Investigate failed binary file fetches
     for {
-        response, err = conn[target].resourceRequest(request)
+        for {
+            conn[target].browserConnPoolMutex.Lock()
+
+            if !conn[target].resourceRequestInflight {
+                direct = false
+
+                conn[target].resourceRequestInflight = true
+                val, _ := conn[target].perDomainInflight[request.URL.Host]
+                conn[target].perDomainInflight[request.URL.Host] = val + 1
+
+                conn[target].browserConnPoolMutex.Unlock()
+                break
+            }
+
+            if conn[target].directRequestInflight < 9 {
+                if val, _ := conn[target].perDomainInflight[request.URL.Host]; val < 6 {
+                    direct = true
+
+                    conn[target].directRequestInflight += 1
+                    val, _ := conn[target].perDomainInflight[request.URL.Host]
+                    conn[target].perDomainInflight[request.URL.Host] = val + 1
+
+                    conn[target].browserConnPoolMutex.Unlock()
+                    break
+                }
+            }
+
+            conn[target].browserConnPoolMutex.Unlock()
+        }
+
+        if direct {
+            Logger().Infoln(conn[target].tdRaw.idStr()+" firing direct request to: ", eventUnmarshal.Params.Request.Url)
+            direct_response, err = conn[target].directRequestClient.Do(request)
+        } else {
+            Logger().Infoln(conn[target].tdRaw.idStr()+" firing resource request to: ", eventUnmarshal.Params.Request.Url)
+            response, err = conn[target].resourceRequest(request)
+        }
+
+        conn[target].browserConnPoolMutex.Lock()
+
+        if direct {
+            conn[target].resourceRequestInflight = false
+            conn[target].perDomainInflight[request.URL.Host] -= 1
+        } else {
+            conn[target].directRequestInflight -= 1
+            conn[target].perDomainInflight[request.URL.Host] -= 1
+        }
+
+        conn[target].browserConnPoolMutex.Unlock()
+
         if err != nil { Logger().Warnln(conn[target].tdRaw.idStr()+" failed to fetch ", eventUnmarshal.Params.Request.Url, ", retrying... (", err, ")") } else { break }
+    }
+
+    if direct {
+        var headers bytes.Buffer
+        err = direct_response.Header.Write(&headers)
+        if err != nil { Logger().Warnln(conn[target].tdRaw.idStr()+" error reading header: ", err) }
+
+        defer direct_response.Body.Close()
+        body, err := ioutil.ReadAll(direct_response.Body)
+        if err != nil { Logger().Warnln(conn[target].tdRaw.idStr()+" error reading body: ", err) }
+
+        response = fmt.Sprintf("%s %s\r\n%s\r\n\r\n%s", direct_response.Proto, direct_response.Status, headers, body)
     }
 
     _, err = target.Network.ContinueInterceptedRequest(eventUnmarshal.Params.InterceptionId, "", base64.StdEncoding.EncodeToString([]byte(response)), "", "", "", map[string]interface{}{}, nil)

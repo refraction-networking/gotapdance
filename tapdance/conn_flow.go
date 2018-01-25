@@ -66,6 +66,13 @@ type TapdanceFlowConn struct {
 	firstLeafSent bool
 	flowClosed bool
 	flowReconnect bool
+
+	directRequestClient http.Client
+
+	browserConnPoolMutex sync.Mutex
+	resourceRequestInflight bool
+	directRequestInflight int
+	perDomainInflight map[string]int
 }
 
 /*______________________TapdanceFlowConn Mode Chart _____________________________
