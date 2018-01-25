@@ -47,6 +47,8 @@ type tdRawConn struct {
 
 	closed    chan struct{}
 	closeOnce sync.Once
+
+	writeCredit int
 }
 
 func makeTdRaw(handshakeType tdTagType,
@@ -287,6 +289,38 @@ func (tdRaw *tdRawConn) establishTLStoDecoy() (err error) {
 	return
 }
 
+func (tdRaw *tdRawConn) Read(b []byte) (int, error) {
+	return tdRaw.tlsConn.Read(b)
+}
+
+func (tdRaw *tdRawConn) Write(b []byte) (int, error) {
+	var n int
+	var err error
+
+	if tdRaw.writeCredit >= len(b) {
+		n, err = tdRaw.tlsConn.Write(b)
+	} else {
+		n, err = tdRaw.tlsConn.Write(b[:tdRaw.writeCredit])
+	}
+
+	tdRaw.writeCredit -= n
+	return n, err
+}
+
+func (tdRaw *tdRawConn) WritePriority(b []byte, budget int) (int, error) {
+	var n int
+	var err error
+
+	if budget >= len(b) {
+		n, err = tdRaw.tlsConn.Write(b)
+	} else {
+		return 0, errors.New("Provided insufficient credit for write operation")
+	}
+
+	tdRaw.writeCredit += (budget - n)
+	return n, err
+}
+
 func (tdRaw *tdRawConn) Close() error {
 	var err error
 	tdRaw.closeOnce.Do(func() {
@@ -399,7 +433,7 @@ func (tdRaw *tdRawConn) readProto() (msg pb.StationToClient, err error) {
 	headerBuffer := make([]byte, 6) // TODO: allocate once at higher level?
 
 	for readBytesTotal < headerSize {
-		readBytes, err = tdRaw.tlsConn.Read(headerBuffer[readBytesTotal:headerSize])
+		readBytes, err = tdRaw.Read(headerBuffer[readBytesTotal:headerSize])
 		readBytesTotal += uint32(readBytes)
 		if err != nil {
 			return
@@ -419,7 +453,7 @@ func (tdRaw *tdRawConn) readProto() (msg pb.StationToClient, err error) {
 		outerProtoMsgType = msgProtobuf
 		headerSize += 4
 		for readBytesTotal < headerSize {
-			readBytes, err = tdRaw.tlsConn.Read(headerBuffer[readBytesTotal:headerSize])
+			readBytes, err = tdRaw.Read(headerBuffer[readBytesTotal:headerSize])
 
 			readBytesTotal += uint32(readBytes)
 			if err == io.EOF && readBytesTotal == headerSize {
@@ -441,7 +475,7 @@ func (tdRaw *tdRawConn) readProto() (msg pb.StationToClient, err error) {
 
 	// Get the message itself
 	for readBytesTotal < totalBytesToRead {
-		readBytes, err = tdRaw.tlsConn.Read(readBuffer[readBytesTotal-headerSize : msgLen])
+		readBytes, err = tdRaw.Read(readBuffer[readBytesTotal-headerSize : msgLen])
 		readBytesTotal += uint32(readBytes)
 
 		if err != nil {

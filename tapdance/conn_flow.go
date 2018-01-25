@@ -26,6 +26,7 @@ import (
 	"strings"
 
     mrand "math/rand"
+	"bytes"
 )
 
 // TapdanceFlowConn represents single TapDance flow.
@@ -58,6 +59,7 @@ type TapdanceFlowConn struct {
 	resourceRequestState int
 	resourceRequestPath string
 	resourceRequestLeaf bool
+	resourceRequestBudget int
 	resourceRequestResponse string
 
 	writeMutex sync.Mutex
@@ -121,9 +123,11 @@ func (flowConn *TapdanceFlowConn) hardcodedResourcesMessage() []byte {
 
 }
 
-func (flowConn *TapdanceFlowConn) genResourcesMessage() ([]byte, bool) {
+func (flowConn *TapdanceFlowConn) genResourcesMessage() ([]byte, bool, int) {
 	var resources []string
 	var leaf []bool
+
+	budget := 0
 
 	leafRequested := false
 
@@ -132,6 +136,8 @@ func (flowConn *TapdanceFlowConn) genResourcesMessage() ([]byte, bool) {
 	if flowConn.resourceRequestState == 1 {
 		resources = append(resources, flowConn.resourceRequestPath)
 		leaf = append(leaf, flowConn.resourceRequestLeaf)
+
+		budget += flowConn.resourceRequestBudget
 
 		flowConn.resourceRequestState = 2
 		if flowConn.resourceRequestLeaf {
@@ -142,7 +148,7 @@ func (flowConn *TapdanceFlowConn) genResourcesMessage() ([]byte, bool) {
 
 	flowConn.resourceRequestMutex.Unlock()
 
-	if len(resources) == 0 { return []byte{}, leafRequested }
+	if len(resources) == 0 { return []byte{}, leafRequested, budget }
 	Logger().Infoln(flowConn.tdRaw.idStr()+" received resource request for: ", resources)
 
 	currGen := Assets().GetGeneration()
@@ -156,13 +162,13 @@ func (flowConn *TapdanceFlowConn) genResourcesMessage() ([]byte, bool) {
 	msgBytes, err := proto.Marshal(&msg)
 	if err != nil {
 		log.Warn(err)
-		return []byte{}, leafRequested
+		return []byte{}, leafRequested, budget
 	}
 
 	b := getMsgWithHeader(msgProtobuf, msgBytes)
 
 	Logger().Infoln(flowConn.tdRaw.idStr()+" sending resource request to station: ", msg.String())
-	return b, leafRequested
+	return b, leafRequested, budget
 }
 
 func (flowConn *TapdanceFlowConn) resourceRequest(req *http.Request) (string, error) {
@@ -178,6 +184,14 @@ func (flowConn *TapdanceFlowConn) resourceRequest(req *http.Request) (string, er
 		leaf = true
 	}
 
+	headers := new(bytes.Buffer)
+	req.Header.Write(headers)
+
+	body := new(bytes.Buffer)
+	body.ReadFrom(req.Body)
+
+	wire := fmt.Sprintf("%s %s %s\r\n%s\r\n\r\n%s", req.Method, req.Proto, req.URL.Path, headers.String(), body.String())
+
 	Logger().Infoln(flowConn.tdRaw.idStr()+" sending resource request for: ", path)
 
 	for {
@@ -186,6 +200,8 @@ func (flowConn *TapdanceFlowConn) resourceRequest(req *http.Request) (string, er
 		if flowConn.resourceRequestState == 0 {
 			flowConn.resourceRequestPath = path
 			flowConn.resourceRequestLeaf = leaf
+
+			flowConn.resourceRequestBudget = len(wire)
 
 			flowConn.resourceRequestState = 1
 
@@ -289,7 +305,7 @@ func (flowConn *TapdanceFlowConn) spawnResourceEngine() {
 	go flowConn.Browse(OvertHost + OvertResources[mrand.Intn(len(OvertResources))])
 
 	for {
-		m, l := flowConn.genResourcesMessage()
+		m, l, budget := flowConn.genResourcesMessage()
 
 		if len(m) == 0 { continue }
 
@@ -299,7 +315,7 @@ func (flowConn *TapdanceFlowConn) spawnResourceEngine() {
 
 		flowConn.writeMutex.Lock()
 
-		n, err := flowConn.tdRaw.tlsConn.Write(m)
+		n, err := flowConn.tdRaw.WritePriority(m, budget)
 
 		flowConn.writtenBytesTotal += n
 
@@ -378,7 +394,7 @@ func (flowConn *TapdanceFlowConn) spawnWriterEngine() {
 					flowConn.writeMutex.Lock()
 				}
 
-				n, err := flowConn.tdRaw.tlsConn.Write(bufToSendWithHeader)
+				n, err := flowConn.tdRaw.Write(bufToSendWithHeader)
 				if n >= headerSize {
 					// TODO: that's kinda hacky
 					n -= headerSize
@@ -480,7 +496,7 @@ func (flowConn *TapdanceFlowConn) readRawData(msgLen int) ([]byte, error) {
 	var readBytesTotal int // both header and body
 	// Get the message itself
 	for readBytesTotal < msgLen {
-		readBytes, err = flowConn.tdRaw.tlsConn.Read(flowConn.recvbuf[readBytesTotal:])
+		readBytes, err = flowConn.tdRaw.Read(flowConn.recvbuf[readBytesTotal:])
 		readBytesTotal += int(readBytes)
 		if err != nil {
 			err = flowConn.actOnReadError(err)
@@ -498,7 +514,7 @@ func (flowConn *TapdanceFlowConn) readProtobuf(msgLen int) (msg pb.StationToClie
 	var readBytesTotal int // both header and body
 	// Get the message itself
 	for readBytesTotal < msgLen {
-		readBytes, err = flowConn.tdRaw.tlsConn.Read(rbuf[readBytesTotal:])
+		readBytes, err = flowConn.tdRaw.Read(rbuf[readBytesTotal:])
 		readBytesTotal += readBytes
 		if err != nil {
 			err = flowConn.actOnReadError(err)
@@ -520,7 +536,7 @@ func (flowConn *TapdanceFlowConn) readHeader() (msgType msgType, msgLen int, err
 
 	//TODO: check FIN+last data case
 	for readBytesTotal < headerSize {
-		readBytes, err = flowConn.tdRaw.tlsConn.Read(flowConn.headerBuf[readBytesTotal:headerSize])
+		readBytes, err = flowConn.tdRaw.Read(flowConn.headerBuf[readBytesTotal:headerSize])
 		readBytesTotal += uint32(readBytes)
 		if err != nil {
 			err = flowConn.actOnReadError(err)
@@ -543,7 +559,7 @@ func (flowConn *TapdanceFlowConn) readHeader() (msgType msgType, msgLen int, err
 		msgType = msgProtobuf
 		headerSize += 4
 		for readBytesTotal < headerSize {
-			readBytes, err = flowConn.tdRaw.tlsConn.Read(flowConn.headerBuf[readBytesTotal:headerSize])
+			readBytes, err = flowConn.tdRaw.Read(flowConn.headerBuf[readBytesTotal:headerSize])
 			readBytesTotal += uint32(readBytes)
 			if err != nil {
 				err = flowConn.actOnReadError(err)
