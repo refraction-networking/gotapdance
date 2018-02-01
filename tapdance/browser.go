@@ -58,7 +58,7 @@ func (flowConn *TapdanceFlowConn) Browse(overt_host string) {
     current_url[target] = "https://" + overt[target]
     Logger().Infoln(flowConn.tdRaw.idStr()+" navigating to ", current_url[target])
 
-    _, _, err = target.Page.Navigate(current_url[target], "", "")
+    _, _, _, err = target.Page.Navigate(current_url[target], "", "")
     if err != nil { Logger().Warnln(flowConn.tdRaw.idStr()+" error navigating to ", current_url[target], ": ", err) }
 
     select{}
@@ -128,13 +128,13 @@ func loadEventFired(target *gcd.ChromeTarget, event []byte) {
         current_url[target] = candidate_links[rand.Intn(len(candidate_links))]
         Logger().Infoln(conn[target].tdRaw.idStr()+" following link to ", current_url[target])
 
-        _, _, err = target.Page.Navigate(current_url[target], "", "")
+        _, _, _, err = target.Page.Navigate(current_url[target], "", "")
         if err != nil { Logger().Warnln(conn[target].tdRaw.idStr()+" error navigating to ", current_url[target] ,": ", err) }
     } else {
         // Improve out-of-link handling, possibly try returning to previous page
         Logger().Infoln(conn[target].tdRaw.idStr()+" ran out of links, refreshing current page")
 
-        _, _, err = target.Page.Navigate(current_url[target], "", "")
+        _, _, _, err = target.Page.Navigate(current_url[target], "", "")
         if err != nil { Logger().Warnln(conn[target].tdRaw.idStr()+" error navigating to ", current_url[target] ,": ", err) }
     }
 }
