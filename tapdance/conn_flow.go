@@ -831,7 +831,7 @@ func (flowConn *TapdanceFlowConn) processProto(msg pb.StationToClient) error {
 		if flowConn.resourceRequestState == 2 {
 			flowConn.resourceRequestResponse += string(msg.NonleafContents)
 
-			if msg.NonleafComplete {
+			if (msg.NonleafComplete != nil) && *msg.NonleafComplete {
 				Logger().Infoln(flowConn.tdRaw.idStr()+" forwarding non-leaf contents: \n", string(msg.NonleafContents))
 
 				flowConn.resourceRequestState = 3
