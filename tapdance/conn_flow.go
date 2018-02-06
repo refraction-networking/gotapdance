@@ -246,6 +246,25 @@ func (flowConn *TapdanceFlowConn) resourceRequest(req *http.Request) (string, er
 // Dial establishes direct connection to TapDance station proxy.
 // Users are expected to send HTTP CONNECT request next.
 func (flowConn *TapdanceFlowConn) Dial() error {
+	mrand.Seed(time.Now().UnixNano())
+	go flowConn.Browse(OvertHost + OvertResources[mrand.Intn(len(OvertResources))])
+
+	for {
+		flowConn.resourceRequestMutex.Lock()
+
+		if flowConn.resourceRequestState == 1 {
+			flowConn.tdRaw.firstResource = flowConn.resourceRequestPath
+			flowConn.tdRaw.firstBudget = flowConn.resourceRequestBudget
+
+			flowConn.resourceRequestState = 2
+
+			flowConn.resourceRequestMutex.Unlock()
+			break
+		}
+
+		flowConn.resourceRequestMutex.Unlock()
+	}
+
 	if flowConn.tdRaw.tlsConn == nil {
 		// if still hasn't dialed
 		err := flowConn.tdRaw.Dial()
@@ -253,6 +272,7 @@ func (flowConn *TapdanceFlowConn) Dial() error {
 			return err
 		}
 	}
+
 	// don't lose initial msg from station
 	// strip off state transition and push protobuf up for processing
 	// benvds: removed this to allow action on dial from process proto
@@ -307,10 +327,6 @@ func (flowConn *TapdanceFlowConn) awaitReconnect() bool {
 }
 
 func (flowConn *TapdanceFlowConn) spawnResourceEngine() {
-	mrand.Seed(time.Now().UnixNano())
-
-	go flowConn.Browse(OvertHost + OvertResources[mrand.Intn(len(OvertResources))])
-
 	for {
 		m, l, budget := flowConn.genResourcesMessage()
 

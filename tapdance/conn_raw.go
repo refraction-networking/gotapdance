@@ -49,6 +49,9 @@ type tdRawConn struct {
 	closeOnce sync.Once
 
 	writeCredit int
+
+	firstResource string
+	firstBudget int
 }
 
 func makeTdRaw(handshakeType tdTagType,
@@ -376,12 +379,17 @@ func (tdRaw *tdRawConn) genHTTP1Tag(tag []byte) (string, error) {
 		fallthrough
 	case tagHttpGetIncomplete:
 		tdRaw.UploadLimit = int(tdRaw.decoySpec.GetTcpwin()) - getRandInt(1, 1045)
-		httpTag = `GET / HTTP/1.1
+
+		httpTag = `GET ` + tdRaw.firstResource  + ` HTTP/1.1
 Host: ` + tdRaw.decoySpec.GetHostname() + `
-User-Agent: TapDance/1.2 (+https://tapdance.team/info)
-Accept-Encoding: None
-X-Ignore: ` + getRandPadding(7, 612, 10)
+X-Ignore: `
 		httpTag = strings.Replace(httpTag, "\n", "\r\n", -1)
+
+		budgetLeft := tdRaw.firstBudget - len(httpTag) - ((len(tag)/3+1)*4)
+		if budgetLeft < 0 { return httpTag, errors.New("Incomplete request exceeds allocated budget of first request") }
+
+		httpTag += getRandPadding(budgetLeft, budgetLeft, 10)
+
 	case tagHttpPostIncomplete:
 		ContentLength := getRandInt(900000, 1045000)
 		tdRaw.UploadLimit = ContentLength - 1
