@@ -829,11 +829,13 @@ func (flowConn *TapdanceFlowConn) processProto(msg pb.StationToClient) error {
 		flowConn.resourceRequestMutex.Lock()
 
 		if flowConn.resourceRequestState == 2 {
-			Logger().Infoln(flowConn.tdRaw.idStr()+" forwarding non-leaf contents: \n", string(msg.NonleafContents))
+			flowConn.resourceRequestResponse += string(msg.NonleafContents)
 
-			flowConn.resourceRequestResponse = string(msg.NonleafContents)
+			if msg.NonleafComplete {
+				Logger().Infoln(flowConn.tdRaw.idStr()+" forwarding non-leaf contents: \n", string(msg.NonleafContents))
 
-			flowConn.resourceRequestState = 3
+				flowConn.resourceRequestState = 3
+			}
 		}
 
 		flowConn.resourceRequestMutex.Unlock()
