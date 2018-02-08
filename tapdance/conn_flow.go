@@ -197,7 +197,7 @@ func (flowConn *TapdanceFlowConn) resourceRequest(req *http.Request) (string, er
 	body := new(bytes.Buffer)
 	body.ReadFrom(req.Body)
 
-	wire := fmt.Sprintf("%s %s %s\r\n%s\r\n\r\n%s", req.Method, req.Proto, req.URL.Path, headers.String(), body.String())
+	wire := fmt.Sprintf("%s %s %s\r\n%s\r\n%s", req.Method, req.URL.Path, req.Proto, headers.String(), body.String())
 
 	Logger().Infoln(flowConn.tdRaw.idStr()+" sending resource request for: ", path)
 
