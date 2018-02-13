@@ -140,8 +140,9 @@ message StationToClient {
     // Signals client to stop connecting for following amount of seconds
     optional uint32 tmp_backoff = 5;
 
-	optional bool nonleaf_complete = 14;
     optional bytes nonleaf_contents = 15;
+	optional bool nonleaf_complete = 16;
+	optional bool leaf_complete = 17;
     // TODO: implement this, or remove this placeholder
     // Specifies what type of lossless compression was used. None if field is
     // not filled. The lossy compression is left implicit.

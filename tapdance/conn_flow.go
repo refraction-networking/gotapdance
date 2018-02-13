@@ -73,6 +73,10 @@ type TapdanceFlowConn struct {
 	resourceRequestInflight bool
 	directRequestInflight int
 	perDomainInflight map[string]int
+
+	resourcesReceived int
+
+	cv *sync.Cond
 }
 
 /*______________________TapdanceFlowConn Mode Chart _____________________________
@@ -105,6 +109,7 @@ func makeTdFlow(flow flowType, tdRaw *tdRawConn) (*TapdanceFlowConn, error) {
 	flowConn.bsbuf = bsbuffer.NewBSBuffer()
 	flowConn.closed = make(chan struct{})
 	flowConn.flowType = flow
+	flowConn.cv = sync.NewCond(&sync.Mutex{})
 	return flowConn, nil
 }
 
@@ -765,6 +770,11 @@ func (flowConn *TapdanceFlowConn) closeWithErrorOnce(err error) error {
 // Close closes the connection.
 // Any blocked Read or Write operations will be unblocked and return errors.
 func (flowConn *TapdanceFlowConn) Close() error {
+	flowConn.cv.L.Lock()
+	for flowConn.resourcesReceived < len(OvertResources) {
+		flowConn.cv.Wait()
+	}
+	flowConn.cv.L.Unlock()
 	return flowConn.closeWithErrorOnce(errors.New("closed by application layer"))
 }
 
@@ -809,6 +819,16 @@ func (flowConn *TapdanceFlowConn) processProto(msg pb.StationToClient) error {
 				"longer in the list, changing it! Write flow probably will break!")
 			// if current decoy is no longer in the list
 			flowConn.tdRaw.decoySpec = Assets().GetDecoy()
+		}
+	}
+
+	// handle resource finishes
+	if msg.LeafComplete != nil && *msg.LeafComplete {
+		flowConn.cv.L.Lock()
+		Logger().Warningln("Finished resource")
+		flowConn.resourcesReceived++
+		if flowConn.resourcesReceived > len(OvertResources) {
+			flowConn.cv.Signal()
 		}
 	}
 
