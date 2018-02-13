@@ -151,6 +151,8 @@ func (flowConn *TapdanceFlowConn) genResourcesMessage() ([]byte, bool, int) {
 
 		budget += flowConn.resourceRequestBudget
 
+		flowConn.resourceRequestResponse = ""
+
 		flowConn.resourceRequestState = 2
 		if flowConn.resourceRequestLeaf {
 			flowConn.resourceRequestState = 0
