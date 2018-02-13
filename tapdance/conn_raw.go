@@ -303,7 +303,7 @@ func (tdRaw *tdRawConn) Write(b []byte) (int, error) {
 	if tdRaw.writeCredit >= len(b) {
 		n, err = tdRaw.tlsConn.Write(b)
 	} else {
-		n, err = tdRaw.tlsConn.Write(b[:tdRaw.writeCredit])
+		n, err = 0, nil
 	}
 
 	tdRaw.writeCredit -= n
