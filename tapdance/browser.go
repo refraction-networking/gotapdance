@@ -155,6 +155,15 @@ func requestIntercepted(target *gcd.ChromeTarget, event []byte) {
         request.Header.Add(k, v.(string))
     }
 
+    // DevTools doesn't supply these headers; find way to get rid of hardcode
+    request.Header.Add("Host", request.URL.Host)
+    request.Header.Add("Connection", "keep-alive")
+    request.Header.Add("Accept-Encoding", "gzip, deflate")
+
+    // Discrepancies between GUI and headless Chrome; find a better fix
+    if ua := request.Header.Get("User-Agent"); ua != "" { request.Header.Set("User-Agent", strings.Replace(ua, "HeadlessChrome", "Chrome", -1)) }
+    if request.Header.Get("Accept-Language") == "" { request.Header.Set("Accept-Language", "en-US,en;q=0.9") }
+
     var direct bool
 
     var direct_response *http.Response
