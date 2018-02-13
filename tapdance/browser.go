@@ -8,7 +8,6 @@ import (
     "encoding/base64"
     "encoding/json"
     "fmt"
-    "io/ioutil"
     "math"
     "math/rand"
     "net/http"
@@ -158,7 +157,7 @@ func requestIntercepted(target *gcd.ChromeTarget, event []byte) {
     // DevTools doesn't supply these headers; find way to get rid of hardcode
     request.Header.Add("Host", request.URL.Host)
     request.Header.Add("Connection", "keep-alive")
-    request.Header.Add("Accept-Encoding", "gzip, deflate")
+    request.Header.Add("Accept-Encoding", "             ") // Handle gzip, deflate
 
     // Discrepancies between GUI and headless Chrome; find a better fix
     if ua := request.Header.Get("User-Agent"); ua != "" { request.Header.Set("User-Agent", strings.Replace(ua, "HeadlessChrome", "Chrome", -1)) }
@@ -225,15 +224,16 @@ func requestIntercepted(target *gcd.ChromeTarget, event []byte) {
     }
 
     if direct {
-        var headers bytes.Buffer
-        err = direct_response.Header.Write(&headers)
+        headers := new(bytes.Buffer)
+        err = direct_response.Header.Write(headers)
         if err != nil { Logger().Warnln(conn[target].tdRaw.idStr()+" error reading header: ", err) }
 
         defer direct_response.Body.Close()
-        body, err := ioutil.ReadAll(direct_response.Body)
+        body := new(bytes.Buffer)
+    	_, err = body.ReadFrom(direct_response.Body)
         if err != nil { Logger().Warnln(conn[target].tdRaw.idStr()+" error reading body: ", err) }
 
-        response = fmt.Sprintf("%s %s\r\n%s\r\n\r\n%s", direct_response.Proto, direct_response.Status, headers, body)
+        response = fmt.Sprintf("%s %s\r\n%s\r\n\r\n%s", direct_response.Proto, direct_response.Status, headers.String(), body.String())
     }
 
     _, err = target.Network.ContinueInterceptedRequest(eventUnmarshal.Params.InterceptionId, "", base64.StdEncoding.EncodeToString([]byte(response)), "", "", "", map[string]interface{}{}, nil)
