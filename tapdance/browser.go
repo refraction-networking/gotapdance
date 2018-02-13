@@ -211,10 +211,10 @@ func requestIntercepted(target *gcd.ChromeTarget, event []byte) {
         conn[target].browserConnPoolMutex.Lock()
 
         if direct {
-            conn[target].resourceRequestInflight = false
+            conn[target].directRequestInflight -= 1
             conn[target].perDomainInflight[request.URL.Host] -= 1
         } else {
-            conn[target].directRequestInflight -= 1
+            conn[target].resourceRequestInflight = false
             conn[target].perDomainInflight[request.URL.Host] -= 1
         }
 
