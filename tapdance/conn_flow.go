@@ -772,11 +772,11 @@ func (flowConn *TapdanceFlowConn) closeWithErrorOnce(err error) error {
 // Close closes the connection.
 // Any blocked Read or Write operations will be unblocked and return errors.
 func (flowConn *TapdanceFlowConn) Close() error {
-	flowConn.cv.L.Lock()
+	/* flowConn.cv.L.Lock()
 	for flowConn.resourcesReceived < len(OvertResources) {
 		flowConn.cv.Wait()
 	}
-	flowConn.cv.L.Unlock()
+	flowConn.cv.L.Unlock() */
 	return flowConn.closeWithErrorOnce(errors.New("closed by application layer"))
 }
 
@@ -825,14 +825,14 @@ func (flowConn *TapdanceFlowConn) processProto(msg pb.StationToClient) error {
 	}
 
 	// handle resource finishes
-	if msg.LeafComplete != nil && *msg.LeafComplete {
+	/* if msg.LeafComplete != nil && *msg.LeafComplete {
 		flowConn.cv.L.Lock()
 		Logger().Warningln("Finished resource")
 		flowConn.resourcesReceived++
 		if flowConn.resourcesReceived > len(OvertResources) {
 			flowConn.cv.Signal()
 		}
-	}
+	} */
 
 	// note that flowConn don't see first-message transitions, such as INIT or RECONNECT
 	stateTransition := msg.GetStateTransition()
