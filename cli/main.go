@@ -4,14 +4,27 @@ import (
 	"flag"
 	"os"
 	"strings"
+	"runtime"
 
 	"github.com/pkg/profile"
 	"github.com/sergeyfrolov/gotapdance/tapdance"
 	"github.com/sergeyfrolov/gotapdance/tdproxy"
 )
 
+
 func main() {
-	defer profile.Start().Stop()
+	var chromePath string
+	switch runtime.GOOS {
+	case "darwin":
+		flag.StringVar(&chromePath, "chrome_path",
+			"/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
+			"Path to Google Chrome binary.")
+	case "linux":
+		flag.StringVar(&chromePath, "chrome_path",
+			"/usr/bin/google-chrome-beta",
+			"Path to Google Chrome binary.")
+	}
+
 
 	portPtr := flag.Int("p", 10500, "HTTP proxy port")
 	hostPtr := flag.String("h", "tapdance2.freeaeskey.xyz", "overt host to request resources from")
@@ -21,6 +34,9 @@ func main() {
 	headlessPortPtr := flag.Int("hp", 9222, "headless browser port")
 
 	flag.Parse()
+	tapdance.ChromePath = chromePath
+
+	defer profile.Start().Stop()
 
 	tapdanceProxy := tdproxy.NewTapDanceProxy(*portPtr)
 	tapdance.OvertHost = *hostPtr
