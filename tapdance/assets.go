@@ -163,8 +163,7 @@ func (a *assets) readConfigs() {
 	}
 }
 
-// gets randomDecoyAddress. sni stands for subject name indication.
-// addr is in format ipv4:port
+// Picks random decoy, returns Server Name Indication and addr in format ipv4:port
 func (a *assets) GetDecoyAddress() (sni string, addr string) {
 	a.RLock()
 	defer a.RUnlock()
@@ -182,8 +181,7 @@ func (a *assets) GetDecoyAddress() (sni string, addr string) {
 	return
 }
 
-// gets randomDecoyAddress. sni stands for subject name indication.
-// addr is in format ipv4:port
+// Gets random DecoySpec.
 func (a *assets) GetDecoy() pb.TLSDecoySpec {
 	a.RLock()
 	defer a.RUnlock()
@@ -232,6 +230,7 @@ func (a *assets) GetGeneration() uint32 {
 	return a.config.GetGeneration()
 }
 
+// Set ClientConf generation and store config to disk
 func (a *assets) SetGeneration(gen uint32) (err error) {
 	a.Lock()
 	defer a.Unlock()
@@ -242,7 +241,7 @@ func (a *assets) SetGeneration(gen uint32) (err error) {
 	return
 }
 
-// Set Public key in persistent way (e.g. store to disk)
+// Set Public key and store config to disk
 func (a *assets) SetPubkey(pubkey pb.PubKey) (err error) {
 	a.Lock()
 	defer a.Unlock()
@@ -253,6 +252,7 @@ func (a *assets) SetPubkey(pubkey pb.PubKey) (err error) {
 	return
 }
 
+// Set ClientConf and store config to disk
 func (a *assets) SetClientConf(conf *pb.ClientConf) (err error) {
 	a.Lock()
 	defer a.Unlock()
@@ -262,7 +262,12 @@ func (a *assets) SetClientConf(conf *pb.ClientConf) (err error) {
 	return
 }
 
-// Set decoys in persistent way (e.g. store to disk)
+// Not goroutine-safe, use at your own risk
+func (a *assets) GetClientConfPtr() *pb.ClientConf {
+	return &a.config
+}
+
+// Overwrite currently used decoys and store config to disk
 func (a *assets) SetDecoys(decoys []*pb.TLSDecoySpec) (err error) {
 	a.Lock()
 	defer a.Unlock()
@@ -272,6 +277,7 @@ func (a *assets) SetDecoys(decoys []*pb.TLSDecoySpec) (err error) {
 	return
 }
 
+// Checks if decoy is in currently used ClientConf decoys list
 func (a *assets) IsDecoyInList(decoy pb.TLSDecoySpec) bool {
 	ipv4str := decoy.GetIpv4AddrStr()
 	hostname := decoy.GetHostname()
