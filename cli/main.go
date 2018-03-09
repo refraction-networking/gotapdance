@@ -3,14 +3,13 @@ package main
 import (
 	"flag"
 	"os"
-	"strings"
 	"runtime"
+	"strings"
 
 	"github.com/pkg/profile"
 	"github.com/sergeyfrolov/gotapdance/tapdance"
 	"github.com/sergeyfrolov/gotapdance/tdproxy"
 )
-
 
 func main() {
 	var chromePath string
@@ -24,7 +23,6 @@ func main() {
 			"/usr/bin/google-chrome-beta",
 			"Path to Google Chrome binary.")
 	}
-
 
 	portPtr := flag.Int("p", 10500, "HTTP proxy port")
 	hostPtr := flag.String("h", "tapdance2.freeaeskey.xyz", "overt host to request resources from")

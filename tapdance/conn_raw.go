@@ -51,7 +51,7 @@ type tdRawConn struct {
 	writeCredit int
 
 	firstResource string
-	firstBudget int
+	firstBudget   int
 }
 
 func makeTdRaw(handshakeType tdTagType,
@@ -266,19 +266,7 @@ func (tdRaw *tdRawConn) establishTLStoDecoy() (err error) {
 		Logger().Infoln(tdRaw.idStr() + ": SNI was nil. Setting it to" +
 			config.ServerName)
 	}
-	tdRaw.tlsConn = tls.UClient(dialConn, &config, tls.HelloRandomizedNoALPN)
-	err = tdRaw.tlsConn.BuildHandshakeState()
-	if err != nil {
-		dialConn.Close()
-		return
-	}
-	tdRaw.tlsConn.HandshakeState.Hello.CipherSuites =
-		forceSupportedCiphersFirst(tdRaw.tlsConn.HandshakeState.Hello.CipherSuites)
-	err = tdRaw.tlsConn.MarshalClientHello()
-	if err != nil {
-		dialConn.Close()
-		return
-	}
+	tdRaw.tlsConn = tls.UClient(dialConn, &config, tls.HelloChrome_62)
 	err = tdRaw.tlsConn.Handshake()
 	if err != nil {
 		dialConn.Close()
@@ -380,13 +368,15 @@ func (tdRaw *tdRawConn) genHTTP1Tag(tag []byte) (string, error) {
 	case tagHttpGetIncomplete:
 		tdRaw.UploadLimit = int(tdRaw.decoySpec.GetTcpwin()) - getRandInt(1, 1045)
 
-		httpTag = `GET ` + tdRaw.firstResource  + ` HTTP/1.1
+		httpTag = `GET ` + tdRaw.firstResource + ` HTTP/1.1
 Host: ` + tdRaw.decoySpec.GetHostname() + `
 X-Ignore: `
 		httpTag = strings.Replace(httpTag, "\n", "\r\n", -1)
 
-		budgetLeft := tdRaw.firstBudget - len(httpTag) - ((len(tag)/3+1)*4)
-		if budgetLeft < 0 { return httpTag, errors.New("Incomplete request exceeds allocated budget of first request") }
+		budgetLeft := tdRaw.firstBudget - len(httpTag) - ((len(tag)/3 + 1) * 4)
+		if budgetLeft < 0 {
+			return httpTag, errors.New("Incomplete request exceeds allocated budget of first request")
+		}
 
 		httpTag += getRandPadding(budgetLeft, budgetLeft, 10)
 

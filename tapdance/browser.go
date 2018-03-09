@@ -8,14 +8,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"math"
 	"math/rand"
 	"net/http"
-	"strings"
-	"time"
 	"net/url"
 	"path/filepath"
-	"io/ioutil"
+	"strings"
+	"time"
 )
 
 var ChromePath = ""
@@ -36,7 +36,6 @@ func (flowConn *TapdanceFlowConn) Browse(overt_host string) {
 		flowConn.perDomainInflight = make(map[string]int)
 	}
 
-
 	tmpDir, err := ioutil.TempDir("/tmp/", "ditto-gcache")
 	if err != nil {
 		Logger().Errorln(err)
@@ -50,7 +49,7 @@ func (flowConn *TapdanceFlowConn) Browse(overt_host string) {
 
 	target, err := debugger.NewTab()
 	if err != nil {
-		Logger().Warnln(flowConn.tdRaw.idStr() + " error getting targets: ", err)
+		Logger().Warnln(flowConn.tdRaw.idStr()+" error getting targets: ", err)
 	}
 
 	conn[target] = flowConn
@@ -60,24 +59,24 @@ func (flowConn *TapdanceFlowConn) Browse(overt_host string) {
 
 	_, err = target.Page.Enable()
 	if err != nil {
-		Logger().Warnln(flowConn.tdRaw.idStr() + " error getting page: ", err)
+		Logger().Warnln(flowConn.tdRaw.idStr()+" error getting page: ", err)
 	}
 
 	target.Subscribe("Network.requestIntercepted", requestIntercepted)
 
 	// TODO: Decide if requests made to non-overt hosts should be intercepted
 	// TODO: Can this argument be an empty slice?
-	_, err = target.Network.SetRequestInterception([]*gcdapi.NetworkRequestPattern{&gcdapi.NetworkRequestPattern{}})
+	_, err = target.Network.SetRequestInterception([]*gcdapi.NetworkRequestPattern{{}})
 	if err != nil {
-		Logger().Warnln(flowConn.tdRaw.idStr() + " error setting interception: ", err)
+		Logger().Warnln(flowConn.tdRaw.idStr()+" error setting interception: ", err)
 	}
 
 	current_url[target] = "https://" + overt[target]
-	Logger().Infoln(flowConn.tdRaw.idStr() + " navigating to ", current_url[target])
+	Logger().Infoln(flowConn.tdRaw.idStr()+" navigating to ", current_url[target])
 
 	_, _, _, err = target.Page.Navigate(current_url[target], "", "", "")
 	if err != nil {
-		Logger().Warnln(flowConn.tdRaw.idStr() + " error navigating to ", current_url[target], ": ", err)
+		Logger().Warnln(flowConn.tdRaw.idStr()+" error navigating to ", current_url[target], ": ", err)
 	}
 
 	select {}
@@ -89,21 +88,21 @@ func loadEventFired(target *gcd.ChromeTarget, event []byte) {
 	rand.Seed(time.Now().UnixNano())
 
 	// TODO: Improve page stay heuristics
-	duration := time.Duration(math.Abs(rand.NormFloat64() * 2 + 5) * float64(time.Second))
-	
-	Logger().Infoln(conn[target].tdRaw.idStr() + " sleeping for ", int(duration / time.Second), " seconds...")
+	duration := time.Duration(math.Abs(rand.NormFloat64()*2+5) * float64(time.Second))
+
+	Logger().Infoln(conn[target].tdRaw.idStr()+" sleeping for ", int(duration/time.Second), " seconds...")
 
 	time.Sleep(duration)
 
 	dom := target.DOM
 	root, err := dom.GetDocument(-1, true)
 	if err != nil {
-		Logger().Warnln(conn[target].tdRaw.idStr() + " error getting root: ", err)
+		Logger().Warnln(conn[target].tdRaw.idStr()+" error getting root: ", err)
 	}
 
 	links, err := dom.QuerySelectorAll(root.NodeId, "a")
 	if err != nil {
-		Logger().Warnln(conn[target].tdRaw.idStr() + " error getting links: ", err)
+		Logger().Warnln(conn[target].tdRaw.idStr()+" error getting links: ", err)
 	}
 
 	var candidate_links []string
@@ -111,12 +110,12 @@ func loadEventFired(target *gcd.ChromeTarget, event []byte) {
 	for _, l := range links {
 		attributes, err := dom.GetAttributes(l)
 		if err != nil {
-			Logger().Warnln(conn[target].tdRaw.idStr() + " error getting attributes: ", err)
+			Logger().Warnln(conn[target].tdRaw.idStr()+" error getting attributes: ", err)
 		}
 
 		attributesMap := make(map[string]string)
 		for i := 0; i < len(attributes); i += 2 {
-			attributesMap[attributes[i]] = attributes[i + 1]
+			attributesMap[attributes[i]] = attributes[i+1]
 		}
 
 		if _, hasHref := attributesMap["href"]; !hasHref {
@@ -154,11 +153,11 @@ func loadEventFired(target *gcd.ChromeTarget, event []byte) {
 		// TODO: Handle broken links
 		prev_curr_url := current_url[target]
 		current_url[target] = candidate_links[rand.Intn(len(candidate_links))]
-		Logger().Infoln(conn[target].tdRaw.idStr() + " following link to ", current_url[target])
+		Logger().Infoln(conn[target].tdRaw.idStr()+" following link to ", current_url[target])
 
 		_, _, _, err = target.Page.Navigate(current_url[target], prev_curr_url, "", "")
 		if err != nil {
-			Logger().Warnln(conn[target].tdRaw.idStr() + " error navigating to ", current_url[target], ": ", err)
+			Logger().Warnln(conn[target].tdRaw.idStr()+" error navigating to ", current_url[target], ": ", err)
 		}
 	} else {
 		// Improve out-of-link handling, possibly try returning to previous page
@@ -166,7 +165,7 @@ func loadEventFired(target *gcd.ChromeTarget, event []byte) {
 
 		_, _, _, err = target.Page.Navigate(current_url[target], current_url[target], "", "")
 		if err != nil {
-			Logger().Warnln(conn[target].tdRaw.idStr() + " error navigating to ", current_url[target], ": ", err)
+			Logger().Warnln(conn[target].tdRaw.idStr()+" error navigating to ", current_url[target], ": ", err)
 		}
 	}
 }
@@ -180,6 +179,7 @@ var leafExtensions = []string{
 	".ico",
 	".dat",
 }
+
 func isLeaf(targetUrl string) bool {
 	extension := strings.ToLower(filepath.Ext(targetUrl))
 	for _, le := range leafExtensions {
@@ -196,14 +196,14 @@ func requestIntercepted(target *gcd.ChromeTarget, event []byte) {
 	eventUnmarshal := &gcdapi.NetworkRequestInterceptedEvent{}
 	err = json.Unmarshal(event, eventUnmarshal)
 	if err != nil {
-		Logger().Warnln(conn[target].tdRaw.idStr() + " error unmarshalling request: ", err)
+		Logger().Warnln(conn[target].tdRaw.idStr()+" error unmarshalling request: ", err)
 	}
 
-	Logger().Infoln(conn[target].tdRaw.idStr() + " intercepted request to: ", eventUnmarshal.Params.Request.Url)
+	Logger().Infoln(conn[target].tdRaw.idStr()+" intercepted request to: ", eventUnmarshal.Params.Request.Url)
 
 	request, err := http.NewRequest(eventUnmarshal.Params.Request.Method, eventUnmarshal.Params.Request.Url, strings.NewReader(eventUnmarshal.Params.Request.PostData))
 	if err != nil {
-		Logger().Warnln(conn[target].tdRaw.idStr() + " error creating request: ", err)
+		Logger().Warnln(conn[target].tdRaw.idStr()+" error creating request: ", err)
 	}
 
 	for k, v := range eventUnmarshal.Params.Request.Headers {
@@ -261,10 +261,10 @@ func requestIntercepted(target *gcd.ChromeTarget, event []byte) {
 		}
 
 		if direct {
-			Logger().Infoln(conn[target].tdRaw.idStr() + " firing direct request to: ", eventUnmarshal.Params.Request.Url)
+			Logger().Infoln(conn[target].tdRaw.idStr()+" firing direct request to: ", eventUnmarshal.Params.Request.Url)
 			direct_response, err = conn[target].directRequestClient.Do(request)
 		} else {
-			Logger().Infoln(conn[target].tdRaw.idStr() + " firing resource request to: ", eventUnmarshal.Params.Request.Url)
+			Logger().Infoln(conn[target].tdRaw.idStr()+" firing resource request to: ", eventUnmarshal.Params.Request.Url)
 			response, err = conn[target].resourceRequest(request)
 		}
 
@@ -281,7 +281,7 @@ func requestIntercepted(target *gcd.ChromeTarget, event []byte) {
 		conn[target].browserConnPoolMutex.Unlock()
 
 		if err != nil {
-			Logger().Warnln(conn[target].tdRaw.idStr() + " failed to fetch ", eventUnmarshal.Params.Request.Url, ", retrying... (", err, ")")
+			Logger().Warnln(conn[target].tdRaw.idStr()+" failed to fetch ", eventUnmarshal.Params.Request.Url, ", retrying... (", err, ")")
 		} else {
 			break
 		}
@@ -291,14 +291,14 @@ func requestIntercepted(target *gcd.ChromeTarget, event []byte) {
 		headers := new(bytes.Buffer)
 		err = direct_response.Header.Write(headers)
 		if err != nil {
-			Logger().Warnln(conn[target].tdRaw.idStr() + " error reading header: ", err)
+			Logger().Warnln(conn[target].tdRaw.idStr()+" error reading header: ", err)
 		}
 
 		defer direct_response.Body.Close()
 		body := new(bytes.Buffer)
 		_, err = body.ReadFrom(direct_response.Body)
 		if err != nil {
-			Logger().Warnln(conn[target].tdRaw.idStr() + " error reading body: ", err)
+			Logger().Warnln(conn[target].tdRaw.idStr()+" error reading body: ", err)
 		}
 
 		response = fmt.Sprintf("%s %s\r\n%s\r\n\r\n%s", direct_response.Proto, direct_response.Status, headers.String(), body.String())
@@ -306,6 +306,6 @@ func requestIntercepted(target *gcd.ChromeTarget, event []byte) {
 
 	_, err = target.Network.ContinueInterceptedRequest(eventUnmarshal.Params.InterceptionId, "", base64.StdEncoding.EncodeToString([]byte(response)), "", "", "", map[string]interface{}{}, nil)
 	if err != nil {
-		Logger().Warnln(conn[target].tdRaw.idStr() + " error replying to intercept: ", err)
+		Logger().Warnln(conn[target].tdRaw.idStr()+" error replying to intercept: ", err)
 	}
 }

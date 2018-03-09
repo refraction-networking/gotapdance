@@ -11,22 +11,21 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"github.com/golang/protobuf/proto"
+	"github.com/prometheus/common/log"
+	utls "github.com/refraction-networking/utls"
+	"github.com/sergeyfrolov/bsbuffer"
+	pb "github.com/sergeyfrolov/gotapdance/protobuf"
 	"io"
 	"net"
+	"net/http"
+	"strings"
 	"sync"
 	"time"
 
-	"github.com/golang/protobuf/proto"
-	"github.com/prometheus/common/log"
-	"github.com/sergeyfrolov/bsbuffer"
-	pb "github.com/sergeyfrolov/gotapdance/protobuf"
-
-	"fmt"
-	"net/http"
-	"strings"
-
-    mrand "math/rand"
 	"bytes"
+	mrand "math/rand"
 )
 
 // TapdanceFlowConn represents single TapDance flow.
@@ -55,24 +54,24 @@ type TapdanceFlowConn struct {
 
 	flowType flowType
 
-	resourceRequestMutex sync.Mutex
-	resourceRequestState int
-	resourceRequestPath string
-	resourceRequestLeaf bool
-	resourceRequestBudget int
+	resourceRequestMutex    sync.Mutex
+	resourceRequestState    int
+	resourceRequestPath     string
+	resourceRequestLeaf     bool
+	resourceRequestBudget   int
 	resourceRequestResponse string
 
-	writeMutex sync.Mutex
+	writeMutex    sync.Mutex
 	firstLeafSent bool
-	flowClosed bool
+	flowClosed    bool
 	flowReconnect bool
 
 	directRequestClient http.Client
 
-	browserConnPoolMutex sync.Mutex
+	browserConnPoolMutex    sync.Mutex
 	resourceRequestInflight bool
-	directRequestInflight int
-	perDomainInflight map[string]int
+	directRequestInflight   int
+	perDomainInflight       map[string]int
 
 	resourcesReceived int
 
@@ -109,6 +108,30 @@ func makeTdFlow(flow flowType, tdRaw *tdRawConn) (*TapdanceFlowConn, error) {
 	flowConn.bsbuf = bsbuffer.NewBSBuffer()
 	flowConn.closed = make(chan struct{})
 	flowConn.flowType = flow
+	flowConn.directRequestClient = http.Client{
+		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			DialTLS: func(network, addr string) (net.Conn, error) {
+				host, port, err := net.SplitHostPort(addr)
+				fmt.Println("host, port, err", host, port, err)
+				if err != nil {
+					return nil, err
+				}
+				dialConn, err := net.Dial(network, addr)
+				if err != nil {
+					return nil, err
+				}
+				config := utls.Config{ServerName: host}
+				tlsConn := utls.UClient(dialConn, &config, utls.HelloChrome_62)
+				err = tlsConn.Handshake()
+				return tlsConn, err
+			},
+			MaxIdleConns:          6,
+			IdleConnTimeout:       300 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+		},
+	}
 	flowConn.cv = sync.NewCond(&sync.Mutex{})
 	return flowConn, nil
 }
@@ -119,7 +142,7 @@ func (flowConn *TapdanceFlowConn) hardcodedResourcesMessage() []byte {
 	currGen := Assets().GetGeneration()
 	msg := pb.ClientToStation{DecoyListGeneration: &currGen} //OvertUrl: []*pb.DupOvUrl{}
 	msg.OvertHost = &OvertHost
-	for i, _ := range resources {
+	for i := range resources {
 		msg.OvertUrl = append(msg.OvertUrl,
 			&pb.DupOvUrl{OvertUrl: &resources[i], IsLeaf: &leaf})
 	}
@@ -162,13 +185,15 @@ func (flowConn *TapdanceFlowConn) genResourcesMessage() ([]byte, bool, int) {
 
 	flowConn.resourceRequestMutex.Unlock()
 
-	if len(resources) == 0 { return []byte{}, leafRequested, budget }
+	if len(resources) == 0 {
+		return []byte{}, leafRequested, budget
+	}
 	Logger().Infoln(flowConn.tdRaw.idStr()+" received resource request for: ", resources)
 
 	currGen := Assets().GetGeneration()
 	msg := pb.ClientToStation{DecoyListGeneration: &currGen}
 	msg.OvertHost = &OvertHost
-	for i, _ := range resources {
+	for i := range resources {
 		msg.OvertUrl = append(msg.OvertUrl,
 			&pb.DupOvUrl{OvertUrl: &resources[i], IsLeaf: &leaf[i]})
 	}
@@ -321,7 +346,9 @@ func (flowConn *TapdanceFlowConn) schedReconnectNow() {
 
 // returns bool indicating success of reconnect
 func (flowConn *TapdanceFlowConn) awaitReconnect() bool {
-	defer func() { flowConn.writtenBytesTotal = 0 }()
+	defer func() {
+		flowConn.writtenBytesTotal = 0
+	}()
 	for {
 		select {
 		case <-flowConn.reconnectStarted:
@@ -337,11 +364,16 @@ func (flowConn *TapdanceFlowConn) spawnResourceEngine() {
 	for {
 		m, l, budget := flowConn.genResourcesMessage()
 
-		if len(m) == 0 { continue }
+		if len(m) == 0 {
+			continue
+		}
 
-		if flowConn.flowClosed { break }
+		if flowConn.flowClosed {
+			break
+		}
 
-		for flowConn.flowReconnect {}
+		for flowConn.flowReconnect {
+		}
 
 		flowConn.writeMutex.Lock()
 
@@ -349,14 +381,16 @@ func (flowConn *TapdanceFlowConn) spawnResourceEngine() {
 
 		flowConn.writtenBytesTotal += n
 
-		if (err != nil) {
+		if err != nil {
 			log.Warn(err)
 
 			flowConn.writeMutex.Unlock()
 			continue
 		}
 
-		if l { flowConn.firstLeafSent = true }
+		if l {
+			flowConn.firstLeafSent = true
+		}
 
 		flowConn.writeMutex.Unlock()
 
