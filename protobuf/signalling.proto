@@ -141,8 +141,8 @@ message StationToClient {
     optional uint32 tmp_backoff = 5;
 
     optional bytes nonleaf_contents = 15;
-	optional bool nonleaf_complete = 16;
-	optional bool leaf_complete = 17;
+	optional bool  nonleaf_complete = 16;
+	optional bool  leaf_complete    = 17;
     // TODO: implement this, or remove this placeholder
     // Specifies what type of lossless compression was used. None if field is
     // not filled. The lossy compression is left implicit.
@@ -188,10 +188,9 @@ message ClientToStation {
 }
 
 message DupOvUrl {
-	// This should be the resource requested by the client for traffic shaping:
-	//     e.g. "/", "/images/kittens.jpg"
     optional string overt_url = 1;
-	// This is a boolean specifying if the client wants the data from this 
-	// resource or not.
     optional bool is_leaf = 2;
+	optional string overt_headers = 3;
+	// expected to be HPACKed
+	optional bytes  overt_headers_packed = 4;
 }
