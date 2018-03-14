@@ -112,8 +112,7 @@ func makeTdFlow(flow flowType, tdRaw *tdRawConn) (*TapdanceFlowConn, error) {
 		Transport: &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
 			DialTLS: func(network, addr string) (net.Conn, error) {
-				host, port, err := net.SplitHostPort(addr)
-				fmt.Println("host, port, err", host, port, err)
+				host, _, err := net.SplitHostPort(addr)
 				if err != nil {
 					return nil, err
 				}
