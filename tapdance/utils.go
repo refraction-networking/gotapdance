@@ -12,7 +12,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"golang.org/x/net/http2/hpack"
 	"net"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -234,4 +236,17 @@ func errIsTimeout(err error) bool {
 		}
 	}
 	return false
+}
+
+func hpack_headers(h *http.Header) ([]byte, error) {
+	var buf bytes.Buffer
+	e := hpack.NewEncoder(&buf)
+	for k, v := range *h {
+		hfield := hpack.HeaderField{Name: k, Value: strings.Join(v, ", ")}
+		err := e.WriteField(hfield)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return buf.Bytes(), nil
 }

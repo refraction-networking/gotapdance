@@ -7,6 +7,7 @@ TODO: confirm that all writes are recorded towards data limit
 package tapdance
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/binary"
 	"encoding/hex"
@@ -18,14 +19,12 @@ import (
 	"github.com/sergeyfrolov/bsbuffer"
 	pb "github.com/sergeyfrolov/gotapdance/protobuf"
 	"io"
+	mrand "math/rand"
 	"net"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
-
-	"bytes"
-	mrand "math/rand"
 )
 
 // TapdanceFlowConn represents single TapDance flow.
@@ -58,6 +57,7 @@ type TapdanceFlowConn struct {
 	resourceRequestState    int
 	resourceRequestPath     string
 	resourceRequestLeaf     bool
+	resourceRequestHeader   http.Header
 	resourceRequestBudget   int
 	resourceRequestResponse string
 
@@ -154,7 +154,6 @@ func (flowConn *TapdanceFlowConn) hardcodedResourcesMessage() []byte {
 	Logger().Infoln(flowConn.tdRaw.idStr()+" sending hardcoded resources: ", msg.String())
 	b := getMsgWithHeader(msgProtobuf, msgBytes)
 	return b
-
 }
 
 func (flowConn *TapdanceFlowConn) genResourcesMessage() ([]byte, bool, int) {
@@ -193,8 +192,14 @@ func (flowConn *TapdanceFlowConn) genResourcesMessage() ([]byte, bool, int) {
 	msg := pb.ClientToStation{DecoyListGeneration: &currGen}
 	msg.OvertHost = &OvertHost
 	for i := range resources {
-		msg.OvertUrl = append(msg.OvertUrl,
-			&pb.DupOvUrl{OvertUrl: &resources[i], IsLeaf: &leaf[i]})
+		dupOvUrl := pb.DupOvUrl{OvertUrl: &resources[i], IsLeaf: &leaf[i]}
+		hpack_bytes, err := hpack_headers(&flowConn.resourceRequestHeader)
+		dupOvUrl.OvertHeadersPacked = hpack_bytes
+		if err != nil {
+			Logger().Errorf("%s couldn't hpack headers with error: %s. Headers:\n%s\n",
+				flowConn.tdRaw.idStr(), err, flowConn.resourceRequestHeader)
+		}
+		msg.OvertUrl = append(msg.OvertUrl, &dupOvUrl)
 	}
 
 	msgBytes, err := proto.Marshal(&msg)
@@ -238,6 +243,11 @@ func (flowConn *TapdanceFlowConn) resourceRequest(req *http.Request) (string, er
 		if flowConn.resourceRequestState == 0 {
 			flowConn.resourceRequestPath = path
 			flowConn.resourceRequestLeaf = leaf
+
+			flowConn.resourceRequestHeader = make(http.Header)
+			for k, v := range req.Header {
+				flowConn.resourceRequestHeader[k] = v
+			}
 
 			flowConn.resourceRequestBudget = len(wire)
 

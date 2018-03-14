@@ -207,13 +207,22 @@ func requestIntercepted(target *gcd.ChromeTarget, event []byte) {
 	}
 
 	for k, v := range eventUnmarshal.Params.Request.Headers {
-		request.Header.Add(k, v.(string))
+		request.Header.Set(k, v.(string))
 	}
 
+	// Doesn't seem to be required
+	//if request.Header.Get("Host") == "" {
+	//	request.Header.Set("Host", request.URL.Host)
+	//}
+
 	// DevTools doesn't supply these headers; find way to get rid of hardcode
-	request.Header.Add("Host", request.URL.Host)
-	request.Header.Add("Connection", "keep-alive")
-	request.Header.Add("Accept-Encoding", "             ") // Handle gzip, deflate
+	if request.Header.Get("Connection") == "" {
+		request.Header.Set("Connection", "keep-alive")
+	}
+
+	if request.Header.Get("Accept-Encoding") == "" {
+		request.Header.Set("Accept-Encoding", "                 ") // TODO: Handle "gzip, deflate" or "gzip, deflate, br"?
+	}
 
 	// Discrepancies between GUI and headless Chrome; find a better fix
 	if ua := request.Header.Get("User-Agent"); ua != "" {
