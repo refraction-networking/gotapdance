@@ -13,7 +13,6 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -168,26 +167,6 @@ func loadEventFired(target *gcd.ChromeTarget, event []byte) {
 			Logger().Warnln(conn[target].tdRaw.idStr()+" error navigating to ", current_url[target], ": ", err)
 		}
 	}
-}
-
-var leafExtensions = []string{
-	".jpg",
-	".jpeg",
-	".png",
-	".gif",
-	".svg",
-	".ico",
-	".dat",
-}
-
-func isLeaf(targetUrl string) bool {
-	extension := strings.ToLower(filepath.Ext(targetUrl))
-	for _, le := range leafExtensions {
-		if extension == le {
-			return true
-		}
-	}
-	return false
 }
 
 func requestIntercepted(target *gcd.ChromeTarget, event []byte) {

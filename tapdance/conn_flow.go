@@ -22,7 +22,6 @@ import (
 	mrand "math/rand"
 	"net"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 )
@@ -54,7 +53,7 @@ type TapdanceFlowConn struct {
 	flowType flowType
 
 	resourceRequestMutex    sync.Mutex
-	resourceRequestState    int
+	resourceRequestState    resourceRequestState
 	resourceRequestPath     string
 	resourceRequestLeaf     bool
 	resourceRequestHeader   http.Header
@@ -166,7 +165,7 @@ func (flowConn *TapdanceFlowConn) genResourcesMessage() ([]byte, bool, int) {
 
 	flowConn.resourceRequestMutex.Lock()
 
-	if flowConn.resourceRequestState == 1 {
+	if flowConn.resourceRequestState == requestSubmitted {
 		resources = append(resources, flowConn.resourceRequestPath)
 		leaf = append(leaf, flowConn.resourceRequestLeaf)
 
@@ -174,9 +173,9 @@ func (flowConn *TapdanceFlowConn) genResourcesMessage() ([]byte, bool, int) {
 
 		flowConn.resourceRequestResponse = ""
 
-		flowConn.resourceRequestState = 2
+		flowConn.resourceRequestState = requestSentToStation
 		if flowConn.resourceRequestLeaf {
-			flowConn.resourceRequestState = 0
+			flowConn.resourceRequestState = requestNotSubmitted
 			leafRequested = true
 		}
 	}
@@ -217,15 +216,7 @@ func (flowConn *TapdanceFlowConn) genResourcesMessage() ([]byte, bool, int) {
 func (flowConn *TapdanceFlowConn) resourceRequest(req *http.Request) (string, error) {
 	path := req.URL.Path
 
-	leaf := false
-	if strings.HasSuffix(path, ".jpg") || strings.HasSuffix(path, ".JPG") ||
-		strings.HasSuffix(path, ".png") || strings.HasSuffix(path, ".PNG") ||
-		strings.HasSuffix(path, ".gif") || strings.HasSuffix(path, ".GIF") ||
-		strings.HasSuffix(path, ".svg") || strings.HasSuffix(path, ".SVG") ||
-		strings.HasSuffix(path, ".ico") || strings.HasSuffix(path, ".ICO") ||
-		strings.HasSuffix(path, ".dat") || strings.HasSuffix(path, ".DAT") {
-		leaf = true
-	}
+	leaf := isLeaf(path)
 
 	headers := new(bytes.Buffer)
 	req.Header.Write(headers)
@@ -240,7 +231,7 @@ func (flowConn *TapdanceFlowConn) resourceRequest(req *http.Request) (string, er
 	for {
 		flowConn.resourceRequestMutex.Lock()
 
-		if flowConn.resourceRequestState == 0 {
+		if flowConn.resourceRequestState == requestNotSubmitted {
 			flowConn.resourceRequestPath = path
 			flowConn.resourceRequestLeaf = leaf
 
@@ -251,7 +242,7 @@ func (flowConn *TapdanceFlowConn) resourceRequest(req *http.Request) (string, er
 
 			flowConn.resourceRequestBudget = len(wire)
 
-			flowConn.resourceRequestState = 1
+			flowConn.resourceRequestState = requestSubmitted
 
 			flowConn.resourceRequestMutex.Unlock()
 			break
@@ -268,10 +259,10 @@ func (flowConn *TapdanceFlowConn) resourceRequest(req *http.Request) (string, er
 		for {
 			flowConn.resourceRequestMutex.Lock()
 
-			if flowConn.resourceRequestState == 3 {
+			if flowConn.resourceRequestState == requestFullfilled {
 				res = flowConn.resourceRequestResponse
 
-				flowConn.resourceRequestState = 0
+				flowConn.resourceRequestState = requestNotSubmitted
 
 				flowConn.resourceRequestMutex.Unlock()
 				break
@@ -293,11 +284,11 @@ func (flowConn *TapdanceFlowConn) Dial() error {
 	for {
 		flowConn.resourceRequestMutex.Lock()
 
-		if flowConn.resourceRequestState == 1 {
+		if flowConn.resourceRequestState == requestSubmitted {
 			flowConn.tdRaw.firstResource = flowConn.resourceRequestPath
 			flowConn.tdRaw.firstBudget = flowConn.resourceRequestBudget
 
-			flowConn.resourceRequestState = 2
+			flowConn.resourceRequestState = requestSentToStation
 
 			flowConn.resourceRequestMutex.Unlock()
 			break
@@ -909,13 +900,13 @@ func (flowConn *TapdanceFlowConn) processProto(msg pb.StationToClient) error {
 
 		flowConn.resourceRequestMutex.Lock()
 
-		if flowConn.resourceRequestState == 2 {
+		if flowConn.resourceRequestState == requestSentToStation {
 			flowConn.resourceRequestResponse += string(msg.NonleafContents)
 
 			if (msg.NonleafComplete != nil) && *msg.NonleafComplete {
 				Logger().Infoln(flowConn.tdRaw.idStr()+" forwarding non-leaf contents: \n", string(msg.NonleafContents))
 
-				flowConn.resourceRequestState = 3
+				flowConn.resourceRequestState = requestFullfilled
 			}
 		}
 

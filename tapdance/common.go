@@ -110,6 +110,37 @@ var tapDanceSupportedCiphers = []uint16{
 	tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
 }
 
+type resourceRequestState int8
+
+const (
+	// No resource request in progress
+	requestNotSubmitted resourceRequestState = 0
+	// Resource request submitted by browser through resourceRequest
+	requestSubmitted resourceRequestState = 1
+
+	// Leaf resource requests will skip states 2 & 3, since their responses are not required nor expected
+	// Resource request picked up by genResourcesMessage, sent to station
+	requestSentToStation resourceRequestState = 2
+	// Resource request fulfilled in processProto, response ready to be read
+	requestFullfilled resourceRequestState = 3
+	// Goto 0 once resourceRequest returns response to browser
+)
+
+func (m *resourceRequestState) Str() string {
+	switch *m {
+	case requestNotSubmitted:
+		return "requestNotSubmitted"
+	case requestSubmitted:
+		return "requestSubmitted"
+	case requestSentToStation:
+		return "requestSentToStation"
+	case requestFullfilled:
+		return "requestFullfilled"
+	default:
+		return strconv.Itoa(int(*m))
+	}
+}
+
 func forceSupportedCiphersFirst(suites []uint16) []uint16 {
 	swapSuites := func(i, j int) {
 		if i == j {

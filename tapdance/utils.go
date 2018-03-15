@@ -15,6 +15,7 @@ import (
 	"golang.org/x/net/http2/hpack"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -249,4 +250,24 @@ func hpack_headers(h *http.Header) ([]byte, error) {
 		}
 	}
 	return buf.Bytes(), nil
+}
+
+var leafExtensions = []string{
+	".jpg",
+	".jpeg",
+	".png",
+	".gif",
+	".svg",
+	".ico",
+	".dat",
+}
+
+func isLeaf(targetUrl string) bool {
+	extension := strings.ToLower(filepath.Ext(targetUrl))
+	for _, le := range leafExtensions {
+		if extension == le {
+			return true
+		}
+	}
+	return false
 }
