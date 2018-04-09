@@ -342,7 +342,7 @@ func (tdRaw *tdRawConn) genHTTP1Tag(tag []byte) (string, error) {
 		tdRaw.UploadLimit = int(tdRaw.decoySpec.GetTcpwin()) - getRandInt(1, 1045)
 		httpTag = `GET / HTTP/1.1
 Host: ` + tdRaw.decoySpec.GetHostname() + `
-User-Agent: TapDance/1.2 (+https://tapdance.team/info)
+User-Agent: TapDance/1.2 (+https://refraction.network/info)
 Accept-Encoding: None
 X-Ignore: ` + getRandPadding(7, 612, 10)
 		httpTag = strings.Replace(httpTag, "\n", "\r\n", -1)
@@ -352,7 +352,7 @@ X-Ignore: ` + getRandPadding(7, 612, 10)
 		httpTag = `POST / HTTP/1.1
 Accept-Encoding: None
 Host: ` + tdRaw.decoySpec.GetHostname() + `
-User-Agent: TapDance/1.2 (+https://tapdance.team/info)
+User-Agent: TapDance/1.2 (+https://refraction.network/info)
 X-Padding: ` + getRandPadding(1, 461, 10) + `
 Content-Type: application/zip; boundary=----WebKitFormBoundaryaym16ehT29q60rUx
 Content-Length: ` + strconv.Itoa(ContentLength) + `
