@@ -9,12 +9,18 @@ import (
 	pb "github.com/sergeyfrolov/gotapdance/protobuf"
 	"github.com/sergeyfrolov/gotapdance/tapdance"
 	"io/ioutil"
-	"net"
 	"net/http"
 	"net/url"
 	"testing"
 	"time"
 )
+
+var TestPubKey = []byte{
+	0x1d, 0x27, 0xd3, 0xc9, 0x6c, 0x8e, 0x43, 0xe5,
+	0x0d, 0x9a, 0x36, 0xf0, 0xda, 0x5a, 0x46, 0xb7,
+	0x6e, 0xe1, 0xbe, 0xf2, 0xff, 0xee, 0x42, 0xef,
+	0x4d, 0xad, 0xac, 0x7a, 0x51, 0xe0, 0x45, 0x5f,
+}
 
 func TestSendSeq(t *testing.T) {
 	buf := new(bytes.Buffer)
@@ -28,24 +34,37 @@ func TestSendSeq(t *testing.T) {
 		}
 	}
 
-	tapdanceProxy := NewTapDanceProxy(10600)
-	go tapdanceProxy.ListenAndServe()
-	time.Sleep(2 * time.Second)
-
 	tapdance.AssetsFromDir("../assets/")
+	// make sure station won't send new ClientConf
 	err := tapdance.Assets().SetGeneration(100500)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
-	tapdance1Hostname := "tapdance1.freeaeskey.xyz"
-	tapdance1Ipv4 := binary.BigEndian.Uint32(net.ParseIP("192.122.190.104").To4())
-	tapdance1Decoy := pb.TLSDecoySpec{Hostname: &tapdance1Hostname,
-		Ipv4Addr: &tapdance1Ipv4}
-	err = tapdance.Assets().SetDecoys([]*pb.TLSDecoySpec{&tapdance1Decoy})
+
+	// use testing public key
+	keyType := pb.KeyType_AES_GCM_128
+	pubKey := pb.PubKey{
+		Key:  TestPubKey,
+		Type: &keyType,
+	}
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	tapdance.Assets().SetPubkey(pubKey)
+
+	// use correct decoy
+	tapdance1Decoy := pb.InitTLSDecoySpec("192.122.190.104", "tapdance1.freeaeskey.xyz")
+	err = tapdance.Assets().SetDecoys([]*pb.TLSDecoySpec{tapdance1Decoy})
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
 
+	// start TapDance proxy
+	tapdanceProxy := NewTapDanceProxy(10600)
+	go tapdanceProxy.ListenAndServe()
+	time.Sleep(2 * time.Second)
+
+	// create proxyClient that will use TapDance proxy
 	proxyUrl, err := url.Parse("http://127.0.0.1:10600")
 	if err != nil {
 		t.Fatalf(err.Error())
@@ -59,7 +78,7 @@ func TestSendSeq(t *testing.T) {
 	}
 	x := make([]byte, hex.EncodedLen(len(b)))
 	hex.Encode(x, b)
-	resource := "https://sendseq.benjaminvandersloot.com/" + string(x)
+	resource := "https://sendseq.sfrolov.io/" + string(x)
 
 	var bufBytes []byte
 	bufBytes, _ = ioutil.ReadAll(buf)
