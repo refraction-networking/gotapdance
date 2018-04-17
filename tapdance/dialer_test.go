@@ -5,12 +5,60 @@ import (
 	"bytes"
 	"crypto/tls"
 	"fmt"
+	pb "github.com/sergeyfrolov/gotapdance/protobuf"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"testing"
 )
+
+func setupTestAssets() error {
+	tmpDir, err := ioutil.TempDir("/tmp/", "td-test-")
+	if err != nil {
+		return err
+	}
+	AssetsSetDir(tmpDir)
+	// make sure station won't send new ClientConf
+	err = Assets().SetGeneration(100500)
+	if err != nil {
+		return err
+	}
+
+	// use testing public key
+	keyType := pb.KeyType_AES_GCM_128
+	stationTestPubkey, err := ioutil.ReadFile("../assets/station_pubkey_test")
+	if err != nil {
+		return err
+	}
+
+	pubKey := pb.PubKey{
+		Key:  stationTestPubkey,
+		Type: &keyType,
+	}
+	if err != nil {
+		return err
+	}
+	Assets().SetPubkey(pubKey)
+
+	// use correct decoy
+	tapdance1Decoy := pb.InitTLSDecoySpec("192.122.190.104", "tapdance1.freeaeskey.xyz")
+	err = Assets().SetDecoys([]*pb.TLSDecoySpec{tapdance1Decoy})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func TestMain(m *testing.M) {
+	err := setupTestAssets()
+	if err != nil {
+		panic(err)
+	}
+	retCode := m.Run()
+	os.Exit(retCode)
+}
 
 func TestTapDanceDial(t *testing.T) {
 	var b bytes.Buffer
