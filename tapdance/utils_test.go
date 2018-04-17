@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"github.com/pkg/errors"
 	"strings"
 	"testing"
 )
@@ -122,16 +123,92 @@ func TestReverseEncrypt(t *testing.T) {
 	}
 }
 
-func printHex(byteArray []byte, name string) {
-	fmt.Print(name, ": [")
-	for i := 0; i < len(byteArray); i++ {
-		if byteArray[i] >= 0x10 {
-			//fmt.Printf("%x", byte_array[i])
-			fmt.Printf("%v, ", byteArray[i])
-		} else {
-			//	fmt.Printf("0%x", byte_array[i])
-			fmt.Printf("%v, ", byteArray[i])
+func TestObfuscationRandomness(t *testing.T) {
+	testKey := []byte{180, 112, 102, 188, 57, 13, 38, 5, 204, 19, 88, 28, 73, 110, 169, 149, 203,
+		140, 250, 223, 0, 166, 73, 5, 37, 9, 239, 74, 200, 165, 26, 7}
+
+	tag := make([]byte, 177)
+
+	rc := randomnessChecker{}
+	for i := 0; i < 10000; i++ {
+		_, err := rand.Read(tag)
+		if err != nil {
+			t.Fatalf("Error: %v\n", err)
+		}
+		obfuscated, err := obfuscateTag(tag, testKey)
+		if err != nil {
+			t.Fatalf("Error: %v\n", err)
+		}
+		rc.addSample(obfuscated)
+	}
+
+	err := rc.testInRange(4700, 5300)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// only supports samples of same size
+type randomnessChecker struct {
+	bitCounts    []int // how many bits are 1
+	sampleCounts []int // how many samples for bit
+}
+
+func (rt *randomnessChecker) addSample(sample []byte) {
+	for len(rt.bitCounts) < 8*len(sample) {
+		// allocate bigger arrays (they are all of same size)
+		rt.bitCounts = append(rt.bitCounts, make([]int, 8*len(sample))...)
+		rt.sampleCounts = append(rt.sampleCounts, make([]int, 8*len(sample))...)
+	}
+
+	for sampleIdx := 0; sampleIdx < len(sample); sampleIdx++ {
+		for bitIdx := 0; bitIdx < 8; bitIdx++ {
+			mask := byte(1 << uint(bitIdx))
+			bitCountIdx := sampleIdx*8 + bitIdx
+			rt.sampleCounts[bitCountIdx] += 1
+			if sample[sampleIdx]&mask >= 1 {
+				rt.bitCounts[bitCountIdx] += 1
+			}
 		}
 	}
-	fmt.Println("]")
+
+}
+
+func (rt *randomnessChecker) getNumSamples() int {
+	numSamples := 0
+	for i := 0; i < len(rt.sampleCounts); i++ {
+		if rt.sampleCounts[0] != 0 {
+			numSamples += 1
+		}
+	}
+	return numSamples
+}
+
+// returns error if there are clear issues with randomness
+func (rt *randomnessChecker) testSimple() error {
+	numSamples := rt.getNumSamples()
+	for i := 0; i < numSamples; i++ {
+		if rt.bitCounts[i] == 0 {
+			return errors.New(fmt.Sprintf("Bit #%v is always zero. Sampled %v times.",
+				i, rt.sampleCounts[i]))
+		}
+		if rt.bitCounts[i] == rt.sampleCounts[i] {
+			return errors.New(fmt.Sprintf("Bit #%v is always one. Sampled %v times.",
+				i, rt.sampleCounts[i]))
+		}
+	}
+	return nil
+}
+
+// returns error if amount of times a bit is set is not in [min, max]
+func (rt *randomnessChecker) testInRange(min, max int) error {
+	numSamples := rt.getNumSamples()
+	for i := 0; i < numSamples; i++ {
+		if rt.bitCounts[i] < min || rt.bitCounts[i] > max {
+			return errors.New(fmt.Sprintf("Expected: bit #%v is set %v - %v times"+
+				" out of %v samples. Got: bit is set %v times.",
+				i, min, max, rt.sampleCounts[i], rt.bitCounts[i]))
+		}
+	}
+	return nil
 }

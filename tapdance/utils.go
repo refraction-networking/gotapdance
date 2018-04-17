@@ -40,7 +40,7 @@ func getRandInt(min int, max int) int {
 	// Flashback to awful C/C++ libraries
 	diff := max - min
 	if diff < 0 {
-		Logger().Warningf("fetRandInt(): max is less than min")
+		Logger().Warningf("getRandInt(): max is less than min")
 		min = max
 		diff *= -1
 	} else if diff == 0 {
@@ -94,17 +94,26 @@ func obfuscateTag(stegoPayload []byte, stationPubkey []byte) (tag []byte, err er
 	var sharedSecret, clientPrivate, clientPublic, representative [32]byte
 	for ok := false; ok != true; {
 		var sliceKeyPrivate []byte = clientPrivate[:]
-		rand.Read(sliceKeyPrivate)
-
-		clientPrivate[0] &= 248
-		clientPrivate[31] &= 127
-		clientPrivate[31] |= 64
+		_, err = rand.Read(sliceKeyPrivate)
+		if err != nil {
+			return nil, err
+		}
 
 		ok = extra25519.ScalarBaseMult(&clientPublic, &representative, &clientPrivate)
 	}
 	var stationPubkeyByte32 [32]byte
 	copy(stationPubkeyByte32[:], stationPubkey)
 	curve25519.ScalarMult(&sharedSecret, &clientPrivate, &stationPubkeyByte32)
+
+	// extra25519.ScalarBaseMult does not randomize most significant bit(sign of y_coord?)
+	// Other implementations of elligator may have up to 2 non-random bits.
+	// Here we randomize the bit, expecting it to be flipped back to 0 on station
+	randByte := make([]byte, 1)
+	_, err = rand.Read(randByte)
+	if err != nil {
+		return nil, err
+	}
+	representative[31] |= (0x80 & randByte[0])
 
 	tagBuf := new(bytes.Buffer) // What we have to encrypt with the shared secret using AES
 	tagBuf.Write(representative[:])
