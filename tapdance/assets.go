@@ -17,7 +17,6 @@ import (
 
 type assets struct {
 	sync.RWMutex
-	once sync.Once
 	path string
 
 	config pb.ClientConf
@@ -29,23 +28,30 @@ type assets struct {
 	filenameClientConf    string
 }
 
+// could reset this internally to refresh assets and avoid woes of singleton testing
 var assetsInstance *assets
 var assetsOnce sync.Once
 
 // Assets is an access point to asset managing singleton.
 // First access to singleton sets path. Assets(), if called
-// before AssetsFromDir() sets path to "./assets/"
+// before SetAssetsDir() sets path to "./assets/"
 func Assets() *assets {
 	_initAssets := func() { initAssets("./assets/") }
 	assetsOnce.Do(_initAssets)
 	return assetsInstance
 }
 
-// AssetsFromDir is an access point to asset managing singleton.
-// First call to Assets() or AssetsFromDir() sets the path. Thus,
-// it is safe to access assets via default Assets() function afterwards.
-func AssetsFromDir(path string) *assets {
-	_initAssets := func() { initAssets(path) }
+// AssetsSetDir sets the directory to read assets from.
+// Functionally equivalent to Assets() after initialization, unless dir changes.
+func AssetsSetDir(dir string) *assets {
+	_initAssets := func() { initAssets(dir) }
+	if assetsInstance != nil {
+		if dir != assetsInstance.path {
+			Logger().Warnf("Assets path changed %s->%s. (Re)initializing.\n",
+				assetsInstance.path, dir)
+			assetsOnce = sync.Once{} // reset once object, allowing re-init
+		}
+	}
 	assetsOnce.Do(_initAssets)
 	return assetsInstance
 }
@@ -84,13 +90,11 @@ func (a *assets) GetAssetsDir() string {
 	return a.path
 }
 
-// Deprecated, use AssetsFromDir() once instead.
-func (a *assets) SetAssetsDir(path string) {
+// SetDir sets the directory to read assets from.
+func (a *assets) SetDir(path string) {
 	a.Lock()
-	defer a.Unlock()
-	a.path = path
-	a.readConfigs()
-	return
+	AssetsSetDir(path)
+	a.Unlock()
 }
 
 func (a *assets) readConfigs() {
@@ -141,7 +145,7 @@ func (a *assets) readConfigs() {
 	rootsFilename := path.Join(a.path, a.filenameRoots)
 	err = readRoots(rootsFilename)
 	if err != nil {
-		Logger().Warningln("Failed to read root ca file: " + err.Error())
+		Logger().Warningln("Assets: failed to read root ca file: " + err.Error())
 	} else {
 		Logger().Infoln("X.509 root CAs successfully read from " + rootsFilename)
 	}
@@ -149,7 +153,7 @@ func (a *assets) readConfigs() {
 	clientConfFilename := path.Join(a.path, a.filenameClientConf)
 	err = readClientConf(clientConfFilename)
 	if err != nil {
-		Logger().Warningln("Failed to read ClientConf file: " + err.Error())
+		Logger().Warningln("Assets: failed to read ClientConf file: " + err.Error())
 	} else {
 		Logger().Infoln("Client config successfully read from " + clientConfFilename)
 	}
@@ -157,7 +161,7 @@ func (a *assets) readConfigs() {
 	pubkeyFilename := path.Join(a.path, a.filenameStationPubkey)
 	err = readPubkey(pubkeyFilename)
 	if err != nil {
-		Logger().Debugln("Failed to read pubkey file: " + err.Error())
+		Logger().Debugln("Assets: failed to read pubkey file: " + err.Error())
 	} else {
 		Logger().Infoln("Pubkey successfully read from " + pubkeyFilename)
 	}

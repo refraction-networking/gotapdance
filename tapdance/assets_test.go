@@ -49,7 +49,7 @@ func TestAssets_Decoys(t *testing.T) {
 		pb.InitTLSDecoySpec("8.255.255.8", "heh.meh"),
 	}
 
-	Assets().SetAssetsDir(dir1)
+	Assets().SetDir(dir1)
 	err = Assets().SetDecoys(testDecoys1)
 	if err != nil {
 		t.Fatal(err)
@@ -57,7 +57,7 @@ func TestAssets_Decoys(t *testing.T) {
 	if !Assets().IsDecoyInList(*pb.InitTLSDecoySpec("19.21.23.42", "blahblahbl.ah")) {
 		t.Fatal("Decoy 19.21.23.42(blahblahbl.ah) is NOT in Decoy List!")
 	}
-	Assets().SetAssetsDir(dir2)
+	Assets().SetDir(dir2)
 	err = Assets().SetDecoys(testDecoys2)
 	if err != nil {
 		t.Fatal(err)
@@ -98,7 +98,7 @@ func TestAssets_Decoys(t *testing.T) {
 			t.Fail()
 		}
 	}
-	Assets().SetAssetsDir(dir1)
+	Assets().SetDir(dir1)
 	if !reflect.DeepEqual(Assets().config.DecoyList.TlsDecoys, testDecoys1) {
 		fmt.Println("Assets are not equal!")
 		fmt.Println("Assets().decoys:", Assets().config.DecoyList.TlsDecoys)
@@ -129,7 +129,7 @@ func TestAssets_Decoys(t *testing.T) {
 	os.Remove(path.Join(dir2, Assets().filenameClientConf))
 	os.Remove(dir1)
 	os.Remove(dir2)
-	Assets().SetAssetsDir(oldpath)
+	Assets().SetDir(oldpath)
 }
 
 func TestAssets_Pubkey(t *testing.T) {
@@ -167,12 +167,12 @@ func TestAssets_Pubkey(t *testing.T) {
 		212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226,
 		227, 228, 229, 230, 231})
 
-	Assets().SetAssetsDir(dir1)
+	Assets().SetDir(dir1)
 	err = Assets().SetPubkey(pubkey1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	Assets().SetAssetsDir(dir2)
+	Assets().SetDir(dir2)
 	err = Assets().SetPubkey(pubkey2)
 	if err != nil {
 		t.Fatal(err)
@@ -184,7 +184,7 @@ func TestAssets_Pubkey(t *testing.T) {
 		t.Fail()
 	}
 
-	Assets().SetAssetsDir(dir1)
+	Assets().SetDir(dir1)
 	if !bytes.Equal(Assets().config.DefaultPubkey.Key[:], pubkey1.Key[:]) {
 		fmt.Println("Pubkeys are not equal!")
 		fmt.Println("Assets().stationPubkey:", Assets().config.DefaultPubkey.Key[:])
@@ -195,5 +195,5 @@ func TestAssets_Pubkey(t *testing.T) {
 	os.Remove(path.Join(dir2, Assets().filenameStationPubkey))
 	os.Remove(dir1)
 	os.Remove(dir2)
-	Assets().SetAssetsDir(oldpath)
+	Assets().SetDir(oldpath)
 }

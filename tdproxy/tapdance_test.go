@@ -11,15 +11,55 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
 	"testing"
 	"time"
 )
 
-var TestPubKey = []byte{
-	0x1d, 0x27, 0xd3, 0xc9, 0x6c, 0x8e, 0x43, 0xe5,
-	0x0d, 0x9a, 0x36, 0xf0, 0xda, 0x5a, 0x46, 0xb7,
-	0x6e, 0xe1, 0xbe, 0xf2, 0xff, 0xee, 0x42, 0xef,
-	0x4d, 0xad, 0xac, 0x7a, 0x51, 0xe0, 0x45, 0x5f,
+func setupTestAssets() error {
+	tmpDir, err := ioutil.TempDir("/tmp/", "td-test-")
+	if err != nil {
+		return err
+	}
+	tapdance.AssetsSetDir(tmpDir)
+	// make sure station won't send new ClientConf
+	err = tapdance.Assets().SetGeneration(100500)
+	if err != nil {
+		return err
+	}
+
+	// use testing public key
+	keyType := pb.KeyType_AES_GCM_128
+	stationTestPubkey, err := ioutil.ReadFile("../assets/station_pubkey_test")
+	if err != nil {
+		return err
+	}
+
+	pubKey := pb.PubKey{
+		Key:  stationTestPubkey,
+		Type: &keyType,
+	}
+	if err != nil {
+		return err
+	}
+	tapdance.Assets().SetPubkey(pubKey)
+
+	// use correct decoy
+	tapdance1Decoy := pb.InitTLSDecoySpec("192.122.190.104", "tapdance1.freeaeskey.xyz")
+	err = tapdance.Assets().SetDecoys([]*pb.TLSDecoySpec{tapdance1Decoy})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func TestMain(m *testing.M) {
+	err := setupTestAssets()
+	if err != nil {
+		panic(err)
+	}
+	retCode := m.Run()
+	os.Exit(retCode)
 }
 
 func TestSendSeq(t *testing.T) {
@@ -32,31 +72,6 @@ func TestSendSeq(t *testing.T) {
 				t.Fatalf("binary.Write failed: %s\n", err)
 			}
 		}
-	}
-
-	tapdance.AssetsFromDir("../assets/")
-	// make sure station won't send new ClientConf
-	err := tapdance.Assets().SetGeneration(100500)
-	if err != nil {
-		t.Fatalf(err.Error())
-	}
-
-	// use testing public key
-	keyType := pb.KeyType_AES_GCM_128
-	pubKey := pb.PubKey{
-		Key:  TestPubKey,
-		Type: &keyType,
-	}
-	if err != nil {
-		t.Fatalf(err.Error())
-	}
-	tapdance.Assets().SetPubkey(pubKey)
-
-	// use correct decoy
-	tapdance1Decoy := pb.InitTLSDecoySpec("192.122.190.104", "tapdance1.freeaeskey.xyz")
-	err = tapdance.Assets().SetDecoys([]*pb.TLSDecoySpec{tapdance1Decoy})
-	if err != nil {
-		t.Fatalf(err.Error())
 	}
 
 	// start TapDance proxy
