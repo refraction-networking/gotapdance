@@ -54,6 +54,10 @@ import (
 )
 
 func main() {
+    // first, copy ClientConf and roots files into assets directory
+    // make sure assets directory is writable (only) by the td process
+    tapdance.AssetsSetDir("./path/to/assets/dir/")
+
 	tdConn, err := tapdance.Dial("tcp", "censoredsite.com:80")
 	if err != nil {
 		fmt.Printf("tapdance.Dial() failed: %+v\n", err)
