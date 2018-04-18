@@ -22,7 +22,7 @@ func main() {
 	var assets_location = flag.String("assetsdir", "./assets/", "Folder to read assets from.")
 	flag.Parse()
 
-	tapdance.AssetsFromDir(*assets_location)
+	tapdance.AssetsSetDir(*assets_location)
 	if *decoy != "" {
 		err := setSingleDecoyHost(*decoy)
 		if err != nil {
