@@ -2,7 +2,6 @@ package tapdance
 
 import (
 	"bufio"
-	"bytes"
 	"crypto/tls"
 	"fmt"
 	pb "github.com/sergeyfrolov/gotapdance/protobuf"
@@ -61,17 +60,6 @@ func TestMain(m *testing.M) {
 }
 
 func TestTapDanceDial(t *testing.T) {
-	var b bytes.Buffer
-	logHolder := bufio.NewWriter(&b)
-	oldLoggerOut := Logger().Out
-	Logger().Out = logHolder
-	defer func() {
-		Logger().Out = oldLoggerOut
-		if t.Failed() {
-			logHolder.Flush()
-			fmt.Printf("TapDance log was:\n%s\n", b.String())
-		}
-	}()
 	urlParse := func(urlStr string) url.URL {
 		_url, err := url.Parse(urlStr)
 		if err != nil {
@@ -93,6 +81,7 @@ func TestTapDanceDial(t *testing.T) {
 		if url.Scheme == "https" {
 			conn = tls.Client(conn, &tls.Config{ServerName: url.Hostname()})
 		}
+		defer conn.Close()
 
 		req, err := http.NewRequest("GET", url.String(), nil)
 		req.Host = url.Hostname()
