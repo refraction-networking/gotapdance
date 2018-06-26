@@ -259,14 +259,13 @@ func (tdRaw *tdRawConn) establishTLStoDecoy() (err error) {
 		Logger().Infoln(tdRaw.idStr() + ": SNI was nil. Setting it to" +
 			config.ServerName)
 	}
-	tdRaw.tlsConn = tls.UClient(dialConn, &config, tls.HelloRandomizedNoALPN)
+  // parrot Chrome 62 ClientHello
+	tdRaw.tlsConn = tls.UClient(dialConn, &config, tls.HelloChrome_62)
 	err = tdRaw.tlsConn.BuildHandshakeState()
 	if err != nil {
 		dialConn.Close()
 		return
 	}
-	tdRaw.tlsConn.HandshakeState.Hello.CipherSuites =
-		forceSupportedCiphersFirst(tdRaw.tlsConn.HandshakeState.Hello.CipherSuites)
 	err = tdRaw.tlsConn.MarshalClientHello()
 	if err != nil {
 		dialConn.Close()
