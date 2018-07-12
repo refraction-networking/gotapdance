@@ -20,6 +20,7 @@ func main() {
 	var decoy = flag.String("decoy", "", "Single decoy to use. Accepts \"SNI,IP\" or simply \"SNI\""+
 		" — IP will be resolved. Examples: \"site.io,1.2.3.4\", \"site.io\"")
 	var assets_location = flag.String("assetsdir", "./assets/", "Folder to read assets from.")
+	var proxyProtocol = flag.Bool("proxyproto", false, "Enable PROXY protocol, requesting TapDance station to send client's IP to destination.")
 	flag.Parse()
 
 	tapdance.AssetsSetDir(*assets_location)
@@ -30,6 +31,9 @@ func main() {
 			flag.Usage()
 			os.Exit(255)
 		}
+	}
+	if *proxyProtocol {
+		tapdance.EnableProxyProtocol()
 	}
 
 	tapdanceProxy := tdproxy.NewTapDanceProxy(*port)

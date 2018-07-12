@@ -311,7 +311,7 @@ func (tdRaw *tdRawConn) prepareTDRequest(handshakeType tdTagType) (string, error
 	masterKey := tdRaw.tlsConn.HandshakeState.MasterSecret
 
 	// write flags
-	flags := tdFlagUseTIL
+	flags := default_flags
 	if tdRaw.tagType == tagHttpPostIncomplete {
 		flags |= tdFlagUploadOnly
 	}
