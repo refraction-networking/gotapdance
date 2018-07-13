@@ -318,6 +318,10 @@ func (tdRaw *tdRawConn) prepareTDRequest(handshakeType tdTagType) (string, error
 	if err := binary.Write(buf, binary.BigEndian, flags); err != nil {
 		return "", err
 	}
+	buf.Write([]byte{0}) // Unassigned byte
+	negotiatedCipher := tdRaw.tlsConn.HandshakeState.Suite.Id
+	buf.Write([]byte{byte(negotiatedCipher >> 8),
+		byte(negotiatedCipher & 0xff),})
 	buf.Write(masterKey[:])
 	buf.Write(tdRaw.tlsConn.HandshakeState.ServerHello.Random)
 	buf.Write(tdRaw.tlsConn.HandshakeState.Hello.Random)
