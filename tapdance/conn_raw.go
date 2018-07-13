@@ -218,7 +218,7 @@ func (tdRaw *tdRawConn) tryDialOnce(expectedTransition pb.S2C_Transition) (err e
 			// this exceptional error implies that station has lost state, thus is fatal
 			return err
 		}
-		Logger().Infoln(tdRaw.idStr() + " Successfully connected to TapDance Station")
+		Logger().Infoln(tdRaw.idStr() + " Successfully connected to TapDance Station [" + tdRaw.initialMsg.GetStationId() + "]")
 	case tagHttpPostIncomplete:
 		// don't wait for response
 	default:
@@ -259,7 +259,7 @@ func (tdRaw *tdRawConn) establishTLStoDecoy() (err error) {
 		Logger().Infoln(tdRaw.idStr() + ": SNI was nil. Setting it to" +
 			config.ServerName)
 	}
-  // parrot Chrome 62 ClientHello
+	// parrot Chrome 62 ClientHello
 	tdRaw.tlsConn = tls.UClient(dialConn, &config, tls.HelloChrome_62)
 	err = tdRaw.tlsConn.BuildHandshakeState()
 	if err != nil {

@@ -139,6 +139,9 @@ message StationToClient {
     // Signals client to stop connecting for following amount of seconds
     optional uint32 tmp_backoff = 5;
 
+    // Sent in SESSION_INIT, identifies the station that picked up
+    optional string station_id = 6;
+
     // Random-sized junk to defeat packet size fingerprinting.
     optional bytes padding = 100;
 }
