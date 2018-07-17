@@ -151,7 +151,7 @@ func (proxy *TapDanceProxy) GetStats() (stats string) {
 
 func (proxy *TapDanceProxy) addFlow(userConn *net.Conn) (pTapdanceState *tapDanceFlow) {
 	// Init connection state
-	id := proxy.countTunnels.Inc()
+	id := proxy.countTunnels.GetAndInc()
 
 	pTapdanceState = makeTapDanceFlow(proxy, id, false)
 	pTapdanceState.userConn = *userConn

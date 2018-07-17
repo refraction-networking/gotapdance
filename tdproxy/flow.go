@@ -71,7 +71,7 @@ func (TDstate *tapDanceFlow) redirect() error {
 		Logger.Debugf("{tapDanceFlow} forwardFromClientToServer returns, bytes sent: " +
 			strconv.FormatUint(uint64(n), 10))
 		if _err == nil {
-			_err = errors.New("StoppedByUser")
+			_err = errors.New("closed by application layer")
 		}
 		errChan <- _err
 		return
@@ -81,7 +81,7 @@ func (TDstate *tapDanceFlow) redirect() error {
 	go forwardFromClientToServer()
 
 	if err = <-errChan; err != nil {
-		if err.Error() == "MSG_CLOSE" || err.Error() == "StoppedByUser" {
+		if err.Error() == "MSG_CLOSE" || err.Error() == "closed by application layer" {
 			Logger.Debugln("[Session " + strconv.FormatUint(uint64(TDstate.id), 10) +
 				" Redirect function returns gracefully: " + err.Error())
 			TDstate.proxy.closedGracefully.Inc()

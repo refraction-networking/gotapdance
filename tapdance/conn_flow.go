@@ -458,7 +458,9 @@ func (flowConn *TapdanceFlowConn) actOnReadError(err error) error {
 			return io.EOF
 		} // else: proceed and exit as a crash
 	}
-
+	if flowConn.closeErr != nil {
+		return flowConn.closeErr
+	}
 	Logger().Infoln(flowConn.tdRaw.idStr() + " crashing due to " + err.Error())
 	return io.ErrUnexpectedEOF
 }
@@ -517,15 +519,13 @@ func (flowConn *TapdanceFlowConn) closeWithErrorOnce(err error) error {
 		// safeguard, shouldn't happen
 		err = errors.New("closed with nil error!")
 	}
-	var errOut error
 	flowConn.closeOnce.Do(func() {
-		Logger().Infoln(flowConn.idStr() + " closed with error " + err.Error())
 		flowConn.closeErr = errors.New(flowConn.idStr() + " " + err.Error())
 		flowConn.bsbuf.Unblock()
 		close(flowConn.closed)
-		errOut = flowConn.tdRaw.Close()
+		flowConn.tdRaw.Close()
 	})
-	return errOut
+	return flowConn.closeErr
 }
 
 // Close closes the connection.
