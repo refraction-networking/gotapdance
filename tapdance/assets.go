@@ -46,10 +46,14 @@ func Assets() *assets {
 func AssetsSetDir(dir string) *assets {
 	_initAssets := func() { initAssets(dir) }
 	if assetsInstance != nil {
+		assetsInstance.Lock()
 		if dir != assetsInstance.path {
 			Logger().Warnf("Assets path changed %s->%s. (Re)initializing.\n",
 				assetsInstance.path, dir)
-			assetsOnce = sync.Once{} // reset once object, allowing re-init
+			assetsInstance.path = dir
+			assetsInstance.readConfigs()
+			assetsInstance.Unlock()
+			return assetsInstance
 		}
 	}
 	assetsOnce.Do(_initAssets)
@@ -88,13 +92,6 @@ func (a *assets) GetAssetsDir() string {
 	a.RLock()
 	defer a.RUnlock()
 	return a.path
-}
-
-// SetDir sets the directory to read assets from.
-func (a *assets) SetDir(path string) {
-	a.Lock()
-	AssetsSetDir(path)
-	a.Unlock()
 }
 
 func (a *assets) readConfigs() {

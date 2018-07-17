@@ -4,12 +4,12 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"github.com/golang/protobuf/proto"
 	pb "github.com/sergeyfrolov/gotapdance/protobuf"
 	"io/ioutil"
 	"net"
 	"os"
 	"path"
-	"reflect"
 	"testing"
 )
 
@@ -49,7 +49,7 @@ func TestAssets_Decoys(t *testing.T) {
 		pb.InitTLSDecoySpec("8.255.255.8", "heh.meh"),
 	}
 
-	Assets().SetDir(dir1)
+	AssetsSetDir(dir1)
 	err = Assets().SetDecoys(testDecoys1)
 	if err != nil {
 		t.Fatal(err)
@@ -57,7 +57,7 @@ func TestAssets_Decoys(t *testing.T) {
 	if !Assets().IsDecoyInList(*pb.InitTLSDecoySpec("19.21.23.42", "blahblahbl.ah")) {
 		t.Fatal("Decoy 19.21.23.42(blahblahbl.ah) is NOT in Decoy List!")
 	}
-	Assets().SetDir(dir2)
+	AssetsSetDir(dir2)
 	err = Assets().SetDecoys(testDecoys2)
 	if err != nil {
 		t.Fatal(err)
@@ -68,16 +68,10 @@ func TestAssets_Decoys(t *testing.T) {
 	if !Assets().IsDecoyInList(*pb.InitTLSDecoySpec("11.22.33.44", "what.is.up")) {
 		t.Fatal("Decoy 11.22.33.44(what.is.up) is NOT in Decoy List!")
 	}
-	if !reflect.DeepEqual(Assets().config.DecoyList.TlsDecoys, testDecoys2) {
-		fmt.Println("Assets are not equal!")
-		fmt.Println("Assets().decoys:", Assets().config.DecoyList.TlsDecoys)
-		fmt.Println("testDecoys2:", testDecoys2)
-		t.Fail()
-	}
 
 	decoyInList := func(d *pb.TLSDecoySpec, decoyList []*pb.TLSDecoySpec) bool {
 		for _, elem := range decoyList {
-			if reflect.DeepEqual(elem, d) {
+			if proto.Equal(elem, d) {
 				return true
 			}
 		}
@@ -98,13 +92,8 @@ func TestAssets_Decoys(t *testing.T) {
 			t.Fail()
 		}
 	}
-	Assets().SetDir(dir1)
-	if !reflect.DeepEqual(Assets().config.DecoyList.TlsDecoys, testDecoys1) {
-		fmt.Println("Assets are not equal!")
-		fmt.Println("Assets().decoys:", Assets().config.DecoyList.TlsDecoys)
-		fmt.Println("testDecoys1:", testDecoys1)
-		t.Fail()
-	}
+	AssetsSetDir(dir1)
+
 	if !Assets().IsDecoyInList(*pb.InitTLSDecoySpec("19.21.23.42", "blahblahbl.ah")) {
 		t.Fatal("Decoy 19.21.23.42(blahblahbl.ah) is NOT in Decoy List!")
 	}
@@ -129,7 +118,7 @@ func TestAssets_Decoys(t *testing.T) {
 	os.Remove(path.Join(dir2, Assets().filenameClientConf))
 	os.Remove(dir1)
 	os.Remove(dir2)
-	Assets().SetDir(oldpath)
+	AssetsSetDir(oldpath)
 }
 
 func TestAssets_Pubkey(t *testing.T) {
@@ -167,12 +156,12 @@ func TestAssets_Pubkey(t *testing.T) {
 		212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226,
 		227, 228, 229, 230, 231})
 
-	Assets().SetDir(dir1)
+	AssetsSetDir(dir1)
 	err = Assets().SetPubkey(pubkey1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	Assets().SetDir(dir2)
+	AssetsSetDir(dir2)
 	err = Assets().SetPubkey(pubkey2)
 	if err != nil {
 		t.Fatal(err)
@@ -184,7 +173,7 @@ func TestAssets_Pubkey(t *testing.T) {
 		t.Fail()
 	}
 
-	Assets().SetDir(dir1)
+	AssetsSetDir(dir1)
 	if !bytes.Equal(Assets().config.DefaultPubkey.Key[:], pubkey1.Key[:]) {
 		fmt.Println("Pubkeys are not equal!")
 		fmt.Println("Assets().stationPubkey:", Assets().config.DefaultPubkey.Key[:])
@@ -195,5 +184,5 @@ func TestAssets_Pubkey(t *testing.T) {
 	os.Remove(path.Join(dir2, Assets().filenameStationPubkey))
 	os.Remove(dir1)
 	os.Remove(dir2)
-	Assets().SetDir(oldpath)
+	AssetsSetDir(oldpath)
 }
