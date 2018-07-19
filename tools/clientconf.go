@@ -14,7 +14,12 @@ import (
 
 func printClientConf(clientConf pb.ClientConf) {
 	fmt.Printf("Generation: %d\n", clientConf.GetGeneration())
-	fmt.Printf("Default Pubkey: %s\n", hex.EncodeToString(clientConf.GetDefaultPubkey().Key[:]))
+	if clientConf.GetDefaultPubkey() != nil {
+		fmt.Printf("Default Pubkey: %s\n", hex.EncodeToString(clientConf.GetDefaultPubkey().Key[:]))
+	}
+	if clientConf.DecoyList == nil {
+		return
+	}
 	decoys := clientConf.DecoyList.TlsDecoys
 	fmt.Printf("Decoy List: %d decoys\n", len(decoys))
 	for i, decoy := range decoys {
