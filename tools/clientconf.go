@@ -98,8 +98,8 @@ func main() {
 	var delpubkey = flag.Bool("delpubkey", false, "Delete pubkey from decoy (or all if -all)")
 
 	var add = flag.Bool("add", false, "Add a new decoy. Must set -host and -ip, optionally set -timeout, -tcpwin and -pubkey")
-	var delete = flag.Int("delete", -1, "Delete a decoy at `index`")
-	var update = flag.Int("update", -1, "Update a decoy at `index`")
+	var delete = flag.Int("delete", -1, "Specifies `index` of decoy to delete")
+	var update = flag.Int("update", -1, "Specifies `index` of decoy to update")
 
 	var host = flag.String("host", "", "New/modified decoy host")
 	var ip = flag.String("ip", "", "New/modified IP address")
