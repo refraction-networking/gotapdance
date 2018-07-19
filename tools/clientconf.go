@@ -95,9 +95,9 @@ func main() {
 	var out_fname = flag.String("o", "", "`output` file name to write new/modified config")
 	var generation = flag.Int("generation", 0, "New/modified generation")
 	var pubkey = flag.String("pubkey", "", "New/modified (decoy) pubkey. If -add or -update, applies to specific decoy. If -all applies to all decoys. Otherwise, applies to default pubkey.")
-	var delpubkey = flag.Bool("delpubkey", false, "Delete pubkey from decoy (or all if -all)")
+	var delpubkey = flag.Bool("delpubkey", false, "Delete pubkey from decoy with index specified in -update (or from all decoys if -all)")
 
-	var add = flag.Bool("add", false, "Add a new decoy. Must set -host and -ip, optionally set -timeout, -tcpwin and -pubkey")
+	var add = flag.Bool("add", false, "If set, modify fields of all decoys in list with provided pubkey/timeout/tcpwin/host/ip")
 	var delete = flag.Int("delete", -1, "Specifies `index` of decoy to delete")
 	var update = flag.Int("update", -1, "Specifies `index` of decoy to update")
 
