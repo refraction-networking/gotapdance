@@ -131,6 +131,12 @@ func main() {
 
 		} else {
 			// Update default public key
+			if clientConf.DefaultPubkey == nil {
+				k := pb.PubKey{}
+				key_type := pb.KeyType_AES_GCM_128
+				k.Type = &key_type
+				clientConf.DefaultPubkey = &k
+			}
 			clientConf.DefaultPubkey.Key = parsePubkey(*pubkey)
 		}
 	}
@@ -167,6 +173,10 @@ func main() {
 		decoy := pb.TLSDecoySpec{}
 		updateDecoy(&decoy, *host, *ip, *pubkey, *delpubkey, *timeout, *tcpwin)
 
+		if clientConf.DecoyList == nil {
+			tls_spec := pb.DecoyList{}
+			clientConf.DecoyList = &tls_spec
+		}
 		clientConf.DecoyList.TlsDecoys = append(clientConf.DecoyList.TlsDecoys, &decoy)
 	}
 
