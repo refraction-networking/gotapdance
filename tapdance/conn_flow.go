@@ -434,7 +434,7 @@ func (flowConn *TapdanceFlowConn) actOnReadError(err error) error {
 			err == io.ErrUnexpectedEOF {
 			Logger().Infoln(flowConn.tdRaw.idStr() + " reconnect: FIN is unexpected")
 		}
-		err = flowConn.tdRaw.Redial()
+		err = flowConn.tdRaw.Dial()
 		if flowConn.flowType != flowReadOnly {
 			// wake up writer engine
 			select {
