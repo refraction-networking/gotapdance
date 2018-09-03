@@ -458,11 +458,8 @@ func (flowConn *TapdanceFlowConn) actOnReadError(err error) error {
 			return io.EOF
 		} // else: proceed and exit as a crash
 	}
-	if flowConn.closeErr != nil {
-		return flowConn.closeErr
-	}
-	Logger().Infoln(flowConn.tdRaw.idStr() + " crashing due to " + err.Error())
-	return io.ErrUnexpectedEOF
+
+	return flowConn.closeWithErrorOnce(err)
 }
 
 // Sets read deadline to {when raw connection was establihsed} + {timeout} - {small random value}
