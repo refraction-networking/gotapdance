@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"context"
 	"github.com/golang/protobuf/proto"
 	"github.com/refraction-networking/utls"
 )
@@ -21,14 +22,14 @@ import (
 // Both reader and writer flows shall have this underlying raw connection.
 // Knows about but doesn't keep track of timeout and upload limit
 type tdRawConn struct {
-	tcpConn closeWriterConn
-	tlsConn *tls.UConn
+	tcpConn       closeWriterConn
+	tlsConn       *tls.UConn
 
-	flowId      uint64
-	sessionId   uint64
-	strIdSuffix string
+	flowId        uint64
+	sessionId     uint64
+	strIdSuffix   string
 
-	customDialer func(string, string) (net.Conn, error)
+	TcpDialer     func(context.Context, string, string) (net.Conn, error)
 
 	decoySpec     pb.TLSDecoySpec
 	establishedAt time.Time
@@ -37,14 +38,14 @@ type tdRawConn struct {
 	remoteConnId  []byte
 	stationPubkey []byte
 
-	failedDecoys []string
-	initialMsg   pb.StationToClient
-	tagType      tdTagType
+	failedDecoys  []string
+	initialMsg    pb.StationToClient
+	tagType       tdTagType
 
-	UploadLimit int // used only in POST-based tags
+	UploadLimit   int // used only in POST-based tags
 
-	closed    chan struct{}
-	closeOnce sync.Once
+	closed        chan struct{}
+	closeOnce     sync.Once
 }
 
 func makeTdRaw(handshakeType tdTagType,
@@ -58,7 +59,7 @@ func makeTdRaw(handshakeType tdTagType,
 	return tdRaw
 }
 
-func (tdRaw *tdRawConn) Dial() error {
+func (tdRaw *tdRawConn) DialContext(ctx context.Context) error {
 	var err error
 
 	maxConnectionAttempts := 6
@@ -72,6 +73,8 @@ func (tdRaw *tdRawConn) Dial() error {
 		if waitTime := sleepBeforeConnect(i); waitTime != nil {
 			select {
 			case <-waitTime:
+			case <-ctx.Done():
+				return context.Canceled
 			case <-tdRaw.closed:
 				return errors.New("Closed")
 			}
@@ -87,7 +90,7 @@ func (tdRaw *tdRawConn) Dial() error {
 			return errors.New("decoy spec is empty! corrupted ClientConf?")
 		}
 
-		err = tdRaw.tryDialOnce(expectedTransition)
+		err = tdRaw.tryDialOnce(ctx, expectedTransition)
 		if err == nil {
 			return err
 		}
@@ -97,10 +100,10 @@ func (tdRaw *tdRawConn) Dial() error {
 	return err
 }
 
-func (tdRaw *tdRawConn) tryDialOnce(expectedTransition pb.S2C_Transition) (err error) {
+func (tdRaw *tdRawConn) tryDialOnce(ctx context.Context, expectedTransition pb.S2C_Transition) (err error) {
 	Logger().Infoln(tdRaw.idStr() + " Attempting to connect to decoy " +
 		tdRaw.decoySpec.GetHostname() + " (" + tdRaw.decoySpec.GetIpv4AddrStr() + ")")
-	err = tdRaw.establishTLStoDecoy()
+	err = tdRaw.establishTLStoDecoy(ctx)
 	if err != nil {
 		Logger().Errorf(tdRaw.idStr() + " establishTLStoDecoy(" +
 			tdRaw.decoySpec.GetHostname() + "," + tdRaw.decoySpec.GetIpv4AddrStr() +
@@ -209,16 +212,23 @@ func (tdRaw *tdRawConn) tryDialOnce(expectedTransition pb.S2C_Transition) (err e
 	return nil
 }
 
-func (tdRaw *tdRawConn) establishTLStoDecoy() (err error) {
+func (tdRaw *tdRawConn) establishTLStoDecoy(ctx context.Context) (err error) {
 	var dialConn net.Conn
-	if tdRaw.customDialer != nil {
-		dialConn, err = tdRaw.customDialer("tcp", tdRaw.decoySpec.GetIpv4AddrStr())
+	deadline, deadlineAlreadySet := ctx.Deadline()
+	if !deadlineAlreadySet {
+		deadline = time.Now().Add(getRandomDuration(deadlineTCPtoDecoyMin, deadlineTCPtoDecoyMax))
+	}
+	childCtx, childCancelFunc := context.WithDeadline(ctx, deadline)
+	defer childCancelFunc()
+
+	if tdRaw.TcpDialer != nil {
+		dialConn, err = tdRaw.TcpDialer(childCtx, "tcp", tdRaw.decoySpec.GetIpv4AddrStr())
 		if err != nil {
 			return err
 		}
 	} else {
-		dialConn, err = net.DialTimeout("tcp", tdRaw.decoySpec.GetIpv4AddrStr(),
-			getRandomDuration(deadlineTCPtoDecoyMin, deadlineTCPtoDecoyMax))
+		d := net.Dialer{}
+		dialConn, err = d.DialContext(childCtx, "tcp", tdRaw.decoySpec.GetIpv4AddrStr())
 		if err != nil {
 			return err
 		}
@@ -246,6 +256,7 @@ func (tdRaw *tdRawConn) establishTLStoDecoy() (err error) {
 		dialConn.Close()
 		return
 	}
+	tdRaw.tlsConn.SetDeadline(deadline)
 	err = tdRaw.tlsConn.Handshake()
 	if err != nil {
 		dialConn.Close()

@@ -7,6 +7,7 @@ TODO: confirm that all writes are recorded towards data limit
 package tapdance
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/binary"
 	"encoding/hex"
@@ -82,10 +83,10 @@ func makeTdFlow(flow flowType, tdRaw *tdRawConn) (*TapdanceFlowConn, error) {
 
 // Dial establishes direct connection to TapDance station proxy.
 // Users are expected to send HTTP CONNECT request next.
-func (flowConn *TapdanceFlowConn) Dial() error {
+func (flowConn *TapdanceFlowConn) DialContext(ctx context.Context) error {
 	if flowConn.tdRaw.tlsConn == nil {
 		// if still hasn't dialed
-		err := flowConn.tdRaw.Dial()
+		err := flowConn.tdRaw.DialContext(ctx)
 		if err != nil {
 			return err
 		}
@@ -434,7 +435,7 @@ func (flowConn *TapdanceFlowConn) actOnReadError(err error) error {
 			err == io.ErrUnexpectedEOF {
 			Logger().Infoln(flowConn.tdRaw.idStr() + " reconnect: FIN is unexpected")
 		}
-		err = flowConn.tdRaw.Dial()
+		err = flowConn.tdRaw.DialContext(context.Background())
 		if flowConn.flowType != flowReadOnly {
 			// wake up writer engine
 			select {
