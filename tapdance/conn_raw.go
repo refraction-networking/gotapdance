@@ -60,10 +60,34 @@ func makeTdRaw(handshakeType tdTagType,
 }
 
 func (tdRaw *tdRawConn) DialContext(ctx context.Context) error {
+	return tdRaw.dial(ctx, false)
+}
+
+func (tdRaw *tdRawConn) RedialContext(ctx context.Context) error {
+	tdRaw.flowId += 1
+	return tdRaw.dial(ctx, true)
+}
+
+
+func (tdRaw *tdRawConn) dial(ctx context.Context, reconnect bool) error {
+	var maxConnectionAttempts int
 	var err error
 
-	maxConnectionAttempts := 6
-	expectedTransition := pb.S2C_Transition_S2C_SESSION_INIT
+	/*
+		// Randomize tdConn.maxSend to avoid heuristics
+		tdConn.maxSend = getRandInt(sendLimitMin, sendLimitMax)
+		tdConn.maxSend -= transitionMsgSize // reserve space for transition msg
+		tdConn.maxSend -= 2                 // reserve 2 bytes for transition msg header
+	*/
+	var expectedTransition pb.S2C_Transition
+	if reconnect {
+		maxConnectionAttempts = 2
+		expectedTransition = pb.S2C_Transition_S2C_CONFIRM_RECONNECT
+		tdRaw.tlsConn.Close()
+	} else {
+		maxConnectionAttempts = 6
+		expectedTransition = pb.S2C_Transition_S2C_SESSION_INIT
+	}
 
 	for i := 0; i < maxConnectionAttempts; i++ {
 		if tdRaw.IsClosed() {
@@ -79,15 +103,17 @@ func (tdRaw *tdRawConn) DialContext(ctx context.Context) error {
 				return errors.New("Closed")
 			}
 		}
-		if !tdRaw.pinDecoySpec {
-			tdRaw.decoySpec = Assets().GetDecoy()
-			if tdRaw.decoySpec.GetIpv4AddrStr() == "" {
-				return errors.New("tdConn.decoyAddr is empty!")
+		if tdRaw.pinDecoySpec {
+			if tdRaw.decoySpec.Ipv4Addr == nil {
+				return errors.New("decoySpec is pinned, but empty!")
 			}
-		}
-
-		if tdRaw.decoySpec.Ipv4Addr == nil {
-			return errors.New("decoy spec is empty! corrupted ClientConf?")
+		} else {
+			if !reconnect {
+				tdRaw.decoySpec = Assets().GetDecoy()
+				if tdRaw.decoySpec.GetIpv4AddrStr() == "" {
+					return errors.New("tdConn.decoyAddr is empty!")
+				}
+			}
 		}
 
 		err = tdRaw.tryDialOnce(ctx, expectedTransition)
