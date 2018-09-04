@@ -20,10 +20,9 @@ GOPATH="${HOME}/go/"
 2. Get source code for Go Tapdance and all dependencies:
 
  ```bash
-go get github.com/sergeyfrolov/gotapdance github.com/Sirupsen/logrus \
-           github.com/agl/ed25519/extra25519 golang.org/x/crypto/curve25519 \
-           github.com/refraction-networking/utls github.com/sergeyfrolov/bsbuffer \
-           github.com/golang/protobuf/proto
+go get github.com/sergeyfrolov/gotapdance
+cd $GOPATH/src/github.com/sergeyfrolov/gotapdance
+go get -d ./...
 ```
 Ignore the "no buildable Go source files" warning.
 

@@ -3,7 +3,7 @@ package gobind
 import (
 	"bytes"
 	"errors"
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"io"
 
 	"github.com/sergeyfrolov/gotapdance/tapdance"
