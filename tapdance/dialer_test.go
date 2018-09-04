@@ -68,7 +68,8 @@ func TestTapDanceDial(t *testing.T) {
 		return *_url
 	}
 	testUrls := []url.URL{
-		urlParse("http://detectportal.firefox.com:80/success.txt"),
+		// TODO: uncomment when/if :80 is allowed on all stations
+		// urlParse("http://detectportal.firefox.com:80/success.txt"),
 		urlParse("https://tapdance1.freeaeskey.xyz:443/"),
 	}
 
@@ -109,11 +110,12 @@ func TestTapDanceDial(t *testing.T) {
 	for _, testUrl := range testUrls {
 		referenceResponse, err := getResponseString(testUrl, net.Dial)
 		if err != nil {
-			t.Fatalf("Failed to get reference response: %v. Check your connection", err)
+			t.Fatalf("Failed to get reference response from %v : %v. Check your connection",
+				testUrl, err)
 		}
 		tdResponse, err := getResponseString(testUrl, Dial)
 		if err != nil {
-			t.Fatalf("Failed to get response via TapDance: %v.", err)
+			t.Fatalf("Failed to get response from %v via TapDance: %v.", testUrl, err)
 		}
 		if string(referenceResponse) != string(tdResponse) {
 			t.Fatalf("Unexpected response from %s\nExpected: %s\nGot: %s",
