@@ -22,14 +22,14 @@ import (
 // Both reader and writer flows shall have this underlying raw connection.
 // Knows about but doesn't keep track of timeout and upload limit
 type tdRawConn struct {
-	tcpConn       closeWriterConn
-	tlsConn       *tls.UConn
+	tcpConn closeWriterConn
+	tlsConn *tls.UConn
 
-	flowId        uint64
-	sessionId     uint64
-	strIdSuffix   string
+	flowId      uint64
+	sessionId   uint64
+	strIdSuffix string
 
-	TcpDialer     func(context.Context, string, string) (net.Conn, error)
+	TcpDialer func(context.Context, string, string) (net.Conn, error)
 
 	decoySpec     pb.TLSDecoySpec
 	establishedAt time.Time
@@ -38,14 +38,14 @@ type tdRawConn struct {
 	remoteConnId  []byte
 	stationPubkey []byte
 
-	failedDecoys  []string
-	initialMsg    pb.StationToClient
-	tagType       tdTagType
+	failedDecoys []string
+	initialMsg   pb.StationToClient
+	tagType      tdTagType
 
-	UploadLimit   int // used only in POST-based tags
+	UploadLimit int // used only in POST-based tags
 
-	closed        chan struct{}
-	closeOnce     sync.Once
+	closed    chan struct{}
+	closeOnce sync.Once
 }
 
 func makeTdRaw(handshakeType tdTagType,
