@@ -11,7 +11,7 @@
 
 # Build
 ## Download Golang and TapDance and dependencies
-1. Install [Golang](https://golang.org/dl/) (currently tested against 1.8-1.9 versions), set GOPATH:
+1. Install [Golang](https://golang.org/dl/) (currently tested against 1.9 and 1.10 versions), set GOPATH:
 
  ```bash
 GOPATH="${HOME}/go/"
