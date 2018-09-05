@@ -68,7 +68,6 @@ func (tdRaw *tdRawConn) RedialContext(ctx context.Context) error {
 	return tdRaw.dial(ctx, true)
 }
 
-
 func (tdRaw *tdRawConn) dial(ctx context.Context, reconnect bool) error {
 	var maxConnectionAttempts int
 	var err error

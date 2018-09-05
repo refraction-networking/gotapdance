@@ -94,6 +94,5 @@ func (d *Dialer) DialProxyContext(ctx context.Context) (net.Conn, error) {
 		flow.tdRaw.TcpDialer = d.TcpDialer
 		return flow, flow.DialContext(ctx)
 	}
-	panic("split flows are not supported at this time")
-	// return dialSplitFlow(ctx, d.TcpDialer)
+	return dialSplitFlow(ctx, d.TcpDialer)
 }
