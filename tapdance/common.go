@@ -3,7 +3,6 @@ package tapdance
 import (
 	"errors"
 	"github.com/refraction-networking/utls"
-	"math"
 	"strconv"
 	"time"
 )
@@ -129,9 +128,8 @@ var tapDanceSupportedCiphers = []uint16{
 
 // How much time to sleep on trying to connect to decoys to prevent overwhelming them
 func sleepBeforeConnect(attempt int) (waitTime <-chan time.Time) {
-	if attempt >= 2 { // return nil for first 2 attempts
-		waitTime = time.After(time.Second *
-			time.Duration(math.Pow(3, float64(attempt-1))))
+	if attempt >= 6 { // return nil for first 6 attempts
+		waitTime = time.After(time.Second * 1)
 	}
 	return
 }

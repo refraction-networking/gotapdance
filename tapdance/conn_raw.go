@@ -80,11 +80,11 @@ func (tdRaw *tdRawConn) dial(ctx context.Context, reconnect bool) error {
 	*/
 	var expectedTransition pb.S2C_Transition
 	if reconnect {
-		maxConnectionAttempts = 2
+		maxConnectionAttempts = 5
 		expectedTransition = pb.S2C_Transition_S2C_CONFIRM_RECONNECT
 		tdRaw.tlsConn.Close()
 	} else {
-		maxConnectionAttempts = 6
+		maxConnectionAttempts = 20
 		expectedTransition = pb.S2C_Transition_S2C_SESSION_INIT
 	}
 
@@ -128,6 +128,8 @@ func (tdRaw *tdRawConn) dial(ctx context.Context, reconnect bool) error {
 func (tdRaw *tdRawConn) tryDialOnce(ctx context.Context, expectedTransition pb.S2C_Transition) (err error) {
 	Logger().Infoln(tdRaw.idStr() + " Attempting to connect to decoy " +
 		tdRaw.decoySpec.GetHostname() + " (" + tdRaw.decoySpec.GetIpv4AddrStr() + ")")
+
+	connect_start := time.Now()
 	err = tdRaw.establishTLStoDecoy(ctx)
 	if err != nil {
 		Logger().Errorf(tdRaw.idStr() + " establishTLStoDecoy(" +
@@ -135,8 +137,9 @@ func (tdRaw *tdRawConn) tryDialOnce(ctx context.Context, expectedTransition pb.S
 			") failed with " + err.Error())
 		return err
 	}
+	connect_time := time.Since(connect_start)
 	Logger().Infof(tdRaw.idStr() + " Connected to decoy " +
-		tdRaw.decoySpec.GetHostname() + " (" + tdRaw.decoySpec.GetIpv4AddrStr() + ")")
+		tdRaw.decoySpec.GetHostname() + " (" + tdRaw.decoySpec.GetIpv4AddrStr() + ") in " + connect_time.String())
 
 	if tdRaw.IsClosed() {
 		// if connection was closed externally while in establishTLStoDecoy()
@@ -163,9 +166,6 @@ func (tdRaw *tdRawConn) tryDialOnce(ctx context.Context, expectedTransition pb.S
 		return err
 	}
 
-	tdRaw.tlsConn.SetDeadline(time.Now().Add(
-		getRandomDuration(deadlineConnectTDStationMin, deadlineConnectTDStationMax)))
-
 	var tdRequest string
 	tdRequest, err = tdRaw.prepareTDRequest(tdRaw.tagType)
 	if err != nil {
@@ -187,8 +187,12 @@ func (tdRaw *tdRawConn) tryDialOnce(ctx context.Context, expectedTransition pb.S
 		return
 	}
 
+	// Give up waiting for the station pretty quickly (2x handshake time == ~4RTT)
+	tdRaw.tlsConn.SetDeadline(time.Now().Add(connect_time * 2))
+
 	switch tdRaw.tagType {
 	case tagHttpGetIncomplete:
+
 		tdRaw.initialMsg, err = tdRaw.readProto()
 		if err != nil {
 			if errIsTimeout(err) {
@@ -214,6 +218,7 @@ func (tdRaw *tdRawConn) tryDialOnce(ctx context.Context, expectedTransition pb.S
 			}
 			return
 		}
+
 		if tdRaw.initialMsg.GetStateTransition() != expectedTransition {
 			err = errors.New("Init error: state transition mismatch!" +
 				" Received: " + tdRaw.initialMsg.GetStateTransition().String() +
