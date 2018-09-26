@@ -1,23 +1,39 @@
 language: go
 
 go:
- - "1.9"
- - "1.10"
+  - "1.10"
 
-before_install:
- - sudo apt-get install libegl1-mesa-dev libgles2-mesa-dev libx11-dev
+os:
+  - linux
+  - osx
 
 sudo: required
 dist: trusty
+
+addons:
+  artifacts: true
+  apt:
+    packages:
+      - libegl1-mesa-dev
+      - libgles2-mesa-dev
+      - libx11-dev
 
 install:
   - go get -t ./...
   - go get github.com/golang/lint/golint
   # Install gometalinter
   - go get github.com/alecthomas/gometalinter
+  # Get Psiphon code
+  - mkdir -p $GOPATH/src/github.com/Psiphon-Labs
+  - git clone https://github.com/Psiphon-Labs/psiphon-tunnel-core.git $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core
+  - go get github.com/kardianos/govendor
+  - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && govendor remove github.com/sergeyfrolov/gotapdance/...)
+  - sed -i -e 's/refraction_networking_tapdance.Logger().Out = ioutil.Discard//' $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go
 
 script:
  - go test -race -v ./tapdance/
  - go test -race -v ./tdproxy/
  - gometalinter --install
  - gometalinter --disable-all -E vet -E gofmt -E misspell -E ineffassign -E deadcode --tests ./tapdance/
+ # Build Psiphon ConsoleClient
+ - go build -race -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
