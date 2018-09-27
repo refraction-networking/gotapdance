@@ -477,11 +477,36 @@ func (tdRaw *tdRawConn) readProto() (msg pb.StationToClient, err error) {
 // Generates padding and stuff
 // Currently guaranteed to be less than 1024 bytes long
 func (tdRaw *tdRawConn) writeTransition(transition pb.C2S_Transition) (n int, err error) {
+	const paddingMinSize = 250
+	const paddingMaxSize = 800
+	const paddingSmoothness = 5
+	paddingDecrement := 0 // reduce potential padding size by this value
+
 	currGen := Assets().GetGeneration()
-	msg := pb.ClientToStation{Padding: []byte(getRandPadding(150, 900, 10)),
+	msg := pb.ClientToStation{
 		DecoyListGeneration: &currGen,
 		StateTransition:     &transition,
 		UploadSync:          new(uint64)} // TODO: remove
+
+	if len(tdRaw.failedDecoys) > 0 {
+		failedDecoysIdx := 0 // how many failed decoys to report now
+		for failedDecoysIdx < len(tdRaw.failedDecoys) {
+			if paddingMinSize < proto.Size(&pb.ClientToStation{
+				FailedDecoys: tdRaw.failedDecoys[:failedDecoysIdx+1]}) {
+				// if failedDecoys list is too big to fit in place of min padding
+				// then send the rest on the next reconnect
+				break
+			}
+			failedDecoysIdx += 1
+		}
+		paddingDecrement = proto.Size(&pb.ClientToStation{
+			FailedDecoys: tdRaw.failedDecoys[:failedDecoysIdx]})
+
+		msg.FailedDecoys = tdRaw.failedDecoys[:failedDecoysIdx]
+		tdRaw.failedDecoys = tdRaw.failedDecoys[failedDecoysIdx:]
+	}
+	msg.Padding = []byte(getRandPadding(paddingMinSize-paddingDecrement,
+		paddingMaxSize-paddingDecrement, paddingSmoothness))
 
 	msgBytes, err := proto.Marshal(&msg)
 	if err != nil {
