@@ -129,7 +129,6 @@ func obfuscateTag(stegoPayload []byte, stationPubkey []byte) (tag []byte, err er
 
 	tagBuf.Write(encryptedData)
 	tag = tagBuf.Bytes()
-	Logger().Debugf("len(tag)", tagBuf.Len())
 	return
 }
 

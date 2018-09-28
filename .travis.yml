@@ -1,10 +1,11 @@
 language: go
 go:
-  - "1.10"
+  - "1.10.x"
+  - "1.x"
 
 os: linux
 sudo: required
-dist: trusty
+dist: xenial
 
 services:
   - docker
@@ -16,20 +17,23 @@ notifications:
   slack:
     secure: ZzIEqFE4XRdE9U2p3aeE32DMtoC8RgjoEavhEQ1oLrWFgUpLktqmp9UVY/U+W6iElilLpDbFpry51+Sv9MWpxJMxr+Q/JJuq/3Bj5KjF/wEtil7qvBYhQ1sM/qUQFG6wRkrMNjZGMiaTmnkWF0rZB8lf7+nbnGFaPW3AVVbD+8gVDWTHI4Hcvvgs0UbrJzoPfpvH0dprOchswc1BBKTgo5c44rvS2fquEMVcqMMiNJ5JQqphuRWLTfzLgOzImSf0/xJJyVp/YTkSnVSg8BcWmDCJ4iB9fJkVyZM9WxcgY/J4T5VzFxfMah9zv2j8UTfzHSMeCJDRL647hdnkmr/Qum/LN91Ey2DJw5KUH743CsAbyGhQML6wZ3NCeEP06hnMDphalU5+BYhtAPyc5CB84g6eLIUQ2EqptuPZpjFQohFnapCTnfB5XKTcW+PjxJsoJzk8x+85Xid+H1nnNxeyf10tLv6Pwy4ZGmEEbsa4SYWXibpIEu3fPJXEdtrht0vM40pDLeUYL6Axmh7hNjmDQOXJG41saF+Rk4AArRhKhMQTmlYCc0e1H2/hIDXUMPbqjHeCpEkaA5W8BFBKynhlJa0JX+rtHDFaK82Di8rXT0NO2ACyG8ZQqk87qePyBYPyfR8hRwhrkmQHlYYOZzV6LBz+ynJuWl9ktcC2irJlHZs=
 
+## Golang Test & CLI build
+# Go versions: all specified
+install:
+  - go get -t ./...
+  - go get github.com/golang/lint/golint
+  - go get github.com/alecthomas/gometalinter
+
+script:
+  - go test -race -v ./tapdance
+  - go test -race -v ./tdproxy
+  - gometalinter --install
+  - gometalinter --disable-all -E vet -E gofmt -E misspell -E ineffassign -E deadcode --tests ./tapdance
+
+## Build job for Psiphon ConsoleClient and Android App
+# Go versions: first value in array
 jobs:
   include:
-    - stage: test
-      name: "Test and lint gotapdance"
-      install:
-        - go get -t ./...
-        - go get github.com/golang/lint/golint
-        - go get github.com/alecthomas/gometalinter
-      script:
-        - go test -race -v ./tapdance
-        - go test -race -v ./tdproxy
-        - gometalinter --install
-        - gometalinter --disable-all -E vet -E gofmt -E misspell -E ineffassign -E deadcode --tests ./tapdance
-
     - &build # YAML anchor/alias
       stage: build
       name: "Build cli and Psiphon ConsoleClient on Linux"

@@ -26,16 +26,16 @@ type tapDanceFlow struct {
 
 // TODO: use dial() functor
 func makeTapDanceFlow(proxy *TapDanceProxy, id uint64, splitFlows bool) *tapDanceFlow {
-	state := new(tapDanceFlow)
+	tdFlow := new(tapDanceFlow)
 
-	state.proxy = proxy
-	state.id = id
+	tdFlow.proxy = proxy
+	tdFlow.id = id
 
-	state.startMs = time.Now()
-	state.splitFlows = splitFlows
+	tdFlow.startMs = time.Now()
+	tdFlow.splitFlows = splitFlows
 
-	Logger.Debugf("Created new TDState ", state)
-	return state
+	Logger.Debugf("Created new TD Flow: %#v\n", tdFlow)
+	return tdFlow
 }
 
 func (TDstate *tapDanceFlow) redirect() error {
