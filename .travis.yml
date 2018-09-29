@@ -79,8 +79,9 @@ jobs:
           - tools
           - platform-tools
           - tools
-          - ndk-bundle
+          - tools
       before_script:
+        - yes | sdkmanager "ndk-bundle"
         - go get -u golang.org/x/mobile/cmd/gomobile
         - gomobile init
         - mkdir -p $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/.hg
