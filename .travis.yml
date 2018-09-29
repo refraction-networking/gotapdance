@@ -22,8 +22,6 @@ before_install:
   - export TRAVIS_BUILD_DIR=$GOPATH/src/github.com/sergeyfrolov/gotapdance
   - cd $TRAVIS_BUILD_DIR
 before_cache:
-  - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && git reset --hard HEAD && git clean -df)
-  - (cd $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android && hg update --clean && hg purge)
   - mv $TRAVIS_BUILD_DIR $TRAVIS_HOME/tmp
   - export TRAVIS_BUILD_DIR=$TRAVIS_HOME/tmp
   - cd $TRAVIS_BUILD_DIR
@@ -74,6 +72,7 @@ jobs:
 
     - <<: *build # Reuse setup steps from build
       name: "Build Psiphon Android Library and App"
+      language: android
       before_script:
         - go get -u golang.org/x/mobile/cmd/gomobile
         - gomobile init
@@ -82,7 +81,7 @@ jobs:
         # Use modified EmbeddedValues.java for TapDance
         - openssl aes-256-cbc -d -K $encrypted_8a9748c534c1_key -iv $encrypted_8a9748c534c1_iv -in build/EmbeddedValues.java.enc -out $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/src/main/java/com/psiphon3/psiphonlibrary/EmbeddedValues.java
         # Patched tunneling protocol for TapDance
-        - patch $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/src/main/java/com/psiphon3/psiphonlibrary/TunnelManager.java build/TunnelManager.java.patch
+        - patch -N $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/src/main/java/com/psiphon3/psiphonlibrary/TunnelManager.java build/TunnelManager.java.patch
       script:
         # Build Psiphon Android Library ca.psiphon.aar
         - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE")
