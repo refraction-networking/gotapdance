@@ -1,8 +1,3 @@
-language: go
-go:
-  - "1.10.x"
-  - "1.x"
-
 sudo: required
 dist: xenial
 
@@ -11,7 +6,7 @@ notifications:
     secure: ZzIEqFE4XRdE9U2p3aeE32DMtoC8RgjoEavhEQ1oLrWFgUpLktqmp9UVY/U+W6iElilLpDbFpry51+Sv9MWpxJMxr+Q/JJuq/3Bj5KjF/wEtil7qvBYhQ1sM/qUQFG6wRkrMNjZGMiaTmnkWF0rZB8lf7+nbnGFaPW3AVVbD+8gVDWTHI4Hcvvgs0UbrJzoPfpvH0dprOchswc1BBKTgo5c44rvS2fquEMVcqMMiNJ5JQqphuRWLTfzLgOzImSf0/xJJyVp/YTkSnVSg8BcWmDCJ4iB9fJkVyZM9WxcgY/J4T5VzFxfMah9zv2j8UTfzHSMeCJDRL647hdnkmr/Qum/LN91Ey2DJw5KUH743CsAbyGhQML6wZ3NCeEP06hnMDphalU5+BYhtAPyc5CB84g6eLIUQ2EqptuPZpjFQohFnapCTnfB5XKTcW+PjxJsoJzk8x+85Xid+H1nnNxeyf10tLv6Pwy4ZGmEEbsa4SYWXibpIEu3fPJXEdtrht0vM40pDLeUYL6Axmh7hNjmDQOXJG41saF+Rk4AArRhKhMQTmlYCc0e1H2/hIDXUMPbqjHeCpEkaA5W8BFBKynhlJa0JX+rtHDFaK82Di8rXT0NO2ACyG8ZQqk87qePyBYPyfR8hRwhrkmQHlYYOZzV6LBz+ynJuWl9ktcC2irJlHZs=
 
 cache:
-  pip: true
+  # pip: true
   directories:
     - $TRAVIS_HOME/go
 before_install:
@@ -22,9 +17,8 @@ before_install:
   - export TRAVIS_BUILD_DIR=$GOPATH/src/github.com/sergeyfrolov/gotapdance
   - cd $TRAVIS_BUILD_DIR
 before_cache:
-  - export GOPATH=$TRAVIS_HOME/gopath
-  - mv $TRAVIS_BUILD_DIR $GOPATH/src/github.com/sergeyfrolov/gotapdance
-  - export TRAVIS_BUILD_DIR=$GOPATH/src/github.com/sergeyfrolov/gotapdance
+  - mv $TRAVIS_BUILD_DIR $TRAVIS_HOME/tmp
+  - export TRAVIS_BUILD_DIR=$TRAVIS_HOME/tmp
   - cd $TRAVIS_BUILD_DIR
 
 ## Golang Test
@@ -42,32 +36,32 @@ script:
 
 ## Build job for CLI, Psiphon ConsoleClient and Android App
 # Go versions: first value in array
-jobs:
-  include:
-    - &build # YAML anchor/alias
-      stage: build
-      name: "Build cli and Psiphon ConsoleClient on Linux"
-      install:
-        - go get -d -u ./...
-        # Substitute build string
-        - sed -i.bak "s/\[BUILD\]/$TRAVIS_BRANCH-$TRAVIS_COMMIT/" tapdance/logger.go
-        - go get -d -u github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
-        # Remove gotapdance from vendored packages
-        - go get -u github.com/kardianos/govendor
-        - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && govendor remove github.com/sergeyfrolov/gotapdance/...)
-        # Enable TapDance logging
-        - sed -i.bak 's/refraction_networking_tapdance.Logger().Out = ioutil.Discard//' $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go
-      script:
-        - go build -o build/cli-$TRAVIS_OS_NAME ./cli
-        - go build -o build/ConsoleClient-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
-      after_success:
-        # Upload built binaries to S3
-        - pip install --user awscli
-        - if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then aws s3 sync build s3://$ARTIFACTS_BUCKET/$TRAVIS_REPO_SLUG/$TRAVIS_BRANCH/; fi
-
-    - <<: *build # Same build on OS X
-      name: "Build cli and Psiphon ConsoleClient on OS X"
-      os: osx
+# jobs:
+#   include:
+    # - &build # YAML anchor/alias
+    #   stage: build
+    #   name: "Build cli and Psiphon ConsoleClient on Linux"
+    #   install:
+    #     - go get -d -u ./...
+    #     # Substitute build string
+    #     - sed -i.bak "s/\[BUILD\]/$TRAVIS_BRANCH-$TRAVIS_COMMIT/" tapdance/logger.go
+    #     - go get -d -u github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
+    #     # Remove gotapdance from vendored packages
+    #     - go get -u github.com/kardianos/govendor
+    #     - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && govendor remove github.com/sergeyfrolov/gotapdance/...)
+    #     # Enable TapDance logging
+    #     - sed -i.bak 's/refraction_networking_tapdance.Logger().Out = ioutil.Discard//' $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go
+    #   script:
+    #     - go build -o build/cli-$TRAVIS_OS_NAME ./cli
+    #     - go build -o build/ConsoleClient-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
+    #   after_success:
+    #     # Upload built binaries to S3
+    #     - pip install --user awscli
+    #     - if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then aws s3 sync build s3://$ARTIFACTS_BUCKET/$TRAVIS_REPO_SLUG/$TRAVIS_BRANCH/; fi
+    #
+    # - <<: *build # Same build on OS X
+    #   name: "Build cli and Psiphon ConsoleClient on OS X"
+    #   os: osx
 
     # - <<: *build # Reuse setup steps from build
     #   name: "Build Psiphon Android Library and App"
