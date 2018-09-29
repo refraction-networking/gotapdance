@@ -74,8 +74,6 @@ jobs:
 
     - <<: *build # Reuse setup steps from build
       name: "Build Psiphon Android Library and App"
-      language: android
-
       before_script:
         - mkdir -p $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/.hg
         - (cd $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system && hg pull -u -b default https://bitbucket.org/psiphon/psiphon-circumvention-system)
@@ -85,7 +83,7 @@ jobs:
         - patch $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/src/main/java/com/psiphon3/psiphonlibrary/TunnelManager.java build/TunnelManager.java.patch
       script:
         # Build Psiphon Android Library ca.psiphon.aar
-    #     - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE")
+        - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE")
     #     - mv $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android/ca.psiphon.aar build/
     #     # Build Psiphon Android App PsiphonAndroid-debug.apk
     #     - cp build/ca.psiphon.aar $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/libs/
