@@ -76,6 +76,9 @@ jobs:
       language: android
       android:
         components:
+          - tools
+          - platform-tools
+          - tools
           - ndk-bundle
       before_script:
         - go get -u golang.org/x/mobile/cmd/gomobile
