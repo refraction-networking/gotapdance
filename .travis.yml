@@ -1,5 +1,9 @@
 language: generic
 
+env:
+  - GIMME_GO_VERSION=1.10.x
+  - GIMME_GO_VERSION=1.x
+
 sudo: required
 dist: xenial
 
@@ -26,6 +30,7 @@ before_cache:
 ## Golang Test
 # Go versions: all specified
 install:
+  - eval "$(gimme)"
   - go get -d -u -t ./...
   - go get -u github.com/golang/lint/golint
   - go get -u github.com/alecthomas/gometalinter
