@@ -83,8 +83,9 @@ jobs:
           - android-23
       before_script:
         - yes | sdkmanager "ndk-bundle"
-        - export CGO_ENABLED=1
-        - go get -u golang.org/x/mobile/cmd/gomobile
+        - go get -d -u golang.org/x/mobile/cmd/gomobile
+        - (cd $GOPATH/src/golang.org/x/mobile/cmd/gomobile && git reset --hard 320ec40f6328971c405979b804e20d5f3c86770c)
+        - go install golang.org/x/mobile/cmd/gomobile
         - gomobile init
         - mkdir -p $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/.hg
         - (cd $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system && hg pull -u -b default https://bitbucket.org/psiphon/psiphon-circumvention-system)
