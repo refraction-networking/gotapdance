@@ -79,7 +79,8 @@ jobs:
           - tools
           - platform-tools
           - tools
-          - tools
+          - build-tools-28.0.3
+          - android-28
       before_script:
         - yes | sdkmanager "ndk-bundle"
         - go get -u golang.org/x/mobile/cmd/gomobile
