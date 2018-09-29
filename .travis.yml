@@ -1,7 +1,7 @@
 language: go
 go:
   - "1.10.x"
-  - "1.x"
+  # - "1.x"
 
 sudo: required
 dist: xenial
@@ -33,33 +33,33 @@ script:
 
 ## Build job for CLI, Psiphon ConsoleClient and Android App
 # Go versions: first value in array
-jobs:
-  include:
-    - &build # YAML anchor/alias
-      stage: build
-      name: "Build cli and Psiphon ConsoleClient on Linux"
-      install:
-        - go get -u ./...
-        # Substitute build string
-        - sed -i.bak "s/\[BUILD\]/$TRAVIS_BRANCH-$TRAVIS_COMMIT/" tapdance/logger.go
-        - mkdir -p $GOPATH/src/github.com/Psiphon-Labs
-        - git clone https://github.com/Psiphon-Labs/psiphon-tunnel-core.git $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core
-        # Remove gotapdance from vendored packages
-        - go get -u github.com/kardianos/govendor
-        - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && govendor remove github.com/sergeyfrolov/gotapdance/...)
-        # Enable TapDance logging
-        - sed -i.bak 's/refraction_networking_tapdance.Logger().Out = ioutil.Discard//' $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go
-      script:
-        - go build -o build/cli-$TRAVIS_OS_NAME ./cli
-        - go build -o build/ConsoleClient-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
-      after_success:
-        # Upload built binaries to S3
-        - sudo pip install awscli
-        - if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then aws s3 sync build s3://$ARTIFACTS_BUCKET/$TRAVIS_REPO_SLUG/$TRAVIS_BRANCH/; fi
-
-    - <<: *build # Same build on OS X
-      name: "Build cli and Psiphon ConsoleClient on OS X"
-      os: osx
+# jobs:
+#   include:
+    # - &build # YAML anchor/alias
+    #   stage: build
+    #   name: "Build cli and Psiphon ConsoleClient on Linux"
+    #   install:
+    #     - go get -u ./...
+    #     # Substitute build string
+    #     - sed -i.bak "s/\[BUILD\]/$TRAVIS_BRANCH-$TRAVIS_COMMIT/" tapdance/logger.go
+    #     - mkdir -p $GOPATH/src/github.com/Psiphon-Labs
+    #     - git clone https://github.com/Psiphon-Labs/psiphon-tunnel-core.git $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core
+    #     # Remove gotapdance from vendored packages
+    #     - go get -u github.com/kardianos/govendor
+    #     - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && govendor remove github.com/sergeyfrolov/gotapdance/...)
+    #     # Enable TapDance logging
+    #     - sed -i.bak 's/refraction_networking_tapdance.Logger().Out = ioutil.Discard//' $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go
+    #   script:
+    #     - go build -o build/cli-$TRAVIS_OS_NAME ./cli
+    #     - go build -o build/ConsoleClient-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
+    #   after_success:
+    #     # Upload built binaries to S3
+    #     - sudo pip install awscli
+    #     - if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then aws s3 sync build s3://$ARTIFACTS_BUCKET/$TRAVIS_REPO_SLUG/$TRAVIS_BRANCH/; fi
+    #
+    # - <<: *build # Same build on OS X
+    #   name: "Build cli and Psiphon ConsoleClient on OS X"
+    #   os: osx
 
     # - <<: *build # Reuse setup steps from build
     #   name: "Build Psiphon Android Library and App"
