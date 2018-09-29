@@ -10,12 +10,16 @@ notifications:
   slack:
     secure: ZzIEqFE4XRdE9U2p3aeE32DMtoC8RgjoEavhEQ1oLrWFgUpLktqmp9UVY/U+W6iElilLpDbFpry51+Sv9MWpxJMxr+Q/JJuq/3Bj5KjF/wEtil7qvBYhQ1sM/qUQFG6wRkrMNjZGMiaTmnkWF0rZB8lf7+nbnGFaPW3AVVbD+8gVDWTHI4Hcvvgs0UbrJzoPfpvH0dprOchswc1BBKTgo5c44rvS2fquEMVcqMMiNJ5JQqphuRWLTfzLgOzImSf0/xJJyVp/YTkSnVSg8BcWmDCJ4iB9fJkVyZM9WxcgY/J4T5VzFxfMah9zv2j8UTfzHSMeCJDRL647hdnkmr/Qum/LN91Ey2DJw5KUH743CsAbyGhQML6wZ3NCeEP06hnMDphalU5+BYhtAPyc5CB84g6eLIUQ2EqptuPZpjFQohFnapCTnfB5XKTcW+PjxJsoJzk8x+85Xid+H1nnNxeyf10tLv6Pwy4ZGmEEbsa4SYWXibpIEu3fPJXEdtrht0vM40pDLeUYL6Axmh7hNjmDQOXJG41saF+Rk4AArRhKhMQTmlYCc0e1H2/hIDXUMPbqjHeCpEkaA5W8BFBKynhlJa0JX+rtHDFaK82Di8rXT0NO2ACyG8ZQqk87qePyBYPyfR8hRwhrkmQHlYYOZzV6LBz+ynJuWl9ktcC2irJlHZs=
 
+cache:
+  directories:
+    - $GOPATH
+
 ## Golang Test
 # Go versions: all specified
 install:
-  - go get -t ./...
-  - go get github.com/golang/lint/golint
-  - go get github.com/alecthomas/gometalinter
+  - go get -u -t ./...
+  - go get -u github.com/golang/lint/golint
+  - go get -u github.com/alecthomas/gometalinter
 
 script:
   - go test -race -v ./tapdance
@@ -31,13 +35,13 @@ jobs:
       stage: build
       name: "Build cli and Psiphon ConsoleClient on Linux"
       install:
-        - go get ./...
+        - go get -u ./...
         # Substitute build string
         - sed -i.bak "s/\[BUILD\]/$TRAVIS_BRANCH-$TRAVIS_COMMIT/" tapdance/logger.go
         - mkdir -p $GOPATH/src/github.com/Psiphon-Labs
         - git clone https://github.com/Psiphon-Labs/psiphon-tunnel-core.git $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core
         # Remove gotapdance from vendored packages
-        - go get github.com/kardianos/govendor
+        - go get -u github.com/kardianos/govendor
         - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && govendor remove github.com/sergeyfrolov/gotapdance/...)
         # Enable TapDance logging
         - sed -i.bak 's/refraction_networking_tapdance.Logger().Out = ioutil.Discard//' $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go
