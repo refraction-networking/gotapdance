@@ -3,7 +3,8 @@ go:
   - "1.10.x"
   - "1.x"
 
-dist: xenial
+sudo: required
+dist: bionic
 
 notifications:
   slack:
