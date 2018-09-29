@@ -54,7 +54,7 @@ jobs:
         - go build -o build/ConsoleClient-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
       after_success:
         # Upload built binaries to S3
-        - pip install awscli
+        - pip install --user -U awscli
         - if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then aws s3 sync build s3://$ARTIFACTS_BUCKET/$TRAVIS_REPO_SLUG/$TRAVIS_BRANCH/; fi
 
     # - <<: *build # Same build on OS X
