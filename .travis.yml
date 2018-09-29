@@ -12,12 +12,16 @@ notifications:
 
 cache:
   directories:
-    - $GOPATH
+    - $GOPATH/src
+before_cache:
+  - mv ${TRAVIS_BUILD_DIR} ${TRAVIS_HOME}/tmp
+  - export TRAVIS_BUILD_DIR=${TRAVIS_HOME}/tmp
+  - cd ${TRAVIS_BUILD_DIR}
 
 ## Golang Test
 # Go versions: all specified
 install:
-  - go get -u -t ./...
+  - go get -d -u -t ./...
   - go get -u github.com/golang/lint/golint
   - go get -u github.com/alecthomas/gometalinter
 
