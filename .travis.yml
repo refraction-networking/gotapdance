@@ -18,7 +18,11 @@ before_install:
   - export GOPATH=$TRAVIS_HOME/go
   - export PATH=$GOPATH/bin:$PATH
   - mkdir -p $GOPATH/src/github.com/sergeyfrolov
-  - rm -rf $GOPATH/src/github.com/sergeyfrolov/gotapdance
+  - mv $TRAVIS_BUILD_DIR $GOPATH/src/github.com/sergeyfrolov/gotapdance
+  - export TRAVIS_BUILD_DIR=$GOPATH/src/github.com/sergeyfrolov/gotapdance
+  - cd $TRAVIS_BUILD_DIR
+before_cache:
+  - export GOPATH=$TRAVIS_HOME/gopath
   - mv $TRAVIS_BUILD_DIR $GOPATH/src/github.com/sergeyfrolov/gotapdance
   - export TRAVIS_BUILD_DIR=$GOPATH/src/github.com/sergeyfrolov/gotapdance
   - cd $TRAVIS_BUILD_DIR
