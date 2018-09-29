@@ -74,6 +74,9 @@ jobs:
     - <<: *build # Reuse setup steps from build
       name: "Build Psiphon Android Library and App"
       language: android
+      android:
+        components:
+          - ndk-bundle
       before_script:
         - go get -u golang.org/x/mobile/cmd/gomobile
         - gomobile init
