@@ -75,6 +75,8 @@ jobs:
     - <<: *build # Reuse setup steps from build
       name: "Build Psiphon Android Library and App"
       before_script:
+        - go get -u golang.org/x/mobile/cmd/gomobile
+        - gomobile init
         - mkdir -p $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/.hg
         - (cd $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system && hg pull -u -b default https://bitbucket.org/psiphon/psiphon-circumvention-system)
         # Use modified EmbeddedValues.java for TapDance
