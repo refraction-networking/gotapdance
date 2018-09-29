@@ -15,6 +15,7 @@ cache:
   directories:
     - $TRAVIS_HOME/go
 before_install:
+  - if [ -z "$TRAVIS_GO_VERSION" ]; then eval "$(curl -sL https://raw.githubusercontent.com/travis-ci/gimme/master/gimme | GIMME_GO_VERSION=stable bash)"; fi
   - export GOPATH=$TRAVIS_HOME/go
   - export PATH=$GOPATH/bin:$PATH
   - mkdir -p $GOPATH/src/github.com/sergeyfrolov
