@@ -14,7 +14,8 @@ cache:
   directories:
     - $GOPATH
 before_cache:
-  - mv ${TRAVIS_BUILD_DIR} ${TRAVIS_HOME}/tmp
+  - cp -r ${TRAVIS_BUILD_DIR} ${TRAVIS_HOME}/tmp
+  - rm -r ${TRAVIS_BUILD_DIR}
   - export TRAVIS_BUILD_DIR=${TRAVIS_HOME}/tmp
   - cd ${TRAVIS_BUILD_DIR}
 
