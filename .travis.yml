@@ -85,6 +85,8 @@ jobs:
         - yes | sdkmanager "ndk-bundle"
         - go get -d -u golang.org/x/mobile/cmd/gomobile
         - (cd $GOPATH/src/golang.org/x/mobile/cmd/gomobile && git reset --hard 320ec40f6328971c405979b804e20d5f3c86770c)
+        - mkdir -p $GOPATH/pkg/gomobile/dl
+        - curl -O $GOPATH/pkg/gomobile/dl/gomobile-ndk-r10e-linux-x86_64.tar.gz https://dl.google.com/go/mobile/gomobile-ndk-r10e-linux-x86_64.tar.gz
         - go install golang.org/x/mobile/cmd/gomobile
         - gomobile init
         - mkdir -p $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/.hg
