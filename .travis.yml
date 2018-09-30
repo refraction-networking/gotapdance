@@ -11,10 +11,10 @@ env:
   - PATH=$HOME/.local/bin:$PATH
 
 cache:
-  pip: true
   directories:
     - $HOME/.gimme
     - $TRAVIS_HOME/go
+    - $TRAVIS_HOME/android
     - $HOME/.gradle
     - $HOME/.cache/pip
 
@@ -33,6 +33,10 @@ before_install:
   - mv $TRAVIS_BUILD_DIR $GOPATH/src/github.com/sergeyfrolov/gotapdance
   - export TRAVIS_BUILD_DIR=$GOPATH/src/github.com/sergeyfrolov/gotapdance
   - cd $TRAVIS_BUILD_DIR
+  # Move Android tools directory
+  - if [ -z "$ANDROID_HOME" ] && [ ! -d "$TRAVIS_HOME/android/tools" ]; then cp -r $ANDROID_HOME/* $TRAVIS_HOME/android/; fi
+  - export ANDROID_HOME=$TRAVIS_HOME/android
+  - export PATH=$ANDROID_HOME/tools/bin:$PATH
 before_cache:
   # Don't cache gotapdance
   - mv $TRAVIS_BUILD_DIR $TRAVIS_HOME/tmp
@@ -85,16 +89,10 @@ jobs:
       name: "Build Psiphon Android Library and App"
       dist: trusty # xenial not available
       language: android
-      android:
-        components:
-          - tools
-          - platform-tools
-          - tools # Intentional to get latest version
-          - build-tools-28.0.3
-          - android-23 # Target API platform
       before_script:
         # Install NDK and accept licenses
-        - yes | sdkmanager "ndk-bundle"
+        - yes | sdkmanager "tools"
+        - yes | sdkmanager "platform-tools" "build-tools;28.0.3" "platforms;android-23" "ndk-bundle"
         - if [ -d "$GOPATH/src/golang.org/x/mobile/cmd/gomobile" ]; then (cd $GOPATH/src/golang.org/x/mobile/cmd/gomobile && git reset --hard); fi
         - go get -d -u golang.org/x/mobile/cmd/gomobile
         # Freeze gomobile version (newer versions break Psiphon code)
