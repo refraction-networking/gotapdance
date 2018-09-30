@@ -84,7 +84,7 @@ jobs:
       before_script:
         - yes | sdkmanager "ndk-bundle"
         - go get -d -u golang.org/x/mobile/cmd/gomobile
-        - (cd $GOPATH/src/golang.org/x/mobile/cmd/gomobile && git reset --hard 74ee969d3ffc95befa9a96a6590c36d71b6afd52)
+        - (cd $GOPATH/src/golang.org/x/mobile/cmd/gomobile && git reset --hard d6153aa12bff20a59a59a08b68ecf806b3a60605)
         - go install golang.org/x/mobile/cmd/gomobile
         - gomobile init
         - mkdir -p $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/.hg
