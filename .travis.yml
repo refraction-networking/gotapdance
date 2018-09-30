@@ -49,7 +49,7 @@ install:
 script:
   - go test -race -v ./tapdance
   - go test -race -v ./tdproxy
-  - if [ ! -f "$GOPATH/bin/misspell" ] || [ -f "$GOPATH/bin/ineffassign" ] || [ -f "$GOPATH/bin/deadcode" ]; then gometalinter --install; fi
+  - if [ ! -f "$GOPATH/bin/misspell" ] || [ ! -f "$GOPATH/bin/ineffassign" ] || [ ! -f "$GOPATH/bin/deadcode" ]; then gometalinter --install; fi
   - gometalinter --disable-all -E vet -E gofmt -E misspell -E ineffassign -E deadcode --tests ./tapdance
 
 
