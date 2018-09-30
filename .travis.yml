@@ -14,8 +14,7 @@ cache:
   pip: true
   directories:
     - $TRAVIS_HOME/go
-    - /usr/local/android-sdk
-    - ~/.gradle
+    - $HOME/.gradle
 before_install:
   # Get Golang in Android environment
   - if [ -z "$TRAVIS_GO_VERSION" ]; then eval "$(curl -sL https://raw.githubusercontent.com/travis-ci/gimme/master/gimme | GIMME_GO_VERSION=stable bash)"; fi
@@ -78,6 +77,7 @@ jobs:
     - <<: *build # Reuse setup steps from build
       name: "Build Psiphon Android Library and App"
       language: android
+      dist: trusty # xenial not available
       android:
         components:
           - tools
