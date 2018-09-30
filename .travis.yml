@@ -85,7 +85,6 @@ jobs:
         - yes | sdkmanager "ndk-bundle"
         - go get -d -u golang.org/x/mobile/cmd/gomobile
         - (cd $GOPATH/src/golang.org/x/mobile/cmd/gomobile && git checkout 320ec40f6328971c405979b804e20d5f3c86770c)
-        - sed -i.bak "s/709d96f5234c224e4b72254fd2e196d0e1486b8d943e972ed98cf14e3ca7bdde/bacfed664a7b69b1b693f246ea49a85f04f502bd1ae723351c5345ab5b2ba850/" $GOPATH/src/golang.org/x/mobile/cmd/gomobile/hashes.go
         - go install golang.org/x/mobile/cmd/gomobile
         - gomobile init
         - mkdir -p $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/.hg
