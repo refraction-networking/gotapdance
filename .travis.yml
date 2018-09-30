@@ -6,10 +6,6 @@ go:
   - "1.10.x"
   - "1.x"
 
-env:
-  # For pip --user
-  - PATH=$HOME/.local/bin:$PATH
-
 cache:
   pip: true
   directories:
@@ -17,6 +13,7 @@ cache:
     - $TRAVIS_HOME/go
     - $TRAVIS_HOME/android
     - $HOME/.gradle
+    - $HOME/.local
 
 notifications:
   slack:
@@ -74,7 +71,8 @@ jobs:
         - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && govendor remove github.com/sergeyfrolov/gotapdance/...)
         # Enable TapDance logging
         - sed -i.bak "s/refraction_networking_tapdance\.Logger()\.Out = ioutil\.Discard//" $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go
-        - pip install --user awscli
+        - pip install --user --upgrade pip
+        - pip install --user --upgrade awscli
       script:
         - go build -o build/cli-$TRAVIS_OS_NAME ./cli
         - go build -o build/ConsoleClient-$TRAVIS_OS_NAME -tags "TAPDANCE" github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
