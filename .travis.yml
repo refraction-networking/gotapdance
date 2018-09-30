@@ -86,7 +86,7 @@ jobs:
         - go get -u golang.org/x/mobile/cmd/gomobile
         - gomobile init
         - sed -i.bak "s/import go\.psi\.Psi;/import psi\.Psi;/" $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android/PsiphonTunnel/PsiphonTunnel.java
-        - sed -i.bak "s/Psi\.PsiphonProvider\.Stub/psi\.PsiphonProvider/" $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android/PsiphonTunnel/PsiphonTunnel.java
+        - sed -i.bak "s/Psi\.PsiphonProvider\.Stub/psi\.PsiphonProvider\.stub/" $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android/PsiphonTunnel/PsiphonTunnel.java
         - sed -i.bak "s/Psi\.GetPacketTunnelMTU/Psi\.getPacketTunnelMTU/" $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android/PsiphonTunnel/PsiphonTunnel.java
         - sed -i.bak "s/Psi\.GetPacketTunnelDNSResolverIPv4Address/Psi\.getPacketTunnelDNSResolverIPv4Address/" $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android/PsiphonTunnel/PsiphonTunnel.java
         - sed -i.bak "s/Psi\.Start(/Psi\.start(/" $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android/PsiphonTunnel/PsiphonTunnel.java
