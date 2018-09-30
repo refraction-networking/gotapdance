@@ -83,14 +83,10 @@ jobs:
           - android-23
       before_script:
         - yes | sdkmanager "ndk-bundle"
-        - go get -u golang.org/x/mobile/cmd/gomobile
+        - go get -d -u golang.org/x/mobile/cmd/gomobile
+        - (cd $GOPATH/src/golang.org/x/mobile/cmd/gomobile && git reset --hard 74ee969d3ffc95befa9a96a6590c36d71b6afd52)
+        - go install golang.org/x/mobile/cmd/gomobile
         - gomobile init
-        - sed -i.bak "s/import go\.psi\.Psi;/import psi\.Psi;/" $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android/PsiphonTunnel/PsiphonTunnel.java
-        - sed -i.bak "s/Psi\.PsiphonProvider\.Stub/Psi\.psiphonProvider\.stub/" $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android/PsiphonTunnel/PsiphonTunnel.java
-        - sed -i.bak "s/Psi\.GetPacketTunnelMTU/Psi\.getPacketTunnelMTU/" $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android/PsiphonTunnel/PsiphonTunnel.java
-        - sed -i.bak "s/Psi\.GetPacketTunnelDNSResolverIPv4Address/Psi\.getPacketTunnelDNSResolverIPv4Address/" $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android/PsiphonTunnel/PsiphonTunnel.java
-        - sed -i.bak "s/Psi\.Start(/Psi\.start(/" $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android/PsiphonTunnel/PsiphonTunnel.java
-        - sed -i.bak "s/Psi\.Stop();/Psi\.stop();/" $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android/PsiphonTunnel/PsiphonTunnel.java
         - mkdir -p $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/.hg
         - (cd $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system && hg pull -u -b default https://bitbucket.org/psiphon/psiphon-circumvention-system)
         # Use modified EmbeddedValues.java for TapDance
