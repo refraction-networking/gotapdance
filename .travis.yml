@@ -81,8 +81,6 @@ jobs:
       language: android
       android:
         components:
-          - tools
-          - tools # Intentional to get latest version
           - android-23
       before_script:
         # Install SDK and accept licenses
