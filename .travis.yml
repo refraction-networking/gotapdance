@@ -99,8 +99,8 @@ jobs:
         - go install golang.org/x/mobile/cmd/gomobile
         # Initialize gomobile tool
         - gomobile init
-        - (cd $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system && hg update --clean)
         - mkdir -p $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/.hg
+        - (cd $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system && hg update --clean)
         - (cd $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system && hg pull -u -b default https://bitbucket.org/psiphon/psiphon-circumvention-system)
         # Use modified EmbeddedValues.java for TapDance
         - openssl aes-256-cbc -d -K $encrypted_8a9748c534c1_key -iv $encrypted_8a9748c534c1_iv -in build/EmbeddedValues.java.enc -out $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/src/main/java/com/psiphon3/psiphonlibrary/EmbeddedValues.java
