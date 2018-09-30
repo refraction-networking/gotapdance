@@ -11,7 +11,6 @@ cache:
   directories:
     - $HOME/.gimme
     - $TRAVIS_HOME/go
-    - $TRAVIS_HOME/android
     - $HOME/.gradle
     - $HOME/.local
 
@@ -30,10 +29,6 @@ before_install:
   - mv $TRAVIS_BUILD_DIR $GOPATH/src/github.com/sergeyfrolov/gotapdance
   - export TRAVIS_BUILD_DIR=$GOPATH/src/github.com/sergeyfrolov/gotapdance
   - cd $TRAVIS_BUILD_DIR
-  # Move Android tools directory
-  - if [ ! -z "$ANDROID_HOME" ] && [ ! -d "$TRAVIS_HOME/android/tools" ]; then cp -r $ANDROID_HOME/* $TRAVIS_HOME/android/; fi
-  - export ANDROID_HOME=$TRAVIS_HOME/android
-  - export PATH=$ANDROID_HOME/tools/bin:$PATH
 before_cache:
   # Don't cache gotapdance
   - mv $TRAVIS_BUILD_DIR $TRAVIS_HOME/tmp
@@ -71,7 +66,7 @@ jobs:
         - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && govendor remove github.com/sergeyfrolov/gotapdance/...)
         # Enable TapDance logging
         - sed -i.bak "s/refraction_networking_tapdance\.Logger()\.Out = ioutil\.Discard//" $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go
-        - pip install --user --upgrade pip
+        - virtualenv -p  .
         - pip install --user --upgrade awscli
       script:
         - go build -o build/cli-$TRAVIS_OS_NAME ./cli
@@ -88,10 +83,16 @@ jobs:
       name: "Build Psiphon Android Library and App"
       dist: trusty # xenial not available
       language: android
+      android:
+        components:
+          - tools
+          - platform-tools
+          - tools
+          - build-tools-28.0.3
+          - android-23
       before_script:
         # Install SDK and accept licenses
-        - yes | sdkmanager "tools"
-        - yes | sdkmanager "platform-tools" "build-tools;28.0.3" "platforms;android-23" "ndk-bundle"
+        - yes | sdkmanager "ndk-bundle"
         - if [ -d "$GOPATH/src/golang.org/x/mobile/cmd/gomobile" ]; then (cd $GOPATH/src/golang.org/x/mobile/cmd/gomobile && git reset --hard); fi
         - go get -d -u golang.org/x/mobile/cmd/gomobile
         # Freeze gomobile version (newer versions break Psiphon code)
