@@ -86,6 +86,7 @@ jobs:
         - go get -d -u golang.org/x/mobile/cmd/gomobile
         - (cd $GOPATH/src/golang.org/x/mobile/cmd/gomobile && git checkout 320ec40f6328971c405979b804e20d5f3c86770c)
         - sed -i.bak "s/709d96f5234c224e4b72254fd2e196d0e1486b8d943e972ed98cf14e3ca7bdde/bacfed664a7b69b1b693f246ea49a85f04f502bd1ae723351c5345ab5b2ba850/" $GOPATH/src/golang.org/x/mobile/cmd/gomobile/hashes.go
+        - sed -i.bak "s/df8492a31030c4a940aa17602ea7ce56eb0759be9235f68fcce4c51150e49881/84c9361734902df622dd49a8c0cfb0090fd7743a2cbf927a9ae85c4826beb173/" $GOPATH/src/golang.org/x/mobile/cmd/gomobile/hashes.go
         - go install golang.org/x/mobile/cmd/gomobile
         - gomobile init
         - mkdir -p $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/.hg
