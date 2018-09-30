@@ -1,20 +1,27 @@
+sudo: required
+dist: xenial
+
 language: go
 go:
   - "1.10.x"
   - "1.x"
 
-sudo: required
-dist: xenial
+env:
+  # For pip --user
+  - PATH=$HOME/.local/bin:$PATH
+
+cache:
+  pip: true
+  directories:
+    - $HOME/.gimme
+    - $TRAVIS_HOME/go
+    - $HOME/.gradle
 
 notifications:
   slack:
     secure: ZzIEqFE4XRdE9U2p3aeE32DMtoC8RgjoEavhEQ1oLrWFgUpLktqmp9UVY/U+W6iElilLpDbFpry51+Sv9MWpxJMxr+Q/JJuq/3Bj5KjF/wEtil7qvBYhQ1sM/qUQFG6wRkrMNjZGMiaTmnkWF0rZB8lf7+nbnGFaPW3AVVbD+8gVDWTHI4Hcvvgs0UbrJzoPfpvH0dprOchswc1BBKTgo5c44rvS2fquEMVcqMMiNJ5JQqphuRWLTfzLgOzImSf0/xJJyVp/YTkSnVSg8BcWmDCJ4iB9fJkVyZM9WxcgY/J4T5VzFxfMah9zv2j8UTfzHSMeCJDRL647hdnkmr/Qum/LN91Ey2DJw5KUH743CsAbyGhQML6wZ3NCeEP06hnMDphalU5+BYhtAPyc5CB84g6eLIUQ2EqptuPZpjFQohFnapCTnfB5XKTcW+PjxJsoJzk8x+85Xid+H1nnNxeyf10tLv6Pwy4ZGmEEbsa4SYWXibpIEu3fPJXEdtrht0vM40pDLeUYL6Axmh7hNjmDQOXJG41saF+Rk4AArRhKhMQTmlYCc0e1H2/hIDXUMPbqjHeCpEkaA5W8BFBKynhlJa0JX+rtHDFaK82Di8rXT0NO2ACyG8ZQqk87qePyBYPyfR8hRwhrkmQHlYYOZzV6LBz+ynJuWl9ktcC2irJlHZs=
 
-cache:
-  pip: true
-  directories:
-    - $TRAVIS_HOME/go
-    - $HOME/.gradle
+
 before_install:
   # Get Golang in Android environment
   - if [ -z "$TRAVIS_GO_VERSION" ]; then eval "$(curl -sL https://raw.githubusercontent.com/travis-ci/gimme/master/gimme | GIMME_GO_VERSION=stable bash)"; fi
@@ -31,24 +38,24 @@ before_cache:
   - export TRAVIS_BUILD_DIR=$TRAVIS_HOME/tmp
   - cd $TRAVIS_BUILD_DIR
 
+
 ## gotapdance tests
 # Go versions: all specified
 install:
   - go get -d -u -t ./...
   - go get -u github.com/golang/lint/golint
   - go get -u github.com/alecthomas/gometalinter
-
 script:
   - go test -race -v ./tapdance
   - go test -race -v ./tdproxy
   - gometalinter --install
   - gometalinter --disable-all -E vet -E gofmt -E misspell -E ineffassign -E deadcode --tests ./tapdance
 
+
 jobs:
   include:
     ## Build cli, Psiphon ConsoleClient and Android app
     # Go versions: first value in list
-
     - &build # YAML anchor/alias
       stage: build
       name: "Build cli and Psiphon ConsoleClient on Linux"
@@ -77,8 +84,8 @@ jobs:
 
     - <<: *build # Reuse setup steps from build
       name: "Build Psiphon Android Library and App"
-      language: android
       dist: trusty # xenial not available
+      language: android
       android:
         components:
           - tools
