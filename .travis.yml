@@ -34,7 +34,7 @@ before_install:
   - export TRAVIS_BUILD_DIR=$GOPATH/src/github.com/sergeyfrolov/gotapdance
   - cd $TRAVIS_BUILD_DIR
   # Move Android tools directory
-  - if [ -z "$ANDROID_HOME" ] && [ ! -d "$TRAVIS_HOME/android/tools" ]; then cp -r $ANDROID_HOME/* $TRAVIS_HOME/android/; fi
+  - if [ ! -z "$ANDROID_HOME" ] && [ ! -d "$TRAVIS_HOME/android/tools" ]; then cp -r $ANDROID_HOME/* $TRAVIS_HOME/android/; fi
   - export ANDROID_HOME=$TRAVIS_HOME/android
   - export PATH=$ANDROID_HOME/tools/bin:$PATH
 before_cache:
