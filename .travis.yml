@@ -11,12 +11,12 @@ env:
   - PATH=$HOME/.local/bin:$PATH
 
 cache:
+  pip: true
   directories:
     - $HOME/.gimme
     - $TRAVIS_HOME/go
     - $TRAVIS_HOME/android
     - $HOME/.gradle
-    - $HOME/.cache/pip
 
 notifications:
   slack:
