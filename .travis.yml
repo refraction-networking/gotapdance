@@ -69,7 +69,7 @@ jobs:
       after_success:
         # Upload built binaries to S3
         - pip install --user awscli
-        - if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then aws s3 sync build s3://$ARTIFACTS_BUCKET/$TRAVIS_REPO_SLUG/$TRAVIS_BRANCH/; fi
+        - if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then aws s3 sync build s3://$AWS_BUCKET/$TRAVIS_REPO_SLUG/$TRAVIS_BRANCH/; fi
 
     - <<: *build # Same build on OS X
       name: "Build cli and Psiphon ConsoleClient on OS X"
