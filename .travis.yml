@@ -16,6 +16,7 @@ cache:
     - $HOME/.gimme
     - $TRAVIS_HOME/go
     - $HOME/.gradle
+    - $HOME/.cache/pip
 
 notifications:
   slack:
@@ -43,12 +44,10 @@ before_cache:
 # Go versions: all specified
 install:
   - go get -d -u -t ./...
-  - go get -u github.com/golang/lint/golint
   - go get -u github.com/alecthomas/gometalinter
 script:
   - go test -race -v ./tapdance
   - go test -race -v ./tdproxy
-  - gometalinter --install
   - gometalinter --disable-all -E vet -E gofmt -E misspell -E ineffassign -E deadcode --tests ./tapdance
 
 
@@ -99,13 +98,13 @@ jobs:
         - if [ -d "$GOPATH/src/golang.org/x/mobile/cmd/gomobile" ]; then (cd $GOPATH/src/golang.org/x/mobile/cmd/gomobile && git reset --hard); fi
         - go get -d -u golang.org/x/mobile/cmd/gomobile
         # Freeze gomobile version (newer versions break Psiphon code)
-        - (cd $GOPATH/src/golang.org/x/mobile/cmd/gomobile && git checkout -b pinned 320ec40f6328971c405979b804e20d5f3c86770c)
+        - (cd $GOPATH/src/golang.org/x/mobile/cmd/gomobile && git reset --hard 320ec40f6328971c405979b804e20d5f3c86770c)
         # Binary hashes has since changed
         - sed -i.bak "s/709d96f5234c224e4b72254fd2e196d0e1486b8d943e972ed98cf14e3ca7bdde/bacfed664a7b69b1b693f246ea49a85f04f502bd1ae723351c5345ab5b2ba850/" $GOPATH/src/golang.org/x/mobile/cmd/gomobile/hashes.go
         - sed -i.bak "s/df8492a31030c4a940aa17602ea7ce56eb0759be9235f68fcce4c51150e49881/84c9361734902df622dd49a8c0cfb0090fd7743a2cbf927a9ae85c4826beb173/" $GOPATH/src/golang.org/x/mobile/cmd/gomobile/hashes.go
         - go install golang.org/x/mobile/cmd/gomobile
         # Initialize gomobile tool
-        - gomobile init
+        - if [ ! -d "$GOPATH/pkg/gomobile" ]; then gomobile init; fi
         - mkdir -p $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/.hg
         - (cd $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system && hg update --clean)
         - (cd $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system && hg pull -u -b default https://bitbucket.org/psiphon/psiphon-circumvention-system)
