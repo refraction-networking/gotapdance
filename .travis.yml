@@ -14,6 +14,8 @@ cache:
   pip: true
   directories:
     - $TRAVIS_HOME/go
+    - /usr/local/android-sdk
+    - ~/.gradle
 before_install:
   - if [ -z "$TRAVIS_GO_VERSION" ]; then eval "$(curl -sL https://raw.githubusercontent.com/travis-ci/gimme/master/gimme | GIMME_GO_VERSION=stable bash)"; fi
   - export GOPATH=$TRAVIS_HOME/go
