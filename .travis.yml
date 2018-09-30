@@ -86,9 +86,7 @@ jobs:
       android:
         components:
           - tools
-          - platform-tools
-          - tools
-          - build-tools-28.0.3
+          - tools # Intentional to get latest version
           - android-23
       before_script:
         # Install SDK and accept licenses
