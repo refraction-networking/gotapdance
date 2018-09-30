@@ -52,6 +52,8 @@ jobs:
     - &build # YAML anchor/alias
       stage: build
       name: "Build cli and Psiphon ConsoleClient on Linux"
+      env:
+        - STAGE_BUILD=1 # Force separate caches
       install:
         - go get -d -u ./...
         # Substitute build string
