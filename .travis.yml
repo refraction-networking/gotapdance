@@ -17,7 +17,9 @@ cache:
     - /usr/local/android-sdk
     - ~/.gradle
 before_install:
+  # Get Golang in Android environment
   - if [ -z "$TRAVIS_GO_VERSION" ]; then eval "$(curl -sL https://raw.githubusercontent.com/travis-ci/gimme/master/gimme | GIMME_GO_VERSION=stable bash)"; fi
+  # Use cached directory as GOPATH
   - export GOPATH=$TRAVIS_HOME/go
   - export PATH=$GOPATH/bin:$PATH
   - mkdir -p $GOPATH/src/github.com/sergeyfrolov
@@ -25,11 +27,12 @@ before_install:
   - export TRAVIS_BUILD_DIR=$GOPATH/src/github.com/sergeyfrolov/gotapdance
   - cd $TRAVIS_BUILD_DIR
 before_cache:
+  # Don't cache gotapdance
   - mv $TRAVIS_BUILD_DIR $TRAVIS_HOME/tmp
   - export TRAVIS_BUILD_DIR=$TRAVIS_HOME/tmp
   - cd $TRAVIS_BUILD_DIR
 
-## Golang Test
+## gotapdance tests
 # Go versions: all specified
 install:
   - go get -d -u -t ./...
@@ -41,13 +44,12 @@ script:
   - go test -race -v ./tdproxy
   - gometalinter --install
   - gometalinter --disable-all -E vet -E gofmt -E misspell -E ineffassign -E deadcode --tests ./tapdance
-install: skip
-script: skip
 
-## Build job for CLI, Psiphon ConsoleClient and Android App
-# Go versions: first value in array
 jobs:
   include:
+    ## Build cli, Psiphon ConsoleClient and Android app
+    # Go versions: first value in list
+
     - &build # YAML anchor/alias
       stage: build
       name: "Build cli and Psiphon ConsoleClient on Linux"
@@ -80,16 +82,20 @@ jobs:
         components:
           - tools
           - platform-tools
-          - tools
+          - tools # Intentional to get latest version
           - build-tools-28.0.3
-          - android-23
+          - android-23 # Target API platform
       before_script:
+        # Install NDK and accept licenses
         - yes | sdkmanager "ndk-bundle"
         - go get -d -u golang.org/x/mobile/cmd/gomobile
+        # Freeze gomobile version (newer versions break Psiphon code)
         - (cd $GOPATH/src/golang.org/x/mobile/cmd/gomobile && git checkout 320ec40f6328971c405979b804e20d5f3c86770c)
+        # Binary hashes has since changed
         - sed -i.bak "s/709d96f5234c224e4b72254fd2e196d0e1486b8d943e972ed98cf14e3ca7bdde/bacfed664a7b69b1b693f246ea49a85f04f502bd1ae723351c5345ab5b2ba850/" $GOPATH/src/golang.org/x/mobile/cmd/gomobile/hashes.go
         - sed -i.bak "s/df8492a31030c4a940aa17602ea7ce56eb0759be9235f68fcce4c51150e49881/84c9361734902df622dd49a8c0cfb0090fd7743a2cbf927a9ae85c4826beb173/" $GOPATH/src/golang.org/x/mobile/cmd/gomobile/hashes.go
         - go install golang.org/x/mobile/cmd/gomobile
+        # Initialize gomobile tool
         - gomobile init
         - mkdir -p $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/.hg
         - (cd $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system && hg pull -u -b default https://bitbucket.org/psiphon/psiphon-circumvention-system)
