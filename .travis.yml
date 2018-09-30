@@ -91,7 +91,7 @@ jobs:
       dist: trusty # xenial not available
       language: android
       before_script:
-        # Install NDK and accept licenses
+        # Install SDK and accept licenses
         - yes | sdkmanager "tools"
         - yes | sdkmanager "platform-tools" "build-tools;28.0.3" "platforms;android-23" "ndk-bundle"
         - if [ -d "$GOPATH/src/golang.org/x/mobile/cmd/gomobile" ]; then (cd $GOPATH/src/golang.org/x/mobile/cmd/gomobile && git reset --hard); fi
