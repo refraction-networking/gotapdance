@@ -110,3 +110,4 @@ jobs:
         - cp build/ca.psiphon.aar $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/libs/
         - (cd $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android && ./gradlew assembleDebug)
         - mv $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/build/outputs/apk/debug/PsiphonAndroid-debug.apk build/
+        - rm -r $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/build
