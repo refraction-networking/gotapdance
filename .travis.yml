@@ -29,16 +29,16 @@ before_cache:
 
 ## Golang Test
 # Go versions: all specified
-# install:
-#   - go get -d -u -t ./...
-#   - go get -u github.com/golang/lint/golint
-#   - go get -u github.com/alecthomas/gometalinter
-#
-# script:
-#   - go test -race -v ./tapdance
-#   - go test -race -v ./tdproxy
-#   - gometalinter --install
-#   - gometalinter --disable-all -E vet -E gofmt -E misspell -E ineffassign -E deadcode --tests ./tapdance
+install:
+  - go get -d -u -t ./...
+  - go get -u github.com/golang/lint/golint
+  - go get -u github.com/alecthomas/gometalinter
+
+script:
+  - go test -race -v ./tapdance
+  - go test -race -v ./tdproxy
+  - gometalinter --install
+  - gometalinter --disable-all -E vet -E gofmt -E misspell -E ineffassign -E deadcode --tests ./tapdance
 install: skip
 script: skip
 
@@ -66,10 +66,10 @@ jobs:
         # Upload built binaries to S3
         - pip install --user awscli
         - if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then aws s3 sync build s3://$ARTIFACTS_BUCKET/$TRAVIS_REPO_SLUG/$TRAVIS_BRANCH/; fi
-    #
-    # - <<: *build # Same build on OS X
-    #   name: "Build cli and Psiphon ConsoleClient on OS X"
-    #   os: osx
+
+    - <<: *build # Same build on OS X
+      name: "Build cli and Psiphon ConsoleClient on OS X"
+      os: osx
 
     - <<: *build # Reuse setup steps from build
       name: "Build Psiphon Android Library and App"
@@ -85,6 +85,7 @@ jobs:
         - yes | sdkmanager "ndk-bundle"
         - go get -d -u golang.org/x/mobile/cmd/gomobile
         - (cd $GOPATH/src/golang.org/x/mobile/cmd/gomobile && git checkout 320ec40f6328971c405979b804e20d5f3c86770c)
+        - sed -i.bak "s/709d96f5234c224e4b72254fd2e196d0e1486b8d943e972ed98cf14e3ca7bdde/bacfed664a7b69b1b693f246ea49a85f04f502bd1ae723351c5345ab5b2ba850/" $GOPATH/src/golang.org/x/mobile/cmd/gomobile/hashes.go
         - go install golang.org/x/mobile/cmd/gomobile
         - gomobile init
         - mkdir -p $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/.hg
@@ -96,8 +97,8 @@ jobs:
       script:
         # Build Psiphon Android Library ca.psiphon.aar
         - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE")
-    #     - mv $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android/ca.psiphon.aar build/
-    #     # Build Psiphon Android App PsiphonAndroid-debug.apk
-    #     - cp build/ca.psiphon.aar $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/libs/
-    #     - docker run -v $TRAVIS_BUILD_DIR:/go/src/github.com/sergeyfrolov/gotapdance -v $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android:/go/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android refraction/psiandroid /bin/bash -c "yes | /android-sdk-linux/tools/bin/sdkmanager --update && cd /go/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android && ./gradlew assembleDebug"
-    #     - sudo mv $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/build/outputs/apk/debug/PsiphonAndroid-debug.apk build/
+        - mv $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android/ca.psiphon.aar build/
+        # Build Psiphon Android App PsiphonAndroid-debug.apk
+        - cp build/ca.psiphon.aar $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/libs/
+        - (cd $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android && ./gradlew assembleDebug)
+        - mv $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/build/outputs/apk/debug/PsiphonAndroid-debug.apk build/
