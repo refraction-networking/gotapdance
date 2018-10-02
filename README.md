@@ -11,36 +11,24 @@
 
 # Build
 ## Download Golang and TapDance and dependencies
-1. Install [Golang](https://golang.org/dl/) (currently tested against version 1.10), set GOPATH:
+0. Install [Golang](https://golang.org/dl/) (currently tested against version 1.10 and latest).
+
+1. Get source code for Go TapDance and all dependencies:
 
  ```bash
-GOPATH="${HOME}/go/"
-```
-
-2. Get source code for Go Tapdance and all dependencies:
-
- ```bash
-go get github.com/sergeyfrolov/gotapdance
-cd $GOPATH/src/github.com/sergeyfrolov/gotapdance
-go get -d ./...
+go get -d -u -t github.com/sergeyfrolov/gotapdance/...
 ```
 Ignore the "no buildable Go source files" warning.
 
-If you have outdated versions of libraries above you might want to do `go get -u all`
+If you have outdated versions of libraries used, you might want to do `go get -u all`.
 
 ## Usage
 
- There are several ways to use TapDance:
+ There are 3 supported ways to use TapDance:
 
  * [Command Line Interface client](cli)
 
- * Mobile: native applications in Java/Objective C for Android or iOS. Golang bindings are used as a shared library.
-
-   * [Android application in Java](android)
-
-   * iOS version: coming ~~soon~~ eventually
-
-   * [Golang Bindings](gobind)
+ * [Psiphon](https://psiphon.ca/) Android app integrated TapDance as one of their transports.
 
  * Use tapdance directly from other Golang program:
 
@@ -57,24 +45,28 @@ func main() {
     // make sure assets directory is writable (only) by the td process
     tapdance.AssetsSetDir("./path/to/assets/dir/")
 
-	tdConn, err := tapdance.Dial("tcp", "censoredsite.com:80")
-	if err != nil {
-		fmt.Printf("tapdance.Dial() failed: %+v\n", err)
-		return
-	}
-	// tdConn implements standard net.Conn, allowing to use it like any other Golang conn with
-	// Write(), Read(), Close() etc. It also allows to pass tdConn to functions that expect
-	// net.Conn, such as tls.Client() making it easy to do tls handshake over TapDance conn.
-	_, err = tdConn.Write([]byte("GET / HTTP/1.1\nHost: censoredsite.com\n\n"))
-	if err != nil {
-		fmt.Printf("tdConn.Write() failed: %+v\n", err)
-		return
-	}
-	buf := make([]byte, 16384)
-	_, err = tdConn.Read(buf)
-	// ...
+    tdConn, err := tapdance.Dial("tcp", "censoredsite.com:80")
+    if err != nil {
+        fmt.Printf("tapdance.Dial() failed: %+v\n", err)
+        return
+    }
+    // tdConn implements standard net.Conn, allowing to use it like any other Golang conn with
+    // Write(), Read(), Close() etc. It also allows to pass tdConn to functions that expect
+    // net.Conn, such as tls.Client() making it easy to do tls handshake over TapDance conn.
+    _, err = tdConn.Write([]byte("GET / HTTP/1.1\nHost: censoredsite.com\n\n"))
+    if err != nil {
+        fmt.Printf("tdConn.Write() failed: %+v\n", err)
+        return
+    }
+    buf := make([]byte, 16384)
+    _, err = tdConn.Read(buf)
+    // ...
 }
 ```
+
+ * [CURRENTLY NOT MAINTAINED] Standalone TapDance mobile applications that use [Golang Bindings](gobind) as a shared library.
+
+   * [Android application in Java](android)
 
 
  # Links
