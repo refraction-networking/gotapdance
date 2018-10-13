@@ -36,7 +36,7 @@ jobs:
   include:
     - &build # YAML anchor/alias
       stage: build
-      name: "Build cli and Psiphon ConsoleClient on Linux"
+      name: "Build cli, probe and Psiphon ConsoleClient on Linux"
       install:
         - go get ./...
         # Substitute build string
@@ -50,6 +50,7 @@ jobs:
         - sed -i.bak 's/refraction_networking_tapdance.Logger().Out = ioutil.Discard//' $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go
       script:
         - go build -o build/cli-$TRAVIS_OS_NAME ./cli
+        - go build -o build/probe-$TRAVIS_OS_NAME ./probe
         - go build -o build/ConsoleClient-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
       after_success:
         # Upload built binaries to S3
@@ -57,7 +58,7 @@ jobs:
         - if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then aws s3 sync build s3://$ARTIFACTS_BUCKET/$TRAVIS_REPO_SLUG/$TRAVIS_BRANCH/; fi
 
     - <<: *build # Same build on OS X
-      name: "Build cli and Psiphon ConsoleClient on OS X"
+      name: "Build cli, probe and Psiphon ConsoleClient on OS X"
       os: osx
 
     - <<: *build # Reuse setup steps from build
