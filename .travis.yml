@@ -6,10 +6,14 @@ go:
   - "1.10.x"
   - "1.x"
 
+services:
+  - docker
+
 cache:
+  timeout: 600
   directories:
     - $TRAVIS_HOME/go
-    - $HOME/.gradle
+    - /var/lib/docker
 
 notifications:
   slack:
@@ -17,8 +21,6 @@ notifications:
 
 
 before_install:
-  # Get Golang in Android environment
-  - if [ -z "$TRAVIS_GO_VERSION" ]; then eval "$(curl -sL https://raw.githubusercontent.com/travis-ci/gimme/master/gimme | GIMME_GO_VERSION=stable bash)"; fi
   # Use cached directory as GOPATH
   - export GOPATH=$TRAVIS_HOME/go
   - export PATH=$GOPATH/bin:$PATH
@@ -53,7 +55,7 @@ jobs:
       stage: build
       name: "Build cli and Psiphon ConsoleClient on Linux"
       env:
-        - STAGE_BUILD=1 # Force separate caches
+        - BUILD_CLI=1 # Force separate caches
       install:
         - go get -d -u ./...
         # Substitute build string
@@ -79,24 +81,9 @@ jobs:
 
     - <<: *build # Reuse setup steps from build
       name: "Build Psiphon Android Library and App"
-      dist: trusty # xenial not available
-      language: android
-      android:
-        components:
-          - android-23
+      env:
+        - BUILD_ANDROID=1 # Force separate caches
       before_script:
-        # Install SDK and accept licenses
-        - yes | sdkmanager "ndk-bundle"
-        - if [ -d "$GOPATH/src/golang.org/x/mobile/cmd/gomobile" ]; then (cd $GOPATH/src/golang.org/x/mobile/cmd/gomobile && git reset --hard); fi
-        - go get -d -u golang.org/x/mobile/cmd/gomobile
-        # Freeze gomobile version (newer versions break Psiphon code)
-        - (cd $GOPATH/src/golang.org/x/mobile && git reset --hard 320ec40f6328971c405979b804e20d5f3c86770c)
-        # Binary hashes has since changed
-        - sed -i.bak "s/709d96f5234c224e4b72254fd2e196d0e1486b8d943e972ed98cf14e3ca7bdde/bacfed664a7b69b1b693f246ea49a85f04f502bd1ae723351c5345ab5b2ba850/" $GOPATH/src/golang.org/x/mobile/cmd/gomobile/hashes.go
-        - sed -i.bak "s/df8492a31030c4a940aa17602ea7ce56eb0759be9235f68fcce4c51150e49881/84c9361734902df622dd49a8c0cfb0090fd7743a2cbf927a9ae85c4826beb173/" $GOPATH/src/golang.org/x/mobile/cmd/gomobile/hashes.go
-        - go install golang.org/x/mobile/cmd/gomobile
-        # Initialize gomobile tool
-        - if [ ! -d "$GOPATH/pkg/gomobile" ]; then gomobile init; fi
         - mkdir -p $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/.hg
         - (cd $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system && hg update --clean)
         - (cd $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system && hg pull -u -b default https://bitbucket.org/psiphon/psiphon-circumvention-system)
@@ -106,10 +93,10 @@ jobs:
         - patch $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/src/main/java/com/psiphon3/psiphonlibrary/TunnelManager.java build/TunnelManager.java.patch
       script:
         # Build Psiphon Android Library ca.psiphon.aar
-        - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE")
+        - docker run -v $TRAVIS_BUILD_DIR:/go/src/github.com/sergeyfrolov/gotapdance -v $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core:/go/src/github.com/Psiphon-Labs/psiphon-tunnel-core refraction/psiandroid /bin/bash -c 'cd /go/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE"'
         - mv $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android/ca.psiphon.aar build/
         # Build Psiphon Android App PsiphonAndroid-debug.apk
         - cp build/ca.psiphon.aar $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/libs/
-        - (cd $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android && ./gradlew assembleDebug)
-        - mv $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/build/outputs/apk/debug/PsiphonAndroid-debug.apk build/
+        - docker run -v $TRAVIS_BUILD_DIR:/go/src/github.com/sergeyfrolov/gotapdance -v $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android:/go/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android refraction/psiandroid /bin/bash -c 'yes | /android-sdk-linux/tools/bin/sdkmanager --update && cd /go/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android && ./gradlew assembleDebug'
+        - sudo mv $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/build/outputs/apk/debug/PsiphonAndroid-debug.apk build/
         - rm $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/libs/ca.psiphon.aar
