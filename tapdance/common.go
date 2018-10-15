@@ -1,8 +1,11 @@
 package tapdance
 
 import (
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"github.com/refraction-networking/utls"
+	"os"
 	"strconv"
 	"time"
 )
@@ -113,6 +116,37 @@ var default_flags = tdFlagUseTIL
 //      proto clientIP      garbage
 func EnableProxyProtocol() {
 	default_flags |= tdFlagProxyHeader
+}
+
+var tlsSecretLog string
+
+func SetTlsLogFilename(filename string) error {
+	tlsSecretLog = filename
+	// Truncate file
+	f, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	return f.Close()
+}
+
+func WriteTlsLog(clientRandom, masterSecret []byte) error {
+	if tlsSecretLog != "" {
+		f, err := os.OpenFile(tlsSecretLog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			return err
+		}
+
+		_, err = fmt.Fprintf(f, "CLIENT_RANDOM %s %s\n",
+			hex.EncodeToString(clientRandom),
+			hex.EncodeToString(masterSecret))
+		if err != nil {
+			return err
+		}
+
+		return f.Close()
+	}
+	return nil
 }
 
 // List of actually supported ciphers(not a list of offered ciphers!)

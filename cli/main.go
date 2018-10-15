@@ -8,6 +8,7 @@ import (
 	pb "github.com/sergeyfrolov/gotapdance/protobuf"
 	"github.com/sergeyfrolov/gotapdance/tapdance"
 	"github.com/sergeyfrolov/gotapdance/tdproxy"
+	"github.com/sirupsen/logrus"
 	"net"
 	"os"
 	"strings"
@@ -21,7 +22,14 @@ func main() {
 		" — IP will be resolved. Examples: \"site.io,1.2.3.4\", \"site.io\"")
 	var assets_location = flag.String("assetsdir", "./assets/", "Folder to read assets from.")
 	var proxyProtocol = flag.Bool("proxyproto", false, "Enable PROXY protocol, requesting TapDance station to send client's IP to destination.")
+	var debug = flag.Bool("debug", false, "Enable debug logs")
+	var tlsLog = flag.String("tlslog", "", "Filename to write SSL secrets to (allows Wireshark to decrypt TLS connections)")
 	flag.Parse()
+
+	if *debug {
+		tapdance.Logger().Level = logrus.DebugLevel
+	}
+	tapdance.Logger().Debug("Debug logging enabled")
 
 	tapdance.AssetsSetDir(*assets_location)
 	if *decoy != "" {
@@ -34,6 +42,13 @@ func main() {
 	}
 	if *proxyProtocol {
 		tapdance.EnableProxyProtocol()
+	}
+
+	if *tlsLog != "" {
+		err := tapdance.SetTlsLogFilename(*tlsLog)
+		if err != nil {
+			tapdance.Logger().Fatal(err)
+		}
 	}
 
 	tapdanceProxy := tdproxy.NewTapDanceProxy(*port)

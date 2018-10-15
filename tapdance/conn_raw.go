@@ -343,6 +343,12 @@ func (tdRaw *tdRawConn) prepareTDRequest(handshakeType tdTagType) (string, error
 	buf.Write(tdRaw.tlsConn.HandshakeState.Hello.Random)
 	buf.Write(tdRaw.remoteConnId[:]) // connection id for persistence
 
+	err := WriteTlsLog(tdRaw.tlsConn.HandshakeState.Hello.Random,
+		tdRaw.tlsConn.HandshakeState.MasterSecret)
+	if err != nil {
+		Logger().Warningf("Failed to write TLS secret log: %s", err)
+	}
+
 	tag, err := obfuscateTag(buf.Bytes(), tdRaw.stationPubkey) // What we encode into the ciphertext
 	if err != nil {
 		return "", err
