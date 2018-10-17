@@ -115,7 +115,7 @@ func TestTapDanceDial(t *testing.T) {
 		}
 		tdResponse, err := getResponseString(testUrl, Dial)
 		if err != nil {
-			t.Fatalf("Failed to get response from %v via TapDance: %v.", testUrl, err)
+			t.Fatalf("Failed to get response from %v via TapDance: %v.", testUrl.String(), err)
 		}
 		if string(referenceResponse) != string(tdResponse) {
 			t.Fatalf("Unexpected response from %s\nExpected: %s\nGot: %s",

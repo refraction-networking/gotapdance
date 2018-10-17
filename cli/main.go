@@ -4,14 +4,17 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
+	"net"
+	"os"
+	"strings"
+	"sync"
+
 	"github.com/pkg/profile"
 	pb "github.com/sergeyfrolov/gotapdance/protobuf"
 	"github.com/sergeyfrolov/gotapdance/tapdance"
 	"github.com/sergeyfrolov/gotapdance/tdproxy"
 	"github.com/sirupsen/logrus"
-	"net"
-	"os"
-	"strings"
 )
 
 func main() {
@@ -24,6 +27,8 @@ func main() {
 	var proxyProtocol = flag.Bool("proxyproto", false, "Enable PROXY protocol, requesting TapDance station to send client's IP to destination.")
 	var debug = flag.Bool("debug", false, "Enable debug logs")
 	var tlsLog = flag.String("tlslog", "", "Filename to write SSL secrets to (allows Wireshark to decrypt TLS connections)")
+	var connect_target = flag.String("connect-addr", "", "If set, tapdance will transparently connect to provided address, which must be either hostname:port or ip:port. "+
+		"Default(unset): connects client to forwardproxy, to which CONNECT request is yet to be written.")
 	flag.Parse()
 
 	if *debug {
@@ -51,12 +56,55 @@ func main() {
 		}
 	}
 
+	if *connect_target != "" {
+		err := connectDirect(*connect_target, *port)
+		if err != nil {
+			tapdance.Logger().Println(err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	tapdanceProxy := tdproxy.NewTapDanceProxy(*port)
 	err := tapdanceProxy.ListenAndServe()
 	if err != nil {
 		tdproxy.Logger.Errorf("Failed to ListenAndServe(): %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func connectDirect(connect_target string, localPort int) error {
+	if _, _, err := net.SplitHostPort(connect_target); err != nil {
+		return fmt.Errorf("Failed to parse host and port from connect_target %s: %v",
+			connect_target, err)
+		os.Exit(1)
+	}
+	tdConn, err := tapdance.Dial("tcp", connect_target)
+	if err != nil {
+		return fmt.Errorf("Failed to dial %s: %v", connect_target, err)
+	}
+	l, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: localPort})
+	if err != nil {
+		return fmt.Errorf("Error listening on port %s: %v", localPort, err)
+	}
+	clientConn, err := l.AcceptTCP()
+	if err != nil {
+		return fmt.Errorf("Error accepting client connection %v: ", err)
+	}
+	wg := sync.WaitGroup{}
+	wg.Add(2)
+	go func() {
+		io.Copy(tdConn, clientConn)
+		tdConn.Close()
+		wg.Done()
+	}()
+	go func() {
+		io.Copy(clientConn, tdConn)
+		clientConn.CloseWrite()
+		wg.Done()
+	}()
+	wg.Wait()
+	return nil
 }
 
 func setSingleDecoyHost(decoy string) error {

@@ -2,10 +2,13 @@ package tapdance
 
 import (
 	"bytes"
+	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
-	pb "github.com/sergeyfrolov/gotapdance/protobuf"
+	"fmt"
 	"io"
 	"net"
 	"strconv"
@@ -13,47 +16,50 @@ import (
 	"sync"
 	"time"
 
-	"context"
 	"github.com/golang/protobuf/proto"
 	"github.com/refraction-networking/utls"
+	pb "github.com/sergeyfrolov/gotapdance/protobuf"
 )
 
 // Simply establishes TLS and TapDance connection.
 // Both reader and writer flows shall have this underlying raw connection.
 // Knows about but doesn't keep track of timeout and upload limit
 type tdRawConn struct {
-	tcpConn closeWriterConn
-	tlsConn *tls.UConn
+	tcpConn closeWriterConn // underlying TCP connection with CloseWrite() function that sends FIN
+	tlsConn *tls.UConn      // TLS connection to decoy (and station)
 
-	flowId      uint64
-	sessionId   uint64
-	strIdSuffix string
+	covert string // hostname that tapdance station will connect client to
 
 	TcpDialer func(context.Context, string, string) (net.Conn, error)
 
 	decoySpec     pb.TLSDecoySpec
-	establishedAt time.Time
 	pinDecoySpec  bool // don't ever change decoy (still changeable from outside)
-
-	remoteConnId  []byte
+	initialMsg    pb.StationToClient
 	stationPubkey []byte
+	tagType       tdTagType
 
-	failedDecoys []string
-	initialMsg   pb.StationToClient
-	tagType      tdTagType
+	remoteConnId []byte // 32 byte ID of the connection to station, used for reconnection
 
-	UploadLimit int // used only in POST-based tags
+	establishedAt time.Time // right after TLS connection to decoy is established, but not to station
+	UploadLimit   int       // used only in POST-based tags
 
 	closed    chan struct{}
 	closeOnce sync.Once
+
+	// stats to report
+	sessionStats pb.SessionStats
+	failedDecoys []string
+
+	// purely for logging and stats reporting purposes:
+	flowId      uint64 // id of the flow within the session (=how many times reconnected)
+	sessionId   uint64 // id of the local session
+	strIdSuffix string // suffix for every log string (e.g. to mark upload-only flows)
 }
 
-func makeTdRaw(handshakeType tdTagType,
-	stationPubkey []byte,
-	remoteConnId []byte) *tdRawConn {
+func makeTdRaw(handshakeType tdTagType, stationPubkey []byte) *tdRawConn {
 	tdRaw := &tdRawConn{tagType: handshakeType,
 		stationPubkey: stationPubkey,
-		remoteConnId:  remoteConnId}
+	}
 	tdRaw.flowId = 0
 	tdRaw.closed = make(chan struct{})
 	return tdRaw
@@ -72,12 +78,7 @@ func (tdRaw *tdRawConn) dial(ctx context.Context, reconnect bool) error {
 	var maxConnectionAttempts int
 	var err error
 
-	/*
-		// Randomize tdConn.maxSend to avoid heuristics
-		tdConn.maxSend = getRandInt(sendLimitMin, sendLimitMax)
-		tdConn.maxSend -= transitionMsgSize // reserve space for transition msg
-		tdConn.maxSend -= 2                 // reserve 2 bytes for transition msg header
-	*/
+	dialStartTs := time.Now()
 	var expectedTransition pb.S2C_Transition
 	if reconnect {
 		maxConnectionAttempts = 5
@@ -86,6 +87,9 @@ func (tdRaw *tdRawConn) dial(ctx context.Context, reconnect bool) error {
 	} else {
 		maxConnectionAttempts = 20
 		expectedTransition = pb.S2C_Transition_S2C_SESSION_INIT
+		if len(tdRaw.covert) > 0 {
+			expectedTransition = pb.S2C_Transition_S2C_SESSION_COVERT_INIT
+		}
 	}
 
 	for i := 0; i < maxConnectionAttempts; i++ {
@@ -115,12 +119,24 @@ func (tdRaw *tdRawConn) dial(ctx context.Context, reconnect bool) error {
 			}
 		}
 
+		if !reconnect {
+			// generate a new remove conn ID for each attempt to dial
+			// keep same remote conn ID for reconnect, since that's what it is for
+			tdRaw.remoteConnId = make([]byte, 16)
+			rand.Read(tdRaw.remoteConnId[:])
+		}
+
 		err = tdRaw.tryDialOnce(ctx, expectedTransition)
 		if err == nil {
-			return err
+			tdRaw.sessionStats.TotalTimeToConnect = durationToU32ptrMs(time.Since(dialStartTs))
+			return nil
 		}
 		tdRaw.failedDecoys = append(tdRaw.failedDecoys,
 			tdRaw.decoySpec.GetHostname()+" "+tdRaw.decoySpec.GetIpv4AddrStr())
+		if tdRaw.sessionStats.FailedDecoysAmount == nil {
+			tdRaw.sessionStats.FailedDecoysAmount = new(uint32)
+		}
+		*tdRaw.sessionStats.FailedDecoysAmount += uint32(1)
 	}
 	return err
 }
@@ -129,17 +145,18 @@ func (tdRaw *tdRawConn) tryDialOnce(ctx context.Context, expectedTransition pb.S
 	Logger().Infoln(tdRaw.idStr() + " Attempting to connect to decoy " +
 		tdRaw.decoySpec.GetHostname() + " (" + tdRaw.decoySpec.GetIpv4AddrStr() + ")")
 
-	connect_start := time.Now()
+	tlsToDecoyStartTs := time.Now()
 	err = tdRaw.establishTLStoDecoy(ctx)
+	tlsToDecoyTotalTs := time.Since(tlsToDecoyStartTs)
 	if err != nil {
 		Logger().Errorf(tdRaw.idStr() + " establishTLStoDecoy(" +
 			tdRaw.decoySpec.GetHostname() + "," + tdRaw.decoySpec.GetIpv4AddrStr() +
 			") failed with " + err.Error())
 		return err
 	}
-	connect_time := time.Since(connect_start)
-	Logger().Infof(tdRaw.idStr() + " Connected to decoy " +
-		tdRaw.decoySpec.GetHostname() + " (" + tdRaw.decoySpec.GetIpv4AddrStr() + ") in " + connect_time.String())
+	tdRaw.sessionStats.TlsToDecoy = durationToU32ptrMs(tlsToDecoyTotalTs)
+	Logger().Infof("%s Connected to decoy %s(%s) in %s", tdRaw.idStr(), tdRaw.decoySpec.GetHostname(),
+		tdRaw.decoySpec.GetIpv4AddrStr(), tlsToDecoyTotalTs.String())
 
 	if tdRaw.IsClosed() {
 		// if connection was closed externally while in establishTLStoDecoy()
@@ -179,6 +196,7 @@ func (tdRaw *tdRawConn) tryDialOnce(ctx context.Context, expectedTransition pb.S
 	Logger().Infoln(tdRaw.idStr() + " Attempting to connect to TapDance Station" +
 		" with connection ID: " + hex.EncodeToString(tdRaw.remoteConnId[:]) + ", method: " +
 		tdRaw.tagType.Str())
+	rttToStationStartTs := time.Now()
 	_, err = tdRaw.tlsConn.Write([]byte(tdRequest))
 	if err != nil {
 		Logger().Errorf(tdRaw.idStr() +
@@ -188,12 +206,13 @@ func (tdRaw *tdRawConn) tryDialOnce(ctx context.Context, expectedTransition pb.S
 	}
 
 	// Give up waiting for the station pretty quickly (2x handshake time == ~4RTT)
-	tdRaw.tlsConn.SetDeadline(time.Now().Add(connect_time * 2))
+	tdRaw.tlsConn.SetDeadline(time.Now().Add(tlsToDecoyTotalTs * 2))
 
 	switch tdRaw.tagType {
 	case tagHttpGetIncomplete:
-
 		tdRaw.initialMsg, err = tdRaw.readProto()
+		rttToStationTotalTs := time.Since(rttToStationStartTs)
+		tdRaw.sessionStats.RttToStation = durationToU32ptrMs(rttToStationTotalTs)
 		if err != nil {
 			if errIsTimeout(err) {
 				Logger().Errorf("%s %s: %v", tdRaw.idStr(),
@@ -218,11 +237,12 @@ func (tdRaw *tdRawConn) tryDialOnce(ctx context.Context, expectedTransition pb.S
 			}
 			return
 		}
-
 		if tdRaw.initialMsg.GetStateTransition() != expectedTransition {
 			err = errors.New("Init error: state transition mismatch!" +
 				" Received: " + tdRaw.initialMsg.GetStateTransition().String() +
 				" Expected: " + expectedTransition.String())
+			Logger().Infof("%s Failed to connect to TapDance Station [%s]: %s",
+				tdRaw.idStr(), tdRaw.initialMsg.GetStationId(), err.Error())
 			// this exceptional error implies that station has lost state, thus is fatal
 			return err
 		}
@@ -235,15 +255,10 @@ func (tdRaw *tdRawConn) tryDialOnce(ctx context.Context, expectedTransition pb.S
 
 	// TapDance should NOT have a timeout, timeouts have to be handled by client and server
 	tdRaw.tlsConn.SetDeadline(time.Time{}) // unsets timeout
-	/*
-		if !reconnect && len(tdConn.failedDecoys) > 0 {
-			tdConn.writeListFailedDecoys()
-		}*/
 	return nil
 }
 
-func (tdRaw *tdRawConn) establishTLStoDecoy(ctx context.Context) (err error) {
-	var dialConn net.Conn
+func (tdRaw *tdRawConn) establishTLStoDecoy(ctx context.Context) error {
 	deadline, deadlineAlreadySet := ctx.Deadline()
 	if !deadlineAlreadySet {
 		deadline = time.Now().Add(getRandomDuration(deadlineTCPtoDecoyMin, deadlineTCPtoDecoyMax))
@@ -251,25 +266,28 @@ func (tdRaw *tdRawConn) establishTLStoDecoy(ctx context.Context) (err error) {
 	childCtx, childCancelFunc := context.WithDeadline(ctx, deadline)
 	defer childCancelFunc()
 
-	if tdRaw.TcpDialer != nil {
-		dialConn, err = tdRaw.TcpDialer(childCtx, "tcp", tdRaw.decoySpec.GetIpv4AddrStr())
-		if err != nil {
-			return err
-		}
-	} else {
+	tcpDialer := tdRaw.TcpDialer
+	if tcpDialer == nil {
+		// custom dialer is not set, use default
 		d := net.Dialer{}
-		dialConn, err = d.DialContext(childCtx, "tcp", tdRaw.decoySpec.GetIpv4AddrStr())
-		if err != nil {
-			return err
-		}
+		tcpDialer = d.DialContext
 	}
+
+	tcpToDecoyStartTs := time.Now()
+	dialConn, err := tcpDialer(childCtx, "tcp", tdRaw.decoySpec.GetIpv4AddrStr())
+	tcpToDecoyTotalTs := time.Since(tcpToDecoyStartTs)
+	if err != nil {
+		return err
+	}
+	tdRaw.sessionStats.TcpToDecoy = durationToU32ptrMs(tcpToDecoyTotalTs)
+
 	config := tls.Config{ServerName: tdRaw.decoySpec.GetHostname()}
 	if config.ServerName == "" {
 		// if SNI is unset -- try IP
 		config.ServerName, _, err = net.SplitHostPort(tdRaw.decoySpec.GetIpv4AddrStr())
 		if err != nil {
 			dialConn.Close()
-			return
+			return err
 		}
 		Logger().Infoln(tdRaw.idStr() + ": SNI was nil. Setting it to" +
 			config.ServerName)
@@ -279,25 +297,25 @@ func (tdRaw *tdRawConn) establishTLStoDecoy(ctx context.Context) (err error) {
 	err = tdRaw.tlsConn.BuildHandshakeState()
 	if err != nil {
 		dialConn.Close()
-		return
+		return err
 	}
 	err = tdRaw.tlsConn.MarshalClientHello()
 	if err != nil {
 		dialConn.Close()
-		return
+		return err
 	}
 	tdRaw.tlsConn.SetDeadline(deadline)
 	err = tdRaw.tlsConn.Handshake()
 	if err != nil {
 		dialConn.Close()
-		return
+		return err
 	}
 	closeWriter, ok := dialConn.(closeWriterConn)
 	if !ok {
 		return errors.New("dialConn is not a closeWriter")
 	}
 	tdRaw.tcpConn = closeWriter
-	return
+	return nil
 }
 
 func (tdRaw *tdRawConn) Close() error {
@@ -321,7 +339,7 @@ func (tdRaw *tdRawConn) closeWrite() error {
 }
 
 func (tdRaw *tdRawConn) prepareTDRequest(handshakeType tdTagType) (string, error) {
-	// Generate initial TapDance request
+	// Generate tag for the initial TapDance request
 	buf := new(bytes.Buffer) // What we have to encrypt with the shared secret using AES
 
 	masterKey := tdRaw.tlsConn.HandshakeState.MasterSecret
@@ -349,15 +367,40 @@ func (tdRaw *tdRawConn) prepareTDRequest(handshakeType tdTagType) (string, error
 		Logger().Warningf("Failed to write TLS secret log: %s", err)
 	}
 
-	tag, err := obfuscateTag(buf.Bytes(), tdRaw.stationPubkey) // What we encode into the ciphertext
+	// Generate and marshal protobuf
+	transition := pb.C2S_Transition_C2S_SESSION_INIT
+	var covert *string
+	if len(tdRaw.covert) > 0 {
+		transition = pb.C2S_Transition_C2S_SESSION_COVERT_INIT
+		covert = &tdRaw.covert
+	}
+	currGen := Assets().GetGeneration()
+	initProto := &pb.ClientToStation{
+		CovertAddress:       covert,
+		StateTransition:     &transition,
+		DecoyListGeneration: &currGen,
+	}
+	initProtoBytes, err := proto.Marshal(initProto)
 	if err != nil {
 		return "", err
 	}
-	return tdRaw.genHTTP1Tag(tag)
+	Logger().Debugln(tdRaw.idStr()+" Initial protobuf", initProto)
+
+	// Obfuscate/encrypt tag and protobuf
+	tag, encryptedProtoMsg, err := obfuscateTagAndProtobuf(buf.Bytes(), initProtoBytes, tdRaw.stationPubkey)
+	if err != nil {
+		return "", err
+	}
+	return tdRaw.genHTTP1Tag(tag, encryptedProtoMsg)
 }
 
 // mutates tdRaw: sets tdRaw.UploadLimit
-func (tdRaw *tdRawConn) genHTTP1Tag(tag []byte) (string, error) {
+func (tdRaw *tdRawConn) genHTTP1Tag(tag, encryptedProtoMsg []byte) (string, error) {
+	sharedHeaders := `Host: ` + tdRaw.decoySpec.GetHostname() +
+		"\nUser-Agent: TapDance/1.2 (+https://refraction.network/info)"
+	if len(encryptedProtoMsg) > 0 {
+		sharedHeaders += "\nX-Proto: " + base64.StdEncoding.EncodeToString(encryptedProtoMsg)
+	}
 	var httpTag string
 	switch tdRaw.tagType {
 	// for complete copy http generator of golang
@@ -365,26 +408,22 @@ func (tdRaw *tdRawConn) genHTTP1Tag(tag []byte) (string, error) {
 		fallthrough
 	case tagHttpGetIncomplete:
 		tdRaw.UploadLimit = int(tdRaw.decoySpec.GetTcpwin()) - getRandInt(1, 1045)
-		httpTag = `GET / HTTP/1.1
-Host: ` + tdRaw.decoySpec.GetHostname() + `
-User-Agent: TapDance/1.2 (+https://refraction.network/info)
-Accept-Encoding: None
-X-Ignore: ` + getRandPadding(7, 612, 10)
+		httpTag = fmt.Sprintf(`GET / HTTP/1.1
+%s
+X-Ignore: %s`, sharedHeaders, getRandPadding(7, maxInt(612-len(sharedHeaders), 7), 10))
 		httpTag = strings.Replace(httpTag, "\n", "\r\n", -1)
 	case tagHttpPostIncomplete:
 		ContentLength := getRandInt(900000, 1045000)
 		tdRaw.UploadLimit = ContentLength - 1
-		httpTag = `POST / HTTP/1.1
+		httpTag = fmt.Sprintf(`POST / HTTP/1.1
+%s
 Accept-Encoding: None
-Host: ` + tdRaw.decoySpec.GetHostname() + `
-User-Agent: TapDance/1.2 (+https://refraction.network/info)
-X-Padding: ` + getRandPadding(1, 461, 10) + `
+X-Padding: %s
 Content-Type: application/zip; boundary=----WebKitFormBoundaryaym16ehT29q60rUx
-Content-Length: ` + strconv.Itoa(ContentLength) + `
-
+Content-Length: %s
 ----WebKitFormBoundaryaym16ehT29q60rUx
 Content-Disposition: form-data; name=\"td.zip\"
-`
+`, sharedHeaders, getRandPadding(1, maxInt(461-len(sharedHeaders), 1), 10), strconv.Itoa(ContentLength))
 		httpTag = strings.Replace(httpTag, "\n", "\r\n", -1)
 	}
 
@@ -411,6 +450,7 @@ func (tdRaw *tdRawConn) idStr() string {
 
 // Simply reads and returns protobuf
 // Returns error if it's not a protobuf
+// TODO: redesign it pb, data, err
 func (tdRaw *tdRawConn) readProto() (msg pb.StationToClient, err error) {
 	var readBuffer bytes.Buffer
 
@@ -473,6 +513,10 @@ func (tdRaw *tdRawConn) writeTransition(transition pb.C2S_Transition) (n int, er
 		DecoyListGeneration: &currGen,
 		StateTransition:     &transition,
 		UploadSync:          new(uint64)} // TODO: remove
+	if tdRaw.flowId == 0 {
+		// we have stats for each reconnect, but only send stats for the initial connection
+		msg.Stats = &tdRaw.sessionStats
+	}
 
 	if len(tdRaw.failedDecoys) > 0 {
 		failedDecoysIdx := 0 // how many failed decoys to report now
