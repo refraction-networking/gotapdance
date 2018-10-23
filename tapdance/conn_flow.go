@@ -553,8 +553,8 @@ func (flowConn *TapdanceFlowConn) processProto(msg pb.StationToClient) error {
 
 		_err := Assets().SetClientConf(conf)
 		if _err != nil {
-			Logger().Errorln(flowConn.idStr() +
-				"Could not save Setpb.ClientConf():" + _err.Error())
+			Logger().Warningln(flowConn.idStr() +
+				" could not persistently set ClientConf: " + _err.Error())
 		}
 	}
 	Logger().Debugln(flowConn.idStr() + " processing incoming protobuf: " + msg.String())
@@ -563,7 +563,7 @@ func (flowConn *TapdanceFlowConn) processProto(msg pb.StationToClient) error {
 		handleConfigInfo(confInfo)
 		// TODO: if we ever get a ``safe'' decoy rotation - code below has to be rewritten
 		if !Assets().IsDecoyInList(flowConn.tdRaw.decoySpec) {
-			Logger().Warningln(flowConn.idStr() + ": current decoy is no " +
+			Logger().Warningln(flowConn.idStr() + " current decoy is no " +
 				"longer in the list, changing it! Read flow probably will break!")
 			// if current decoy is no longer in the list
 			flowConn.tdRaw.decoySpec = Assets().GetDecoy()
