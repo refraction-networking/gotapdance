@@ -21,13 +21,14 @@ func main() {
 	defer profile.Start().Stop()
 
 	var port = flag.Int("port", 10500, "TapDance will listen for connections on this port.")
-	var decoy = flag.String("decoy", "", "Single decoy to use. Accepts \"SNI,IP\" or simply \"SNI\""+
-		" — IP will be resolved. Examples: \"site.io,1.2.3.4\", \"site.io\"")
+	var decoy = flag.String("decoy", "", "Sets single decoy. ClientConf won't be requested. " +
+		"Accepts \"SNI,IP\" or simply \"SNI\" — IP will be resolved. " +
+		"Examples: \"site.io,1.2.3.4\", \"site.io\"")
 	var assets_location = flag.String("assetsdir", "./assets/", "Folder to read assets from.")
 	var proxyProtocol = flag.Bool("proxyproto", false, "Enable PROXY protocol, requesting TapDance station to send client's IP to destination.")
 	var debug = flag.Bool("debug", false, "Enable debug logs")
 	var tlsLog = flag.String("tlslog", "", "Filename to write SSL secrets to (allows Wireshark to decrypt TLS connections)")
-	var connect_target = flag.String("connect-addr", "", "If set, tapdance will transparently connect to provided address, which must be either hostname:port or ip:port. "+
+	var connect_target = flag.String("connect-addr", "", "If set, tapdance will transparently connect to provided address, which must be either hostname:port or ip:port. " +
 		"Default(unset): connects client to forwardproxy, to which CONNECT request is yet to be written.")
 	flag.Parse()
 
@@ -136,6 +137,8 @@ func setSingleDecoyHost(decoy string) error {
 				decoySpec,
 			},
 		}
+	maxUint32 := ^uint32(0) // max generation: station won't send ClientConf
+	tapdance.Assets().GetClientConfPtr().Generation = &maxUint32
 	tapdance.Logger().Infof("Single decoy parsed. SNI: %s, IP: %s", sni, ip)
 	return nil
 }
