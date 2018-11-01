@@ -40,7 +40,7 @@ jobs:
       install:
         - go get ./...
         # Substitute build string
-        - sed -i.bak "s/\[BUILD\]/$TRAVIS_BRANCH-$TRAVIS_COMMIT/" tapdance/logger.go
+        - sed -i.bak "s/buildInfo = \"\"/buildInfo = \"$TRAVIS_BRANCH-$TRAVIS_COMMIT\"/" tapdance/logger.go
         - mkdir -p $GOPATH/src/github.com/Psiphon-Labs
         - git clone https://github.com/Psiphon-Labs/psiphon-tunnel-core.git $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core
         # Remove gotapdance from vendored packages
