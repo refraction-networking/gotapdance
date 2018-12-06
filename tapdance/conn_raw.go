@@ -353,7 +353,10 @@ func (tdRaw *tdRawConn) prepareTDRequest(handshakeType tdTagType) (string, error
 		return "", err
 	}
 	buf.Write([]byte{0}) // Unassigned byte
-	negotiatedCipher := tdRaw.tlsConn.HandshakeState.Suite.Id
+	negotiatedCipher := tdRaw.tlsConn.HandshakeState.State12.Suite.Id
+	if tdRaw.tlsConn.HandshakeState.ServerHello.Vers == tls.VersionTLS13 {
+		negotiatedCipher = tdRaw.tlsConn.HandshakeState.State13.Suite.Id
+	}
 	buf.Write([]byte{byte(negotiatedCipher >> 8),
 		byte(negotiatedCipher & 0xff)})
 	buf.Write(masterKey[:])
