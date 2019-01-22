@@ -7,15 +7,17 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
-	"errors"
+	"github.com/pkg/errors"
+	"golang.org/x/crypto/hkdf"
+	"math/big"
 	mrand "math/rand"
 	"net"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/agl/ed25519/extra25519"
-	"golang.org/x/crypto/curve25519"
+	"encoding/base64"
+	"fmt"
 )
 
 // The key argument should be the AES key, either 16 or 32 bytes
@@ -85,75 +87,37 @@ func getRandString(length int) string {
 	return string(randString)
 }
 
-// obfuscateTagAndProtobuf() generates key-pair and combines it /w stationPubkey to generate
-// sharedSecret. Client will use Eligator to find and send uniformly random representative for its
-// public key (and avoid sending it directly over the wire, as points on ellyptic curve are
-// distinguishable)
-// Then the sharedSecret will be used to encrypt stegoPayload and protobuf slices:
-//  - stegoPayload is encrypted with AES-GCM KEY=sharedSecret[0:16], IV=sharedSecret[16:28]
-//  - protobuf is encrypted with AES-GCM KEY=sharedSecret[0:16], IV={new random IV}, that will be
-//    prepended to encryptedProtobuf and eventually sent out together
-// Returns
-//  - tag(concatenated representative and encrypted stegoPayload),
-//  - encryptedProtobuf(concatenated 12 byte IV + encrypted protobuf)
-//  - error
-func obfuscateTagAndProtobuf(stegoPayload []byte, protobuf []byte, stationPubkey []byte) ([]byte, []byte, error) {
-	if len(stationPubkey) != 32 {
-		return nil, nil, errors.New("Unexpected station pubkey length. Expected: 32." +
-			" Received: " + strconv.Itoa(len(stationPubkey)) + ".")
-	}
-	var sharedSecret, clientPrivate, clientPublic, representative [32]byte
-	for ok := false; ok != true; {
-		var sliceKeyPrivate []byte = clientPrivate[:]
-		_, err := rand.Read(sliceKeyPrivate)
-		if err != nil {
-			return nil, nil, err
-		}
 
-		ok = extra25519.ScalarBaseMult(&clientPublic, &representative, &clientPrivate)
-	}
-	var stationPubkeyByte32 [32]byte
-	copy(stationPubkeyByte32[:], stationPubkey)
-	curve25519.ScalarMult(&sharedSecret, &clientPrivate, &stationPubkeyByte32)
+type tapdanceSharedKeys struct {
+	FspKey, FspIv, VspKey, VspIv, DarkDecoySeed []byte
+}
 
-	// extra25519.ScalarBaseMult does not randomize most significant bit(sign of y_coord?)
-	// Other implementations of elligator may have up to 2 non-random bits.
-	// Here we randomize the bit, expecting it to be flipped back to 0 on station
-	randByte := make([]byte, 1)
-	_, err := rand.Read(randByte)
-	if err != nil {
-		return nil, nil, err
-	}
-	representative[31] |= (0x80 & randByte[0])
-
-	tagBuf := new(bytes.Buffer) // What we have to encrypt with the shared secret using AES
-	tagBuf.Write(representative[:])
-
-	stationPubkeyHash := sha256.Sum256(sharedSecret[:])
-	aesKey := stationPubkeyHash[:16]
-	aesIvTag := stationPubkeyHash[16:28] // 12 bytes for stegoPayload nonce
-
-	encryptedStegoPayload, err := aesGcmEncrypt(stegoPayload, aesKey, aesIvTag)
-	if err != nil {
-		return nil, nil, err
+func genSharedKeys(sharedSecret []byte) (tapdanceSharedKeys, error) {
+	tdHkdf := hkdf.New(sha256.New, sharedSecret, []byte("tapdancetapdancetapdancetapdance"), nil)
+	keys := tapdanceSharedKeys{
+		FspKey:        make([]byte, 16),
+		FspIv:         make([]byte, 12),
+		VspKey:        make([]byte, 16),
+		VspIv:         make([]byte, 12),
+		DarkDecoySeed: make([]byte, 16),
 	}
 
-	tagBuf.Write(encryptedStegoPayload)
-	tag := tagBuf.Bytes()
-
-	if len(protobuf) == 0 {
-		return tag, nil, err
+	if _, err := tdHkdf.Read(keys.FspKey); err != nil {
+		return keys, err
 	}
-
-	// probably could have used all zeros as IV here, but better to err on safe side
-	aesIvProtobuf := make([]byte, 12)
-	_, err = rand.Read(aesIvProtobuf)
-	if err != nil {
-		return nil, nil, err
+	if _, err := tdHkdf.Read(keys.FspIv); err != nil {
+		return keys, err
 	}
-
-	encryptedProtobuf, err := aesGcmEncrypt(protobuf, aesKey, aesIvProtobuf)
-	return tag, append(aesIvProtobuf, encryptedProtobuf...), err
+	if _, err := tdHkdf.Read(keys.VspKey); err != nil {
+		return keys, err
+	}
+	if _, err := tdHkdf.Read(keys.VspIv); err != nil {
+		return keys, err
+	}
+	if _, err := tdHkdf.Read(keys.DarkDecoySeed); err != nil {
+		return keys, err
+	}
+	return keys, nil
 }
 
 func getMsgWithHeader(msgType msgType, msgBytes []byte) []byte {
@@ -197,7 +161,21 @@ func uint16toInt16(i uint16) int16 {
 	return pos + neg
 }
 
-func reverseEncrypt(ciphertext []byte, keyStream []byte) (plaintext string) {
+// generates HTTP request, that is ready to have tag prepended to it
+func generateHTTPRequestBeginning(encryptedProtoMsg []byte, decoyHostname string) []byte {
+	sharedHeaders := `Host: ` + decoyHostname +
+		"\nUser-Agent: TapDance/1.2 (+https://refraction.network/info)"
+	if len(encryptedProtoMsg) > 0 {
+		sharedHeaders += "\nX-Proto: " + base64.StdEncoding.EncodeToString(encryptedProtoMsg)
+	}
+	httpTag := fmt.Sprintf(`GET / HTTP/1.1
+%s
+X-Ignore: %s`, sharedHeaders, getRandPadding(7, maxInt(612-len(sharedHeaders), 7), 10))
+	return []byte(strings.Replace(httpTag, "\n", "\r\n", -1))
+}
+
+func reverseEncrypt(ciphertext []byte, keyStream []byte) []byte {
+	var plaintext string
 	// our plaintext can be antyhing where x & 0xc0 == 0x40
 	// i.e. 64-127 in ascii (@, A-Z, [\]^_`, a-z, {|}~ DEL)
 	// This means that we are allowed to choose the last 6 bits
@@ -241,7 +219,7 @@ func reverseEncrypt(ciphertext []byte, keyStream []byte) (plaintext string) {
 		plaintext += string(pc)
 		plaintext += string(pd)
 	}
-	return
+	return []byte(plaintext)
 }
 
 func minInt(a, b int) int {
@@ -281,4 +259,86 @@ func errIsTimeout(err error) bool {
 		}
 	}
 	return false
+}
+
+type ddIpSelector struct {
+	nets []net.IPNet
+}
+
+func newDDIpSelector(netsStr []string) (*ddIpSelector, error) {
+	dd := ddIpSelector{}
+	for _, _netStr := range netsStr {
+		_, _net, err := net.ParseCIDR(_netStr)
+		if err != nil {
+			return nil, err
+		}
+		if _net == nil {
+			return nil, fmt.Errorf("failed to parse %v as subnet", _netStr)
+		}
+		dd.nets = append(dd.nets, *_net)
+	}
+	return &dd, nil
+}
+
+func (d *ddIpSelector) selectIpAddr(seed []byte) (*net.IP, error) {
+	addresses_total := big.NewInt(0)
+
+	type idNet struct {
+		min, max big.Int
+		net net.IPNet
+	}
+	var idNets []idNet
+
+	for _, _net := range d.nets {
+		netMaskOnes, _ := _net.Mask.Size()
+		if ipv4net := _net.IP.To4(); ipv4net != nil {
+			_idNet := idNet{}
+			_idNet.min.Set(addresses_total)
+			addresses_total.Add(addresses_total, big.NewInt(2).Exp(big.NewInt(2),big.NewInt(int64(32-netMaskOnes)),nil))
+			addresses_total.Sub(addresses_total, big.NewInt(1))
+			_idNet.max.Set(addresses_total)
+			_idNet.net = _net
+			idNets = append(idNets, _idNet)
+		} else if ipv6net := _net.IP.To16(); ipv6net != nil {
+			_idNet := idNet{}
+			_idNet.min.Set(addresses_total)
+			addresses_total.Add(addresses_total, big.NewInt(2).Exp(big.NewInt(2),big.NewInt(int64(128-netMaskOnes)),nil))
+			addresses_total.Sub(addresses_total, big.NewInt(1))
+			_idNet.max.Set(addresses_total)
+			_idNet.net = _net
+			idNets = append(idNets, _idNet)
+		} else {
+			return nil, fmt.Errorf("failed to parse %v", _net)
+		}
+	}
+	id := &big.Int{}
+	id.SetBytes(seed)
+	if id.Cmp(addresses_total) >= 0 {
+		id.Mod(id, addresses_total)
+	}
+
+	var result net.IP
+	for _, _idNet := range idNets {
+		if _idNet.max.Cmp(id) >= 0 && _idNet.min.Cmp(id) == -1 {
+			if ipv4net := _idNet.net.IP.To4(); ipv4net != nil {
+				ipBigInt := &big.Int{}
+				ipBigInt.SetBytes(ipv4net)
+				ipNetDiff := _idNet.max.Sub(id, &_idNet.min)
+				ipBigInt.Add(ipBigInt, ipNetDiff)
+				result = net.IP(ipBigInt.Bytes()).To4() // implicit check that it fits
+			} else if ipv6net := _idNet.net.IP.To16(); ipv6net != nil {
+				ipBigInt := &big.Int{}
+				ipBigInt.SetBytes(ipv6net)
+				ipNetDiff := _idNet.max.Sub(id, &_idNet.min)
+				ipBigInt.Add(ipBigInt, ipNetDiff)
+				result = net.IP(ipBigInt.Bytes()).To16()
+			} else {
+				return nil, fmt.Errorf("failed to parse %v", _idNet.net.IP)
+			}
+		}
+	}
+	if result == nil {
+		return nil, errors.New("supposedly impossible state in dark decoy selection")
+	}
+	return &result, nil
 }

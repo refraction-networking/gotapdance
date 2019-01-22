@@ -39,7 +39,7 @@ func makeTapDanceFlow(proxy *TapDanceProxy, id uint64, splitFlows bool) *tapDanc
 }
 
 func (TDstate *tapDanceFlow) redirect() error {
-	dialer := tapdance.Dialer{SplitFlows: TDstate.splitFlows}
+	dialer := tapdance.Dialer{SplitFlows: TDstate.splitFlows, DarkDecoy: true}
 	var err error
 	TDstate.servConn, err = dialer.DialProxy()
 	if err != nil {

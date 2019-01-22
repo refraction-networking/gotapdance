@@ -3,6 +3,7 @@ package tapdance
 import (
 	"context"
 	"net"
+	"errors"
 )
 
 var sessionsTotal CounterUint64
@@ -10,6 +11,7 @@ var sessionsTotal CounterUint64
 // Dialer contains options and implements advanced functions for establishing TapDance connection.
 type Dialer struct {
 	SplitFlows bool
+	DarkDecoy bool
 	TcpDialer  func(context.Context, string, string) (net.Conn, error)
 }
 
@@ -59,9 +61,12 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 			return nil, err
 		}
 		flow.tdRaw.TcpDialer = d.TcpDialer
+		if d.DarkDecoy {
+			return dialDarkDecoy(ctx, flow)
+		}
 		return flow, flow.DialContext(ctx)
 	}
-	return dialSplitFlow(ctx, d.TcpDialer, address)
+	return nil, errors.New("SplitFlows are not supported")
 }
 
 // DialProxy establishes direct connection to TapDance station proxy.

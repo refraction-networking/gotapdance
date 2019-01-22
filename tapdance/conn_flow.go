@@ -47,15 +47,8 @@ type TapdanceFlowConn struct {
 	closeErr  error
 
 	flowType flowType
-}
 
-/*______________________TapdanceFlowConn Mode Chart _____________________________
-|FlowType     |Default Tag|Diff from old-school bidirectional  | Engines spawned|
-|-------------|-----------|------------------------------------|----------------|
-|Bidirectional| HTTP GET  |                                    | Writer, Reader |
-|Upload       | HTTP POST |acquires upload                     | Writer, Reader |
-|ReadOnly     | HTTP GET  |yields upload, writer sync ignored  | Reader         |
-\_____________|___________|____________________________________|_______________*/
+}
 
 // NewTapDanceConn returns TapDance connection, that is ready to be Dial'd
 func NewTapDanceConn() (net.Conn, error) {
@@ -92,6 +85,7 @@ func (flowConn *TapdanceFlowConn) DialContext(ctx context.Context) error {
 			return err
 		}
 	}
+
 	// don't lose initial msg from station
 	// strip off state transition and push protobuf up for processing
 	flowConn.tdRaw.initialMsg.StateTransition = nil
@@ -111,13 +105,13 @@ func (flowConn *TapdanceFlowConn) DialContext(ctx context.Context) error {
 		flowConn.writeSliceChan = make(chan []byte)
 		flowConn.writeResultChan = make(chan ioOpResult)
 		go flowConn.spawnWriterEngine()
-		return nil
 	case flowReadOnly:
 		go flowConn.spawnReaderEngine()
-		return nil
+	case flowRendezvous:
 	default:
 		panic("Not implemented")
 	}
+	return nil
 }
 
 type ioOpResult struct {
