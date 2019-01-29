@@ -284,11 +284,11 @@ func (a *assets) SetDecoys(decoys []*pb.TLSDecoySpec) (err error) {
 
 // Checks if decoy is in currently used ClientConf decoys list
 func (a *assets) IsDecoyInList(decoy pb.TLSDecoySpec) bool {
-	ipv4str := decoy.GetIpv4AddrStr()
+	ipv4str := decoy.GetIpAddrStr()
 	hostname := decoy.GetHostname()
 	for _, d := range a.config.GetDecoyList().GetTlsDecoys() {
 		if strings.Compare(d.GetHostname(), hostname) == 0 &&
-			strings.Compare(d.GetIpv4AddrStr(), ipv4str) == 0 {
+			strings.Compare(d.GetIpAddrStr(), ipv4str) == 0 {
 			return true
 		}
 	}

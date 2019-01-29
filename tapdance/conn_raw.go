@@ -113,7 +113,7 @@ func (tdRaw *tdRawConn) dial(ctx context.Context, reconnect bool) error {
 		} else {
 			if !reconnect {
 				tdRaw.decoySpec = Assets().GetDecoy()
-				if tdRaw.decoySpec.GetIpv4AddrStr() == "" {
+				if tdRaw.decoySpec.GetIpAddrStr() == "" {
 					return errors.New("tdConn.decoyAddr is empty!")
 				}
 			}
@@ -132,7 +132,7 @@ func (tdRaw *tdRawConn) dial(ctx context.Context, reconnect bool) error {
 			return nil
 		}
 		tdRaw.failedDecoys = append(tdRaw.failedDecoys,
-			tdRaw.decoySpec.GetHostname()+" "+tdRaw.decoySpec.GetIpv4AddrStr())
+			tdRaw.decoySpec.GetHostname()+" "+tdRaw.decoySpec.GetIpAddrStr())
 		if tdRaw.sessionStats.FailedDecoysAmount == nil {
 			tdRaw.sessionStats.FailedDecoysAmount = new(uint32)
 		}
@@ -143,20 +143,20 @@ func (tdRaw *tdRawConn) dial(ctx context.Context, reconnect bool) error {
 
 func (tdRaw *tdRawConn) tryDialOnce(ctx context.Context, expectedTransition pb.S2C_Transition) (err error) {
 	Logger().Infoln(tdRaw.idStr() + " Attempting to connect to decoy " +
-		tdRaw.decoySpec.GetHostname() + " (" + tdRaw.decoySpec.GetIpv4AddrStr() + ")")
+		tdRaw.decoySpec.GetHostname() + " (" + tdRaw.decoySpec.GetIpAddrStr() + ")")
 
 	tlsToDecoyStartTs := time.Now()
 	err = tdRaw.establishTLStoDecoy(ctx)
 	tlsToDecoyTotalTs := time.Since(tlsToDecoyStartTs)
 	if err != nil {
 		Logger().Errorf(tdRaw.idStr() + " establishTLStoDecoy(" +
-			tdRaw.decoySpec.GetHostname() + "," + tdRaw.decoySpec.GetIpv4AddrStr() +
+			tdRaw.decoySpec.GetHostname() + "," + tdRaw.decoySpec.GetIpAddrStr() +
 			") failed with " + err.Error())
 		return err
 	}
 	tdRaw.sessionStats.TlsToDecoy = durationToU32ptrMs(tlsToDecoyTotalTs)
 	Logger().Infof("%s Connected to decoy %s(%s) in %s", tdRaw.idStr(), tdRaw.decoySpec.GetHostname(),
-		tdRaw.decoySpec.GetIpv4AddrStr(), tlsToDecoyTotalTs.String())
+		tdRaw.decoySpec.GetIpAddrStr(), tlsToDecoyTotalTs.String())
 
 	if tdRaw.IsClosed() {
 		// if connection was closed externally while in establishTLStoDecoy()
@@ -274,7 +274,7 @@ func (tdRaw *tdRawConn) establishTLStoDecoy(ctx context.Context) error {
 	}
 
 	tcpToDecoyStartTs := time.Now()
-	dialConn, err := tcpDialer(childCtx, "tcp", tdRaw.decoySpec.GetIpv4AddrStr())
+	dialConn, err := tcpDialer(childCtx, "tcp", tdRaw.decoySpec.GetIpAddrStr())
 	tcpToDecoyTotalTs := time.Since(tcpToDecoyStartTs)
 	if err != nil {
 		return err
@@ -284,7 +284,7 @@ func (tdRaw *tdRawConn) establishTLStoDecoy(ctx context.Context) error {
 	config := tls.Config{ServerName: tdRaw.decoySpec.GetHostname()}
 	if config.ServerName == "" {
 		// if SNI is unset -- try IP
-		config.ServerName, _, err = net.SplitHostPort(tdRaw.decoySpec.GetIpv4AddrStr())
+		config.ServerName, _, err = net.SplitHostPort(tdRaw.decoySpec.GetIpAddrStr())
 		if err != nil {
 			dialConn.Close()
 			return err
