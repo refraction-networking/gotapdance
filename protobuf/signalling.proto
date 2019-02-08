@@ -180,6 +180,9 @@ message ClientToStation {
     // TODO: make it required for initialization, and stop connecting any client straight to squid?
     optional string covert_address = 20;
 
+    // Used in dark decoys to signal which dark decoy it will connect to.
+    optional string masked_decoy_server_name = 21;
+
     // Random-sized junk to defeat packet size fingerprinting.
     optional bytes padding = 100;
 }

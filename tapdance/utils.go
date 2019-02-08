@@ -16,7 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"encoding/base64"
 	"fmt"
 )
 
@@ -87,19 +86,19 @@ func getRandString(length int) string {
 	return string(randString)
 }
 
-
 type tapdanceSharedKeys struct {
-	FspKey, FspIv, VspKey, VspIv, DarkDecoySeed []byte
+	FspKey, FspIv, VspKey, VspIv, NewMasterSecret, DarkDecoySeed []byte
 }
 
 func genSharedKeys(sharedSecret []byte) (tapdanceSharedKeys, error) {
 	tdHkdf := hkdf.New(sha256.New, sharedSecret, []byte("tapdancetapdancetapdancetapdance"), nil)
 	keys := tapdanceSharedKeys{
-		FspKey:        make([]byte, 16),
-		FspIv:         make([]byte, 12),
-		VspKey:        make([]byte, 16),
-		VspIv:         make([]byte, 12),
-		DarkDecoySeed: make([]byte, 16),
+		FspKey:          make([]byte, 16),
+		FspIv:           make([]byte, 12),
+		VspKey:          make([]byte, 16),
+		VspIv:           make([]byte, 12),
+		NewMasterSecret: make([]byte, 48),
+		DarkDecoySeed:   make([]byte, 16),
 	}
 
 	if _, err := tdHkdf.Read(keys.FspKey); err != nil {
@@ -112,6 +111,9 @@ func genSharedKeys(sharedSecret []byte) (tapdanceSharedKeys, error) {
 		return keys, err
 	}
 	if _, err := tdHkdf.Read(keys.VspIv); err != nil {
+		return keys, err
+	}
+	if _, err := tdHkdf.Read(keys.NewMasterSecret); err != nil {
 		return keys, err
 	}
 	if _, err := tdHkdf.Read(keys.DarkDecoySeed); err != nil {
@@ -162,12 +164,9 @@ func uint16toInt16(i uint16) int16 {
 }
 
 // generates HTTP request, that is ready to have tag prepended to it
-func generateHTTPRequestBeginning(encryptedProtoMsg []byte, decoyHostname string) []byte {
+func generateHTTPRequestBeginning(decoyHostname string) []byte {
 	sharedHeaders := `Host: ` + decoyHostname +
 		"\nUser-Agent: TapDance/1.2 (+https://refraction.network/info)"
-	if len(encryptedProtoMsg) > 0 {
-		sharedHeaders += "\nX-Proto: " + base64.StdEncoding.EncodeToString(encryptedProtoMsg)
-	}
 	httpTag := fmt.Sprintf(`GET / HTTP/1.1
 %s
 X-Ignore: %s`, sharedHeaders, getRandPadding(7, maxInt(612-len(sharedHeaders), 7), 10))
@@ -285,7 +284,7 @@ func (d *ddIpSelector) selectIpAddr(seed []byte) (*net.IP, error) {
 
 	type idNet struct {
 		min, max big.Int
-		net net.IPNet
+		net      net.IPNet
 	}
 	var idNets []idNet
 
@@ -294,7 +293,7 @@ func (d *ddIpSelector) selectIpAddr(seed []byte) (*net.IP, error) {
 		if ipv4net := _net.IP.To4(); ipv4net != nil {
 			_idNet := idNet{}
 			_idNet.min.Set(addresses_total)
-			addresses_total.Add(addresses_total, big.NewInt(2).Exp(big.NewInt(2),big.NewInt(int64(32-netMaskOnes)),nil))
+			addresses_total.Add(addresses_total, big.NewInt(2).Exp(big.NewInt(2), big.NewInt(int64(32-netMaskOnes)), nil))
 			addresses_total.Sub(addresses_total, big.NewInt(1))
 			_idNet.max.Set(addresses_total)
 			_idNet.net = _net
@@ -302,7 +301,7 @@ func (d *ddIpSelector) selectIpAddr(seed []byte) (*net.IP, error) {
 		} else if ipv6net := _net.IP.To16(); ipv6net != nil {
 			_idNet := idNet{}
 			_idNet.min.Set(addresses_total)
-			addresses_total.Add(addresses_total, big.NewInt(2).Exp(big.NewInt(2),big.NewInt(int64(128-netMaskOnes)),nil))
+			addresses_total.Add(addresses_total, big.NewInt(2).Exp(big.NewInt(2), big.NewInt(int64(128-netMaskOnes)), nil))
 			addresses_total.Sub(addresses_total, big.NewInt(1))
 			_idNet.max.Set(addresses_total)
 			_idNet.net = _net

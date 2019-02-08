@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
@@ -44,6 +43,10 @@ type tdRawConn struct {
 
 	closed    chan struct{}
 	closeOnce sync.Once
+
+	// dark decoy variables
+	darkDecoyUsed bool
+	darkDecoySNI  string
 
 	// stats to report
 	sessionStats pb.SessionStats
@@ -241,7 +244,6 @@ func (tdRaw *tdRawConn) tryDialOnce(ctx context.Context, expectedTransition pb.S
 		panic("Unsupported td handshake type:" + tdRaw.tagType.Str())
 	}
 
-
 	// TapDance should NOT have a timeout, timeouts have to be handled by client and server
 	tdRaw.tlsConn.SetDeadline(time.Time{}) // unsets timeout
 	return nil
@@ -328,31 +330,6 @@ func (tdRaw *tdRawConn) closeWrite() error {
 }
 
 func (tdRaw *tdRawConn) prepareTDRequest(handshakeType tdTagType) ([]byte, error) {
-	generateLegacyFSP := func() ([]byte, error) {
-		buf := new(bytes.Buffer)
-		// write flags
-		masterKey := tdRaw.tlsConn.HandshakeState.MasterSecret
-		flags := default_flags
-		if tdRaw.tagType == tagHttpPostIncomplete {
-			flags |= tdFlagUploadOnly
-		}
-		if err := binary.Write(buf, binary.BigEndian, flags); err != nil {
-			return nil, err
-		}
-		buf.Write([]byte{0}) // Unassigned byte
-		negotiatedCipher := tdRaw.tlsConn.HandshakeState.State12.Suite.Id
-		if tdRaw.tlsConn.HandshakeState.ServerHello.Vers == tls.VersionTLS13 {
-			negotiatedCipher = tdRaw.tlsConn.HandshakeState.State13.Suite.Id
-		}
-		buf.Write([]byte{byte(negotiatedCipher >> 8),
-			byte(negotiatedCipher & 0xff)})
-		buf.Write(masterKey[:])
-		buf.Write(tdRaw.tlsConn.HandshakeState.ServerHello.Random)
-		buf.Write(tdRaw.tlsConn.HandshakeState.Hello.Random)
-		buf.Write(tdRaw.remoteConnId[:]) // connection id for persistence
-		return buf.Bytes(), nil
-	}
-
 	generateFSP := func(espSize uint16) []byte {
 		buf := make([]byte, 6)
 		binary.BigEndian.PutUint16(buf[0:2], espSize)
@@ -380,7 +357,14 @@ func (tdRaw *tdRawConn) prepareTDRequest(handshakeType tdTagType) ([]byte, error
 			StateTransition:     &transition,
 			DecoyListGeneration: &currGen,
 		}
-		Logger().Debugln(tdRaw.idStr() + " Initial protobuf", initProto)
+		if tdRaw.darkDecoyUsed {
+			initProto.MaskedDecoyServerName = &tdRaw.darkDecoySNI
+		}
+		Logger().Debugln(tdRaw.idStr()+" Initial protobuf", initProto)
+		const AES_GCM_TAG_SIZE = 16
+		for (proto.Size(initProto)+AES_GCM_TAG_SIZE)%3 != 0 {
+			initProto.Padding = append(initProto.Padding, byte(0))
+		}
 		return proto.Marshal(initProto)
 	}
 
@@ -390,69 +374,35 @@ func (tdRaw *tdRawConn) prepareTDRequest(handshakeType tdTagType) ([]byte, error
 	}
 
 	tdKeys, err := genSharedKeys(sharedSecret)
-	if err != nil{
+	if err != nil {
 		return nil, err
 	}
 	tdRaw.tdKeys = tdKeys
 
-	useNewTag := true
-	var protobufHeader, vsp, fsp []byte
-	if useNewTag {
-		protobufHeader = nil
-		vsp, err = generateVSP()
-		if err != nil {
-			return nil, err
-		}
-		if len(vsp) > int(^uint16(0)) {
-			return nil, fmt.Errorf("Variable-Size Payload exceeds %v", ^uint16(0))
-		}
- 		fsp = generateFSP(uint16(len(vsp)))
-	} else {
-		// legacy encryptedFsp
-		protobufHeader, err = generateVSP()
-		if err != nil {
-			return nil, err
-		}
-		if len(vsp) > int(^uint16(0)) {
-			return nil, fmt.Errorf("Variable-Size Payload exceeds %v", ^uint16(0))
-		}
-		fsp, err = generateLegacyFSP()
-		if err != nil {
-			return nil, err
-		}
-
-		// generate old-style keys
-		sharedSecretHash := sha256.Sum256(sharedSecret[:])
-		tdKeys.FspKey = sharedSecretHash[:16]
-		tdKeys.FspIv = sharedSecretHash[16:28]
-		tdKeys.VspKey = tdKeys.FspKey
-		Logger().Println("tdKeys.DarkDecoySeed", tdKeys.DarkDecoySeed)
-	    // tdKeys.VspIv is already generated, will be sent by us
+	// generate and encrypt variable size payload
+	vsp, err := generateVSP()
+	if err != nil {
+		return nil, err
 	}
-
-	var encryptedProtobufHeader, encryptedFsp, encryptedVsp []byte
-	if len(protobufHeader) > 0 {
-		// protobufHeader is the legacy VSP
-		encryptedProtobufHeader, err = aesGcmEncrypt(protobufHeader, tdKeys.VspKey, tdKeys.VspIv)
-		encryptedProtobufHeader = append(tdKeys.VspIv, encryptedProtobufHeader...)
+	if len(vsp) > int(^uint16(0)) {
+		return nil, fmt.Errorf("Variable-Size Payload exceeds %v", ^uint16(0))
 	}
-
-	encryptedFsp, err = aesGcmEncrypt(fsp, tdKeys.FspKey, tdKeys.FspIv)
+	encryptedVsp, err := aesGcmEncrypt(vsp, tdKeys.VspKey, tdKeys.VspIv)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(vsp) > 0 && false {// TODO: remove false
-		encryptedVsp, err = aesGcmEncrypt(vsp, tdKeys.VspKey, tdKeys.VspIv)
-		if err != nil {
-			return nil, err
-		}
+	// generate and encrypt fixed size payload
+	fsp := generateFSP(uint16(len(encryptedVsp)))
+	encryptedFsp, err := aesGcmEncrypt(fsp, tdKeys.FspKey, tdKeys.FspIv)
+	if err != nil {
+		return nil, err
 	}
 
 	var tag []byte // tag will be base-64 style encoded
 	tag = append(encryptedVsp, representative...)
 	tag = append(tag, encryptedFsp...)
-	httpRequest := generateHTTPRequestBeginning(encryptedProtobufHeader, tdRaw.decoySpec.GetHostname())
+	httpRequest := generateHTTPRequestBeginning(tdRaw.decoySpec.GetHostname())
 
 	// get current TLS keystream to write payload into the ciphertext of http request
 	keystreamOffset := len(httpRequest)
@@ -463,7 +413,6 @@ func (tdRaw *tdRawConn) prepareTDRequest(handshakeType tdTagType) ([]byte, error
 	}
 	keystreamAtTag := wholeKeystream[keystreamOffset:]
 	httpRequest = append(httpRequest, reverseEncrypt(tag, keystreamAtTag)...)
-
 
 	if tdRaw.tagType == tagHttpGetComplete {
 		httpRequest = append(httpRequest, []byte("\r\n\r\n")...)

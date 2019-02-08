@@ -47,7 +47,6 @@ type TapdanceFlowConn struct {
 	closeErr  error
 
 	flowType flowType
-
 }
 
 // NewTapDanceConn returns TapDance connection, that is ready to be Dial'd

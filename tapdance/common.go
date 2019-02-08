@@ -201,3 +201,17 @@ func generateEligatorTransformedKey(stationPubkey []byte)([]byte, []byte, error)
 	representative[31] |= (0x80 & randByte[0])
 	return sharedSecret[:], representative[:], nil
 }
+
+var darkDecoySNIs  = []string{
+	"wikipedia.org",
+	"yahoo.com",
+	"amazon.com",
+	"live.com",
+	"reddit.com",
+	"netflix.com",
+	"microsoft.com",
+}
+
+func pickDarkDecoySNI() string {
+	return darkDecoySNIs[getRandInt(0, len(darkDecoySNIs)-1)]
+}
