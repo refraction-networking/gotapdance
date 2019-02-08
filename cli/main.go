@@ -64,6 +64,9 @@ func main() {
 			os.Exit(1)
 		}
 		return
+	} else {
+		tdproxy.Logger.Errorf("dark decoys require -connect-addr to be set")
+		os.Exit(1)
 	}
 
 	tapdanceProxy := tdproxy.NewTapDanceProxy(*port)
@@ -80,7 +83,8 @@ func connectDirect(connect_target string, localPort int) error {
 			connect_target, err)
 		os.Exit(1)
 	}
-	tdConn, err := tapdance.Dial("tcp", connect_target)
+	tdDialer := tapdance.Dialer{DarkDecoy:true}
+	tdConn, err := tdDialer.Dial("tcp", connect_target)
 	if err != nil {
 		return fmt.Errorf("Failed to dial %s: %v", connect_target, err)
 	}

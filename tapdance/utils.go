@@ -337,7 +337,7 @@ func (d *ddIpSelector) selectIpAddr(seed []byte) (*net.IP, error) {
 		}
 	}
 	if result == nil {
-		return nil, errors.New("supposedly impossible state in dark decoy selection")
+		return nil, errors.New("let's rewrite dark decoy selector")
 	}
 	return &result, nil
 }
