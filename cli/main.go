@@ -8,7 +8,6 @@ import (
 	"net"
 	"os"
 	"strings"
-	"sync"
 
 	"github.com/pkg/profile"
 	pb "github.com/sergeyfrolov/gotapdance/protobuf"
@@ -21,14 +20,14 @@ func main() {
 	defer profile.Start().Stop()
 
 	var port = flag.Int("port", 10500, "TapDance will listen for connections on this port.")
-	var decoy = flag.String("decoy", "", "Sets single decoy. ClientConf won't be requested. " +
-		"Accepts \"SNI,IP\" or simply \"SNI\" — IP will be resolved. " +
+	var decoy = flag.String("decoy", "", "Sets single decoy. ClientConf won't be requested. "+
+		"Accepts \"SNI,IP\" or simply \"SNI\" — IP will be resolved. "+
 		"Examples: \"site.io,1.2.3.4\", \"site.io\"")
 	var assets_location = flag.String("assetsdir", "./assets/", "Folder to read assets from.")
 	var proxyProtocol = flag.Bool("proxyproto", false, "Enable PROXY protocol, requesting TapDance station to send client's IP to destination.")
 	var debug = flag.Bool("debug", false, "Enable debug logs")
 	var tlsLog = flag.String("tlslog", "", "Filename to write SSL secrets to (allows Wireshark to decrypt TLS connections)")
-	var connect_target = flag.String("connect-addr", "", "If set, tapdance will transparently connect to provided address, which must be either hostname:port or ip:port. " +
+	var connect_target = flag.String("connect-addr", "", "If set, tapdance will transparently connect to provided address, which must be either hostname:port or ip:port. "+
 		"Default(unset): connects client to forwardproxy, to which CONNECT request is yet to be written.")
 	flag.Parse()
 
@@ -79,37 +78,37 @@ func main() {
 
 func connectDirect(connect_target string, localPort int) error {
 	if _, _, err := net.SplitHostPort(connect_target); err != nil {
-		return fmt.Errorf("Failed to parse host and port from connect_target %s: %v",
+		return fmt.Errorf("railed to parse host and port from connect_target %s: %v",
 			connect_target, err)
 		os.Exit(1)
 	}
-	tdDialer := tapdance.Dialer{DarkDecoy:true}
-	tdConn, err := tdDialer.Dial("tcp", connect_target)
-	if err != nil {
-		return fmt.Errorf("Failed to dial %s: %v", connect_target, err)
-	}
+
 	l, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: localPort})
 	if err != nil {
-		return fmt.Errorf("Error listening on port %s: %v", localPort, err)
+		return fmt.Errorf("error listening on port %s: %v", localPort, err)
 	}
-	clientConn, err := l.AcceptTCP()
-	if err != nil {
-		return fmt.Errorf("Error accepting client connection %v: ", err)
+
+	tdDialer := tapdance.Dialer{DarkDecoy: true}
+	for {
+		clientConn, err := l.AcceptTCP()
+		if err != nil {
+			return fmt.Errorf("error accepting client connection %v: ", err)
+		}
+		// TODO: go back to pre-dialing after measuring performance
+		tdConn, err := tdDialer.Dial("tcp", connect_target)
+		if err != nil {
+			return fmt.Errorf("failed to dial %s: %v", connect_target, err)
+		}
+		// TODO: proper connection management with idle timeout
+		go func() {
+			io.Copy(tdConn, clientConn)
+			tdConn.Close()
+		}()
+		go func() {
+			io.Copy(clientConn, tdConn)
+			clientConn.CloseWrite()
+		}()
 	}
-	wg := sync.WaitGroup{}
-	wg.Add(2)
-	go func() {
-		io.Copy(tdConn, clientConn)
-		tdConn.Close()
-		wg.Done()
-	}()
-	go func() {
-		io.Copy(clientConn, tdConn)
-		clientConn.CloseWrite()
-		wg.Done()
-	}()
-	wg.Wait()
-	return nil
 }
 
 func setSingleDecoyHost(decoy string) error {
