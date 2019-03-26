@@ -48,6 +48,9 @@ jobs:
         - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && govendor remove github.com/sergeyfrolov/gotapdance/...)
         # Enable TapDance logging
         - sed -i.bak 's/refraction_networking_tapdance.Logger().Out = ioutil.Discard//' $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go
+        # Write test key
+        - sed -i.bak 's/clientConfFileName := filepath.Join(assetsDir, \"ClientConf\")/clientConfFileName := filepath.Join(assetsDir, \"station_pubkey\")/' $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go
+        - sed -i.bak 's/err = ioutil.WriteFile(clientConfFileName, getEmbeddedClientConf(), 0644)/err = ioutil.WriteFile(clientConfFileName, []byte(\"\\x32\\xb2\\x1a\\xf8\\xaa\\xd7\\xe7\\xfb\\x7f\\xf3\\xd7\\x56\\x02\\xd6\\xd1\\xa7\\x29\\x9d\\x13\\x7a\\x20\\x91\\x91\\x8c\\x57\\xbc\\xb5\\x48\\x32\\xd5\\x22\\x13\"), 0644)/' $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go
       script:
         - go build -race -o build/cli-$TRAVIS_OS_NAME ./cli
         - go build -race -o build/ConsoleClient-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
