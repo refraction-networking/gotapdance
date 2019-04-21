@@ -2,9 +2,12 @@ package tapdance
 
 import (
 	"context"
-	"github.com/refraction-networking/utls"
 	"net"
 	"time"
+
+	pt "git.torproject.org/pluggable-transports/goptlib.git"
+	tls "github.com/refraction-networking/utls"
+	"gitlab.com/yawning/obfs4.git/transports/obfs4"
 )
 
 func dialDarkDecoy(ctx context.Context, tdFlow *TapdanceFlowConn) (net.Conn, error) {
@@ -59,21 +62,39 @@ func dialDarkDecoy(ctx context.Context, tdFlow *TapdanceFlowConn) (net.Conn, err
 		return nil, err
 	}
 
-	darkTlsConn := tls.UClient(darkTcpConn, &tls.Config{ServerName: darkDecoySNI},
-		tls.HelloRandomizedNoALPN)
-	err = darkTlsConn.Handshake()
-	if err != nil {
-		Logger().Infof("%v failed to do tls handshake with dark decoy %v(%v): %v\n",
-			tdFlow.idStr(), darDecoyIpAddr.String(), darkDecoySNI, err)
-		return nil, err
-	}
+	const useObfs4 = true // TODO: remove
+	if useObfs4 {
+		args := &pt.Args{}
+		args.Add("cert", "value")
+		//args.Add("node-id", "value")
+		//args.Add("public-key", "value")
 
-	darkTlsConn.Conn = nil
-	forgedTlsConn := tls.MakeConnWithCompleteHandshake(
-		darkTcpConn, tls.VersionTLS12, // TODO: parse version! :(
-		darkTlsConn.HandshakeState.ServerHello.CipherSuite,
-		tdFlow.tdRaw.tdKeys.NewMasterSecret,
-		darkTlsConn.HandshakeState.Hello.Random[:],
-		darkTlsConn.HandshakeState.ServerHello.Random[:], true)
-	return forgedTlsConn, nil
+		factory, err := obfs4.Transport{}.ClientFactory("this argument is ignored lol")
+		if err != nil {
+			Logger().Infof("failed to create factory: %v\n", err)
+			return nil, err
+		}
+		prediailedDarkConn := func(_, _ string) (conn net.Conn, e error) {
+			return darkTcpConn, nil
+		}
+		return factory.Dial("tcp", darkAddr, prediailedDarkConn, args)
+	} else {
+		darkTlsConn := tls.UClient(darkTcpConn, &tls.Config{ServerName: darkDecoySNI},
+			tls.HelloRandomizedNoALPN)
+		err = darkTlsConn.Handshake()
+		if err != nil {
+			Logger().Infof("%v failed to do tls handshake with dark decoy %v(%v): %v\n",
+				tdFlow.idStr(), darDecoyIpAddr.String(), darkDecoySNI, err)
+			return nil, err
+		}
+
+		darkTlsConn.Conn = nil
+		forgedTlsConn := tls.MakeConnWithCompleteHandshake(
+			darkTcpConn, tls.VersionTLS12, // TODO: parse version! :(
+			darkTlsConn.HandshakeState.ServerHello.CipherSuite,
+			tdFlow.tdRaw.tdKeys.NewMasterSecret,
+			darkTlsConn.HandshakeState.Hello.Random[:],
+			darkTlsConn.HandshakeState.ServerHello.Random[:], true)
+		return forgedTlsConn, nil
+	}
 }
