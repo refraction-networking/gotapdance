@@ -19,7 +19,7 @@ func InitTLSDecoySpec(ip string, sni string) *TLSDecoySpec {
 	if _ip.To4() != nil {
 		ipUint32 = new(uint32)
 		*ipUint32 = binary.BigEndian.Uint32(net.ParseIP(ip).To4())
-	} else if _ip.To16() != nil  {
+	} else if _ip.To16() != nil {
 		ipv6Bytes = _ip
 	}
 	tlsDecoy := TLSDecoySpec{Hostname: &sni, Ipv4Addr: ipUint32, Ipv6Addr: ipv6Bytes}

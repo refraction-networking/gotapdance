@@ -171,7 +171,7 @@ func sleepBeforeConnect(attempt int) (waitTime <-chan time.Time) {
 
 // takes Station's Public Key
 // returns Shared Secret, and Eligator Representative
-func generateEligatorTransformedKey(stationPubkey []byte)([]byte, []byte, error) {
+func generateEligatorTransformedKey(stationPubkey []byte) ([]byte, []byte, error) {
 	if len(stationPubkey) != 32 {
 		return nil, nil, errors.New("Unexpected station pubkey length. Expected: 32." +
 			" Received: " + strconv.Itoa(len(stationPubkey)) + ".")
@@ -202,7 +202,7 @@ func generateEligatorTransformedKey(stationPubkey []byte)([]byte, []byte, error)
 	return sharedSecret[:], representative[:], nil
 }
 
-var darkDecoySNIs  = []string{
+var darkDecoySNIs = []string{
 	"wikipedia.org",
 	"yahoo.com",
 	"amazon.com",

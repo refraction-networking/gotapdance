@@ -2,8 +2,8 @@ package tapdance
 
 import (
 	"context"
-	"net"
 	"errors"
+	"net"
 )
 
 var sessionsTotal CounterUint64
@@ -11,7 +11,7 @@ var sessionsTotal CounterUint64
 // Dialer contains options and implements advanced functions for establishing TapDance connection.
 type Dialer struct {
 	SplitFlows bool
-	DarkDecoy bool
+	DarkDecoy  bool
 	TcpDialer  func(context.Context, string, string) (net.Conn, error)
 }
 
