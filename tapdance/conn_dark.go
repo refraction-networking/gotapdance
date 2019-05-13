@@ -2,12 +2,10 @@ package tapdance
 
 import (
 	"context"
+	"fmt"
 	"net"
+	"strconv"
 	"time"
-
-	pt "git.torproject.org/pluggable-transports/goptlib.git"
-	tls "github.com/refraction-networking/utls"
-	"gitlab.com/yawning/obfs4.git/transports/obfs4"
 )
 
 func dialDarkDecoy(ctx context.Context, tdFlow *TapdanceFlowConn) (net.Conn, error) {
@@ -16,12 +14,12 @@ func dialDarkDecoy(ctx context.Context, tdFlow *TapdanceFlowConn) (net.Conn, err
 		return nil, err
 	}
 
-	darkDecoySNI := pickDarkDecoySNI()
-
 	tdFlow.tdRaw.tagType = tagHttpGetComplete
 	tdFlow.flowType = flowRendezvous
 	tdFlow.tdRaw.darkDecoyUsed = true
-	tdFlow.tdRaw.darkDecoySNI = darkDecoySNI
+
+	// TODO: check if darkDecoyIpAddr is reachable, and fail early if it's not
+	// (dark decoy being IPv6 is the main reason why it would be unreachable)
 
 	err = tdFlow.DialContext(ctx)
 	if err != nil {
@@ -29,7 +27,8 @@ func dialDarkDecoy(ctx context.Context, tdFlow *TapdanceFlowConn) (net.Conn, err
 	}
 	go readAndClose(tdFlow, time.Second*15)
 
-	darDecoyIpAddr, err := _ddIpSelector.selectIpAddr(tdFlow.tdRaw.tdKeys.DarkDecoySeed)
+	flowIdString := fmt.Sprintf("[Session %v]", strconv.FormatUint(tdFlow.tdRaw.sessionId, 10))
+	darkDecoyIpAddr, err := _ddIpSelector.selectIpAddr(tdFlow.tdRaw.tdKeys.DarkDecoySeed)
 	if err != nil {
 		Logger().Infof("%v failed to select dark decoy: %v\n", tdFlow.idStr(), err)
 		return nil, err
@@ -50,51 +49,26 @@ func dialDarkDecoy(ctx context.Context, tdFlow *TapdanceFlowConn) (net.Conn, err
 	}
 	// randomized sleeping here to break the intraflow signal
 	toSleep := time.Millisecond * time.Duration(300+getRttMillisec()*getRandInt(212, 3449)/1000)
-	Logger().Debugf("%v Registration for dark decoy sent, sleeping for %v", tdFlow.idStr(), toSleep)
+	Logger().Debugf("%v Registration for dark decoy sent, sleeping for %v",
+		flowIdString, toSleep)
 	time.Sleep(toSleep)
 
-	darkAddr := net.JoinHostPort(darDecoyIpAddr.String(), "443")
-	Logger().Infof("%v Connecting to dark decoy %v", tdFlow.idStr(), darkAddr)
-	darkTcpConn, err := net.DialTimeout("tcp", darkAddr, 10*time.Second)
+	deadline, deadlineAlreadySet := ctx.Deadline()
+	if !deadlineAlreadySet {
+		// randomized timeout to Dial dark decoy address
+		deadline = time.Now().Add(getRandomDuration(1061*getRttMillisec()*2, 1953*getRttMillisec()*3))
+	}
+	childCtx, childCancelFunc := context.WithDeadline(ctx, deadline)
+	defer childCancelFunc()
+
+	darkAddr := net.JoinHostPort(darkDecoyIpAddr.String(), "443")
+	darkTcpConn, err := (&net.Dialer{}).DialContext(childCtx, "tcp", darkAddr)
 	if err != nil {
 		Logger().Infof("%v failed to dial dark decoy %v: %v\n",
-			tdFlow.idStr(), darDecoyIpAddr.String(), err)
+			flowIdString, darkDecoyIpAddr.String(), err)
 		return nil, err
 	}
+	Logger().Infof("%v Connected to dark decoy %v", flowIdString, darkAddr)
 
-	const useObfs4 = true // TODO: remove
-	if useObfs4 {
-		args := &pt.Args{}
-		args.Add("cert", "value")
-		//args.Add("node-id", "value")
-		//args.Add("public-key", "value")
-
-		factory, err := obfs4.Transport{}.ClientFactory("this argument is ignored lol")
-		if err != nil {
-			Logger().Infof("failed to create factory: %v\n", err)
-			return nil, err
-		}
-		prediailedDarkConn := func(_, _ string) (conn net.Conn, e error) {
-			return darkTcpConn, nil
-		}
-		return factory.Dial("tcp", darkAddr, prediailedDarkConn, args)
-	} else {
-		darkTlsConn := tls.UClient(darkTcpConn, &tls.Config{ServerName: darkDecoySNI},
-			tls.HelloRandomizedNoALPN)
-		err = darkTlsConn.Handshake()
-		if err != nil {
-			Logger().Infof("%v failed to do tls handshake with dark decoy %v(%v): %v\n",
-				tdFlow.idStr(), darDecoyIpAddr.String(), darkDecoySNI, err)
-			return nil, err
-		}
-
-		darkTlsConn.Conn = nil
-		forgedTlsConn := tls.MakeConnWithCompleteHandshake(
-			darkTcpConn, tls.VersionTLS12, // TODO: parse version! :(
-			darkTlsConn.HandshakeState.ServerHello.CipherSuite,
-			tdFlow.tdRaw.tdKeys.NewMasterSecret,
-			darkTlsConn.HandshakeState.Hello.Random[:],
-			darkTlsConn.HandshakeState.ServerHello.Random[:], true)
-		return forgedTlsConn, nil
-	}
+	return darkTcpConn, nil
 }

@@ -106,27 +106,31 @@ func (m *tdTagType) Str() string {
 	}
 }
 
-// First byte of tag is for FLAGS
+// Fixed-Size-Payload has a 1 byte flags field.
 // bit 0 (1 << 7) determines if flow is bidirectional(0) or upload-only(1)
-// bits 1-5 are unassigned
+// bit 1 (1 << 6) enables dark-decoys
+// bits 2-5 are unassigned
 // bit 6 determines whether PROXY-protocol-formatted string will be sent
 // bit 7 (1 << 0) signals to use TypeLen outer proto
 var (
 	tdFlagUploadOnly  = uint8(1 << 7)
+	tdFlagDarkDecoy   = uint8(1 << 6)
 	tdFlagProxyHeader = uint8(1 << 1)
 	tdFlagUseTIL      = uint8(1 << 0)
 )
 
 var default_flags = tdFlagUseTIL
 
-// Requests station to proxy client IP to upstream in following form:
-// CONNECT 1.2.3.4:443 HTTP/1.1\r\n
-// Host: 1.2.3.4\r\n
-// \r\n
+// Global EnableProxyProtocol() is deprecated,
+// use tapdance.Dialer with UseProxyHeader flag instead
+//
+// Requests station to send client's IP to covert in following form:
 // PROXY TCP4 x.x.x.x 127.0.0.1 1111 1234\r\n
 //       ^__^ ^_____^ ^_________________^
 //      proto clientIP      garbage
 func EnableProxyProtocol() {
+	Logger().Println("tapdance.EnableProxyProtocol() is deprecated, " +
+		"use tapdance.Dialer with UseProxyHeader flag instead.")
 	default_flags |= tdFlagProxyHeader
 }
 
@@ -200,18 +204,4 @@ func generateEligatorTransformedKey(stationPubkey []byte) ([]byte, []byte, error
 	}
 	representative[31] |= (0x80 & randByte[0])
 	return sharedSecret[:], representative[:], nil
-}
-
-var darkDecoySNIs = []string{
-	"wikipedia.org",
-	"yahoo.com",
-	"amazon.com",
-	"live.com",
-	"reddit.com",
-	"netflix.com",
-	"microsoft.com",
-}
-
-func pickDarkDecoySNI() string {
-	return darkDecoySNIs[getRandInt(0, len(darkDecoySNIs)-1)]
 }
