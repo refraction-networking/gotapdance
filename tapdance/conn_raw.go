@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/refraction-networking/utls"
+	tls "github.com/refraction-networking/utls"
 	pb "github.com/sergeyfrolov/gotapdance/protobuf"
 )
 
@@ -45,8 +45,9 @@ type tdRawConn struct {
 	closeOnce sync.Once
 
 	// dark decoy variables
-	darkDecoyUsed bool
-	darkDecoySNI  string
+	darkDecoyUsed       bool
+	darkDecoySNI        string
+	darkDecoydIpSupport IpSupport
 
 	// stats to report
 	sessionStats pb.SessionStats
@@ -359,6 +360,7 @@ func (tdRaw *tdRawConn) prepareTDRequest(handshakeType tdTagType) ([]byte, error
 		}
 		if tdRaw.darkDecoyUsed {
 			initProto.MaskedDecoyServerName = &tdRaw.darkDecoySNI
+			initProto.ClientDDIpSupport = &tdRaw.darkDecoydIpSupport
 		}
 		Logger().Debugln(tdRaw.idStr()+" Initial protobuf", initProto)
 		const AES_GCM_TAG_SIZE = 16

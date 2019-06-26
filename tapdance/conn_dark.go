@@ -10,8 +10,18 @@ import (
 	"gitlab.com/yawning/obfs4.git/transports/obfs4"
 )
 
+func checkIpSupport(ctx context.Context) (IpSupport, error) {
+	return BothSupport, nil
+}
+
 func dialDarkDecoy(ctx context.Context, tdFlow *TapdanceFlowConn) (net.Conn, error) {
-	_ddIpSelector, err := newDDIpSelector([]string{"192.122.190.0/24", "2001:48a8:687f:1::/64"})
+
+	ipSupport, err := checkIpSupport(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	_ddIpSelector, err := newDDIpSelector([]string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}, ipSupport)
 	if err != nil {
 		return nil, err
 	}
@@ -22,6 +32,7 @@ func dialDarkDecoy(ctx context.Context, tdFlow *TapdanceFlowConn) (net.Conn, err
 	tdFlow.flowType = flowRendezvous
 	tdFlow.tdRaw.darkDecoyUsed = true
 	tdFlow.tdRaw.darkDecoySNI = darkDecoySNI
+	tdFlow.tdRaw.darkDecoydIpSupport = ipSupport
 
 	err = tdFlow.DialContext(ctx)
 	if err != nil {

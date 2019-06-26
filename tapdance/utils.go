@@ -7,14 +7,15 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
-	"github.com/pkg/errors"
-	"golang.org/x/crypto/hkdf"
 	"math/big"
 	mrand "math/rand"
 	"net"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
+	"golang.org/x/crypto/hkdf"
 
 	"fmt"
 )
@@ -264,7 +265,15 @@ type ddIpSelector struct {
 	nets []net.IPNet
 }
 
-func newDDIpSelector(netsStr []string) (*ddIpSelector, error) {
+type IpSupport uint32
+
+const (
+	V4Support   IpSupport = 1
+	V6Support   IpSupport = 2
+	BothSupport IpSupport = 3
+)
+
+func newDDIpSelector(netsStr []string, ipsprt IpSupport) (*ddIpSelector, error) {
 	dd := ddIpSelector{}
 	for _, _netStr := range netsStr {
 		_, _net, err := net.ParseCIDR(_netStr)
@@ -274,7 +283,19 @@ func newDDIpSelector(netsStr []string) (*ddIpSelector, error) {
 		if _net == nil {
 			return nil, fmt.Errorf("failed to parse %v as subnet", _netStr)
 		}
-		dd.nets = append(dd.nets, *_net)
+
+		// Split out IPv4 and IPv6 for clients that do not support IPv6
+		if ipv4net := _net.IP.To4(); ipv4net != nil {
+			if ipsprt&V4Support != 0 {
+				dd.nets = append(dd.nets, *_net)
+			}
+		} else if ipv6net := _net.IP.To16(); ipv6net != nil {
+			if ipsprt&V6Support != 0 {
+				dd.nets = append(dd.nets, *_net)
+			}
+		} else {
+			return nil, fmt.Errorf("failed to parse %v", _net)
+		}
 	}
 	return &dd, nil
 }
