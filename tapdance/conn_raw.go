@@ -45,9 +45,9 @@ type tdRawConn struct {
 	closeOnce sync.Once
 
 	// dark decoy variables
-	darkDecoyUsed       bool
-	darkDecoySNI        string
-	darkDecoydIpSupport IpSupport
+	darkDecoyUsed      bool
+	darkDecoySNI       string
+	darkDecoyV6Support bool
 
 	// stats to report
 	sessionStats pb.SessionStats
@@ -360,7 +360,7 @@ func (tdRaw *tdRawConn) prepareTDRequest(handshakeType tdTagType) ([]byte, error
 		}
 		if tdRaw.darkDecoyUsed {
 			initProto.MaskedDecoyServerName = &tdRaw.darkDecoySNI
-			initProto.ClientDDIpSupport = &tdRaw.darkDecoydIpSupport
+			initProto.DarkDecoyV6Support = &tdRaw.darkDecoyV6Support
 		}
 		Logger().Debugln(tdRaw.idStr()+" Initial protobuf", initProto)
 		const AES_GCM_TAG_SIZE = 16

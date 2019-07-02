@@ -1,15 +1,13 @@
-
 package tapdance
 
-import ( 
+import (
 	"fmt"
 	"testing"
 )
 
-func TestNewInterfaces(t *testing.T) {
-	fmt.Println("Getting Network interfaces")
-}
-
 func TestIpV6Support(t *testing.T) {
 	fmt.Println("Testing IPv6 Support")
+
+	fmt.Printf("Supports IPV6: %t\n", SupportsIpv6())
+	// fmt.Printf("Supports IPV4: %t\n", SupportsIpv4())
 }

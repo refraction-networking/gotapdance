@@ -10,16 +10,9 @@ import (
 	"gitlab.com/yawning/obfs4.git/transports/obfs4"
 )
 
-func checkIpSupport(ctx context.Context) (IpSupport, error) {
-	return BothSupport, nil
-}
-
 func dialDarkDecoy(ctx context.Context, tdFlow *TapdanceFlowConn) (net.Conn, error) {
 
-	ipSupport, err := checkIpSupport(ctx)
-	if err != nil {
-		return nil, err
-	}
+	ipSupport := SupportsIpv6()
 
 	_ddIpSelector, err := newDDIpSelector([]string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}, ipSupport)
 	if err != nil {
@@ -32,7 +25,7 @@ func dialDarkDecoy(ctx context.Context, tdFlow *TapdanceFlowConn) (net.Conn, err
 	tdFlow.flowType = flowRendezvous
 	tdFlow.tdRaw.darkDecoyUsed = true
 	tdFlow.tdRaw.darkDecoySNI = darkDecoySNI
-	tdFlow.tdRaw.darkDecoydIpSupport = ipSupport
+	tdFlow.tdRaw.darkDecoyV6Support = ipSupport
 
 	err = tdFlow.DialContext(ctx)
 	if err != nil {
@@ -80,7 +73,8 @@ func dialDarkDecoy(ctx context.Context, tdFlow *TapdanceFlowConn) (net.Conn, err
 		//args.Add("node-id", "value")
 		//args.Add("public-key", "value")
 
-		factory, err := obfs4.Transport{}.ClientFactory("this argument is ignored lol")
+		obfs4T := &obfs4.Transport{}
+		factory, err := obfs4T.ClientFactory("this argument is ignored lol")
 		if err != nil {
 			Logger().Infof("failed to create factory: %v\n", err)
 			return nil, err

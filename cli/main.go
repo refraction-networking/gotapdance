@@ -78,7 +78,7 @@ func main() {
 
 func connectDirect(connect_target string, localPort int) error {
 	if _, _, err := net.SplitHostPort(connect_target); err != nil {
-		return fmt.Errorf("railed to parse host and port from connect_target %s: %v",
+		return fmt.Errorf("failed to parse host and port from connect_target %s: %v",
 			connect_target, err)
 		os.Exit(1)
 	}
