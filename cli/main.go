@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -21,15 +22,26 @@ func main() {
 
 	var port = flag.Int("port", 10500, "TapDance will listen for connections on this port.")
 	var decoy = flag.String("decoy", "", "Sets single decoy. ClientConf won't be requested. "+
-		"Accepts \"SNI,IP\" or simply \"SNI\" — IP will be resolved. "+
-		"Examples: \"site.io,1.2.3.4\", \"site.io\"")
+		"Accepts \"SNI,IP\" or simply \n\"SNI\" — IP will be resolved. "+
+		"\nExamples: \"site.io,1.2.3.4\", \"site.io\"")
 	var assets_location = flag.String("assetsdir", "./assets/", "Folder to read assets from.")
-	var proxyProtocol = flag.Bool("proxyproto", false, "Enable PROXY protocol, requesting TapDance station to send client's IP to destination.")
+	var proxyProtocol = flag.Uint("proxyproto", 1, "Specify PROXY protocol, requesting TapDance station to send client's IP to \ndestination. Used when connecting to followup proxy after.")
 	var debug = flag.Bool("debug", false, "Enable debug logs")
 	var tlsLog = flag.String("tlslog", "", "Filename to write SSL secrets to (allows Wireshark to decrypt TLS connections)")
-	var connect_target = flag.String("connect-addr", "", "If set, tapdance will transparently connect to provided address, which must be either hostname:port or ip:port. "+
-		"Default(unset): connects client to forwardproxy, to which CONNECT request is yet to be written.")
+	var connect_target = flag.String("connect-addr", "", "If set, tapdance will transparently connect to provided address, which \nmust be either hostname:port or ip:port. "+
+		"Default(unset): connects client to \nforwardproxy, to which CONNECT request is yet to be written.")
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Dark Decoy CLI\n$./cli -connect-addr=<decoy_address> [OPTIONS] \n\nOptions:\n")
+		flag.PrintDefaults()
+	}
 	flag.Parse()
+
+	if *connect_target == "" {
+		tdproxy.Logger.Errorf("dark decoys require -connect-addr to be set\n")
+		flag.Usage()
+
+		os.Exit(1)
+	}
 
 	if *debug {
 		tapdance.Logger().Level = logrus.DebugLevel
@@ -45,8 +57,10 @@ func main() {
 			os.Exit(255)
 		}
 	}
-	if *proxyProtocol {
-		tapdance.EnableProxyProtocol()
+
+	err := tapdance.EnableProxyProtocol(*proxyProtocol)
+	if err != nil {
+
 	}
 
 	if *tlsLog != "" {
@@ -56,20 +70,16 @@ func main() {
 		}
 	}
 
-	if *connect_target != "" {
-		err := connectDirect(*connect_target, *port)
-		if err != nil {
-			tapdance.Logger().Println(err)
-			os.Exit(1)
-		}
-		return
-	} else {
-		tdproxy.Logger.Errorf("dark decoys require -connect-addr to be set")
+	tapdance.Logger().Debugf("STATION_PUBKEY\n%s", hex.Dump((*(tapdance.Assets().GetPubkey()))[:]))
+
+	err = connectDirect(*connect_target, *port)
+	if err != nil {
+		tapdance.Logger().Println(err)
 		os.Exit(1)
 	}
 
 	tapdanceProxy := tdproxy.NewTapDanceProxy(*port)
-	err := tapdanceProxy.ListenAndServe()
+	err = tapdanceProxy.ListenAndServe()
 	if err != nil {
 		tdproxy.Logger.Errorf("Failed to ListenAndServe(): %v\n", err)
 		os.Exit(1)
