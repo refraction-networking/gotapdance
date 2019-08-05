@@ -25,7 +25,6 @@ func main() {
 		"Accepts \"SNI,IP\" or simply \n\"SNI\" — IP will be resolved. "+
 		"\nExamples: \"site.io,1.2.3.4\", \"site.io\"")
 	var assets_location = flag.String("assetsdir", "./assets/", "Folder to read assets from.")
-	var proxyProtocol = flag.Uint("proxyproto", 1, "Specify PROXY protocol, requesting TapDance station to send client's IP to \ndestination. Used when connecting to followup proxy after.")
 	var debug = flag.Bool("debug", false, "Enable debug logs")
 	var tlsLog = flag.String("tlslog", "", "Filename to write SSL secrets to (allows Wireshark to decrypt TLS connections)")
 	var connect_target = flag.String("connect-addr", "", "If set, tapdance will transparently connect to provided address, which \nmust be either hostname:port or ip:port. "+
@@ -58,10 +57,7 @@ func main() {
 		}
 	}
 
-	err := tapdance.EnableProxyProtocol(*proxyProtocol)
-	if err != nil {
-
-	}
+	tapdance.EnableProxyProtocol()
 
 	if *tlsLog != "" {
 		err := tapdance.SetTlsLogFilename(*tlsLog)
@@ -72,7 +68,7 @@ func main() {
 
 	tapdance.Logger().Debugf("STATION_PUBKEY\n%s", hex.Dump((*(tapdance.Assets().GetPubkey()))[:]))
 
-	err = connectDirect(*connect_target, *port)
+	err := connectDirect(*connect_target, *port)
 	if err != nil {
 		tapdance.Logger().Println(err)
 		os.Exit(1)

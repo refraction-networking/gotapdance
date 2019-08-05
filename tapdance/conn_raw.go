@@ -44,6 +44,8 @@ type tdRawConn struct {
 	closed    chan struct{}
 	closeOnce sync.Once
 
+	useProxyHeader bool // request the station to prepend the connection with PROXY header
+
 	// dark decoy variables
 	darkDecoyUsed      bool
 	darkDecoySNI       string
@@ -345,7 +347,9 @@ func (tdRaw *tdRawConn) generateVSP() ([]byte, error) {
 		DecoyListGeneration: &currGen,
 	}
 	if tdRaw.darkDecoyUsed {
-		initProto.MaskedDecoyServerName = &tdRaw.darkDecoySNI
+		if len(tdRaw.darkDecoySNI) > 0 {
+			initProto.MaskedDecoyServerName = &tdRaw.darkDecoySNI
+		}
 		initProto.V6Support = &tdRaw.darkDecoyV6Support
 	}
 	Logger().Debugln(tdRaw.idStr()+" Initial protobuf", initProto)
@@ -359,10 +363,12 @@ func (tdRaw *tdRawConn) generateVSP() ([]byte, error) {
 func (tdRaw *tdRawConn) generateFSP(espSize uint16) []byte {
 	buf := make([]byte, 6)
 	binary.BigEndian.PutUint16(buf[0:2], espSize)
-
 	flags := default_flags
 	if tdRaw.tagType == tagHttpPostIncomplete {
 		flags |= tdFlagUploadOnly
+	}
+	if tdRaw.useProxyHeader {
+		flags |= tdFlagProxyHeader
 	}
 	buf[2] = flags
 

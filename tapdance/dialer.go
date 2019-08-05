@@ -11,8 +11,10 @@ var sessionsTotal CounterUint64
 // Dialer contains options and implements advanced functions for establishing TapDance connection.
 type Dialer struct {
 	SplitFlows bool
-	DarkDecoy  bool
 	TcpDialer  func(context.Context, string, string) (net.Conn, error)
+
+	DarkDecoy      bool
+	UseProxyHeader bool
 }
 
 // Dial connects to the address on the named network.
@@ -57,11 +59,15 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 
 	if !d.SplitFlows {
 		flow, err := makeTdFlow(flowBidirectional, nil, address)
+		flow.tdRaw.useProxyHeader = d.UseProxyHeader
 		if err != nil {
 			return nil, err
 		}
 		flow.tdRaw.TcpDialer = d.TcpDialer
 		if d.DarkDecoy {
+			if len(address) == 0 {
+				return nil, errors.New("Dark Decoys require target address to be set")
+			}
 			return dialDarkDecoy(ctx, flow)
 		}
 		return flow, flow.DialContext(ctx)
