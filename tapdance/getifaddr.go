@@ -6,7 +6,7 @@ package tapdance
 #include <arpa/inet.h>
 #include <ifaddrs.h>
 
-char ADDR[INET_ADDRSTRLEN];
+char ADDR[INET6_ADDRSTRLEN];
 */
 import "C"
 import (

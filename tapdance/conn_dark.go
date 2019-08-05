@@ -66,7 +66,7 @@ func dialDarkDecoy(ctx context.Context, tdFlow *TapdanceFlowConn) (net.Conn, err
 		return nil, err
 	}
 
-	const useObfs4 = true // TODO: remove
+	const useObfs4 = false // TODO: remove
 	if useObfs4 {
 		args := &pt.Args{}
 		args.Add("cert", "value")

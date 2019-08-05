@@ -5,11 +5,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/agl/ed25519/extra25519"
-	"golang.org/x/crypto/curve25519"
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/agl/ed25519/extra25519"
+	"golang.org/x/crypto/curve25519"
 )
 
 const timeoutMax = 30000
@@ -126,8 +127,11 @@ var default_flags = tdFlagUseTIL
 // PROXY TCP4 x.x.x.x 127.0.0.1 1111 1234\r\n
 //       ^__^ ^_____^ ^_________________^
 //      proto clientIP      garbage
-func EnableProxyProtocol() {
+//
+// TODO: Add Support for more client-to-station proxies here
+func EnableProxyProtocol(protocolId uint) error {
 	default_flags |= tdFlagProxyHeader
+	return nil
 }
 
 var tlsSecretLog string

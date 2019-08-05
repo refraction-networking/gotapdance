@@ -176,7 +176,7 @@ func (tdRaw *tdRawConn) tryDialOnce(ctx context.Context, expectedTransition pb.S
 		return errors.New("Closed")
 	}
 
-	tdRequest, err := tdRaw.prepareTDRequest(tdRaw.tagType)
+	tdRequest, err := tdRaw.prepareTDRequest()
 	if err != nil {
 		Logger().Errorf(tdRaw.idStr() +
 			" Preparation of initial TD request failed with " + err.Error())
@@ -330,45 +330,46 @@ func (tdRaw *tdRawConn) closeWrite() error {
 	return tdRaw.tcpConn.CloseWrite()
 }
 
-func (tdRaw *tdRawConn) prepareTDRequest(handshakeType tdTagType) ([]byte, error) {
-	generateFSP := func(espSize uint16) []byte {
-		buf := make([]byte, 6)
-		binary.BigEndian.PutUint16(buf[0:2], espSize)
-
-		flags := default_flags
-		if tdRaw.tagType == tagHttpPostIncomplete {
-			flags |= tdFlagUploadOnly
-		}
-		buf[2] = flags
-
-		return buf
+func (tdRaw *tdRawConn) generateVSP() ([]byte, error) {
+	// Generate and marshal protobuf
+	transition := pb.C2S_Transition_C2S_SESSION_INIT
+	var covert *string
+	if len(tdRaw.covert) > 0 {
+		transition = pb.C2S_Transition_C2S_SESSION_COVERT_INIT
+		covert = &tdRaw.covert
 	}
-
-	generateVSP := func() ([]byte, error) {
-		// Generate and marshal protobuf
-		transition := pb.C2S_Transition_C2S_SESSION_INIT
-		var covert *string
-		if len(tdRaw.covert) > 0 {
-			transition = pb.C2S_Transition_C2S_SESSION_COVERT_INIT
-			covert = &tdRaw.covert
-		}
-		currGen := Assets().GetGeneration()
-		initProto := &pb.ClientToStation{
-			CovertAddress:       covert,
-			StateTransition:     &transition,
-			DecoyListGeneration: &currGen,
-		}
-		if tdRaw.darkDecoyUsed {
-			initProto.MaskedDecoyServerName = &tdRaw.darkDecoySNI
-			initProto.DarkDecoyV6Support = &tdRaw.darkDecoyV6Support
-		}
-		Logger().Debugln(tdRaw.idStr()+" Initial protobuf", initProto)
-		const AES_GCM_TAG_SIZE = 16
-		for (proto.Size(initProto)+AES_GCM_TAG_SIZE)%3 != 0 {
-			initProto.Padding = append(initProto.Padding, byte(0))
-		}
-		return proto.Marshal(initProto)
+	currGen := Assets().GetGeneration()
+	initProto := &pb.ClientToStation{
+		CovertAddress:       covert,
+		StateTransition:     &transition,
+		DecoyListGeneration: &currGen,
 	}
+	if tdRaw.darkDecoyUsed {
+		initProto.MaskedDecoyServerName = &tdRaw.darkDecoySNI
+		initProto.V6Support = &tdRaw.darkDecoyV6Support
+	}
+	Logger().Debugln(tdRaw.idStr()+" Initial protobuf", initProto)
+	const AES_GCM_TAG_SIZE = 16
+	for (proto.Size(initProto)+AES_GCM_TAG_SIZE)%3 != 0 {
+		initProto.Padding = append(initProto.Padding, byte(0))
+	}
+	return proto.Marshal(initProto)
+}
+
+func (tdRaw *tdRawConn) generateFSP(espSize uint16) []byte {
+	buf := make([]byte, 6)
+	binary.BigEndian.PutUint16(buf[0:2], espSize)
+
+	flags := default_flags
+	if tdRaw.tagType == tagHttpPostIncomplete {
+		flags |= tdFlagUploadOnly
+	}
+	buf[2] = flags
+
+	return buf
+}
+
+func (tdRaw *tdRawConn) prepareTDRequest() ([]byte, error) {
 
 	sharedSecret, representative, err := generateEligatorTransformedKey(tdRaw.stationPubkey)
 	if err != nil {
@@ -382,7 +383,7 @@ func (tdRaw *tdRawConn) prepareTDRequest(handshakeType tdTagType) ([]byte, error
 	tdRaw.tdKeys = tdKeys
 
 	// generate and encrypt variable size payload
-	vsp, err := generateVSP()
+	vsp, err := tdRaw.generateVSP()
 	if err != nil {
 		return nil, err
 	}
@@ -395,7 +396,7 @@ func (tdRaw *tdRawConn) prepareTDRequest(handshakeType tdTagType) ([]byte, error
 	}
 
 	// generate and encrypt fixed size payload
-	fsp := generateFSP(uint16(len(encryptedVsp)))
+	fsp := tdRaw.generateFSP(uint16(len(encryptedVsp)))
 	encryptedFsp, err := aesGcmEncrypt(fsp, tdKeys.FspKey, tdKeys.FspIv)
 	if err != nil {
 		return nil, err
