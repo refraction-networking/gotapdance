@@ -15,6 +15,7 @@ type Dialer struct {
 
 	DarkDecoy      bool
 	UseProxyHeader bool
+	V6Support      *bool // *bool so that it is a nullable type. that can be overridden
 }
 
 // Dial connects to the address on the named network.
@@ -60,6 +61,7 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 	if !d.SplitFlows {
 		flow, err := makeTdFlow(flowBidirectional, nil, address)
 		flow.tdRaw.useProxyHeader = d.UseProxyHeader
+		flow.tdRaw.darkDecoyV6Support = d.V6Support
 		if err != nil {
 			return nil, err
 		}

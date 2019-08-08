@@ -49,7 +49,7 @@ type tdRawConn struct {
 	// dark decoy variables
 	darkDecoyUsed      bool
 	darkDecoySNI       string
-	darkDecoyV6Support bool
+	darkDecoyV6Support *bool // *bool so that it is a nullable type. that can be overridden by the dialer
 
 	// stats to report
 	sessionStats pb.SessionStats
@@ -350,7 +350,7 @@ func (tdRaw *tdRawConn) generateVSP() ([]byte, error) {
 		if len(tdRaw.darkDecoySNI) > 0 {
 			initProto.MaskedDecoyServerName = &tdRaw.darkDecoySNI
 		}
-		initProto.V6Support = &tdRaw.darkDecoyV6Support
+		initProto.V6Support = tdRaw.darkDecoyV6Support
 	}
 	Logger().Debugln(tdRaw.idStr()+" Initial protobuf", initProto)
 	const AES_GCM_TAG_SIZE = 16

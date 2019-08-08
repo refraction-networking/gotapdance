@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -9,6 +8,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/pkg/profile"
 	pb "github.com/sergeyfrolov/gotapdance/protobuf"
@@ -57,16 +57,12 @@ func main() {
 		}
 	}
 
-	tapdance.EnableProxyProtocol()
-
 	if *tlsLog != "" {
 		err := tapdance.SetTlsLogFilename(*tlsLog)
 		if err != nil {
 			tapdance.Logger().Fatal(err)
 		}
 	}
-
-	tapdance.Logger().Debugf("STATION_PUBKEY\n%s", hex.Dump((*(tapdance.Assets().GetPubkey()))[:]))
 
 	err := connectDirect(*connect_target, *port)
 	if err != nil {
@@ -94,7 +90,8 @@ func connectDirect(connect_target string, localPort int) error {
 		return fmt.Errorf("error listening on port %s: %v", localPort, err)
 	}
 
-	tdDialer := tapdance.Dialer{DarkDecoy: true}
+	v6Support := false
+	tdDialer := tapdance.Dialer{DarkDecoy: true, UseProxyHeader: false, V6Support: &v6Support}
 	for {
 		clientConn, err := l.AcceptTCP()
 		if err != nil {
@@ -105,15 +102,24 @@ func connectDirect(connect_target string, localPort int) error {
 		if err != nil {
 			return fmt.Errorf("failed to dial %s: %v", connect_target, err)
 		}
-		// TODO: proper connection management with idle timeout
+
+		// Copy data from the client application into the DarkDecoy connection.
+		// 		TODO: Make sure this works
+		// 		TODO: proper connection management with idle timeout
+		var wg sync.WaitGroup
+		wg.Add(2)
 		go func() {
 			io.Copy(tdConn, clientConn)
+			wg.Done()
 			tdConn.Close()
 		}()
 		go func() {
 			io.Copy(clientConn, tdConn)
+			wg.Done()
 			clientConn.CloseWrite()
 		}()
+		wg.Wait()
+		tapdance.Logger().Debug("copy loop ended")
 	}
 }
 

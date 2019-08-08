@@ -10,7 +10,16 @@ import (
 
 func dialDarkDecoy(ctx context.Context, tdFlow *TapdanceFlowConn) (net.Conn, error) {
 
-	ipSupport := SupportsIpv6()
+	// Check Ipv6 support
+	// 		*bool so that it is a nullable type. that can be overridden by the dialer & tdRawConn
+	var ipSupport bool
+	if tdFlow.tdRaw.darkDecoyV6Support == nil {
+		ipSupport = SupportsIpv6()
+		tdFlow.tdRaw.darkDecoyV6Support = &ipSupport
+	} else {
+		ipSupport = *tdFlow.tdRaw.darkDecoyV6Support
+	}
+	// ipSupport := false
 
 	_ddIpSelector, err := newDDIpSelector([]string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}, ipSupport)
 	if err != nil {
@@ -21,7 +30,6 @@ func dialDarkDecoy(ctx context.Context, tdFlow *TapdanceFlowConn) (net.Conn, err
 	tdFlow.flowType = flowRendezvous
 	tdFlow.tdRaw.darkDecoyUsed = true
 	// tdFlow.tdRaw.darkDecoySNI = darkDecoySNI
-	tdFlow.tdRaw.darkDecoyV6Support = ipSupport
 
 	// TODO: check if darkDecoyIpAddr is reachable, and fail early if it's not
 	// (dark decoy being IPv6 is the main reason why it would be unreachable)
