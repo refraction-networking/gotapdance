@@ -92,7 +92,7 @@ func connectDirect(connect_target string, localPort int, proxyHeader bool, v6Sup
 
 	l, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: localPort})
 	if err != nil {
-		return fmt.Errorf("error listening on port %s: %v", localPort, err)
+		return fmt.Errorf("error listening on port %v: %v", localPort, err)
 	}
 
 	tdDialer := tapdance.Dialer{DarkDecoy: true, UseProxyHeader: proxyHeader, V6Support: v6Support}

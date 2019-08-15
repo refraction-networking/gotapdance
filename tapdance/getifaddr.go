@@ -10,26 +10,9 @@ char ADDR[INET6_ADDRSTRLEN];
 */
 import "C"
 import (
-	"regexp"
-	"runtime"
 	"unsafe"
+	"net"
 )
-
-type InterfaceInfo struct {
-	Name       string
-	InBytes    uint
-	OutBytes   uint
-	InPackets  uint
-	OutPackets uint
-	InErrors   uint
-	OutErrors  uint
-}
-
-type InterfacesInfo struct {
-	List []InterfaceInfo
-	IP   string
-}
-
 
 // Get all interfaces on the device and check if they support by identifying 
 //  a non-local interface with an assigned ipv6 address
@@ -43,25 +26,21 @@ func SupportsIpv6() (bool) {
 
 	for fi := ifaces; fi != nil; fi = fi.ifa_next {
 
-		ifa_name := C.GoString(fi.ifa_name)
-		// ifa_family := C.int(fi.ifa_addr.sa_family)
-
-		if fi.ifa_addr == nil  || 
-			fi.ifa_addr.sa_family != C.AF_INET6 ||
-			rx_lo.Match([]byte(ifa_name)) || 
-			!realInterfaceName(ifa_name) {
+		if fi.ifa_addr == nil || fi.ifa_addr.sa_family != C.AF_INET6 {
 			continue
 		}
 
-		sa_in := (*C.struct_sockaddr_in)(unsafe.Pointer(fi.ifa_addr))
+		sa_in := (*C.struct_sockaddr_in6)(unsafe.Pointer(fi.ifa_addr))
 		if C.inet_ntop(
 			C.int(fi.ifa_addr.sa_family), 
-			unsafe.Pointer(&sa_in.sin_addr),
+			unsafe.Pointer(&sa_in.sin6_addr),
 			&C.ADDR[0],
 			C.socklen_t(unsafe.Sizeof(C.ADDR))) != nil {
 
-			// IP := C.GoString((*C.char)(unsafe.Pointer(&C.ADDR)))
-			return true
+			IpStr := C.GoString((*C.char)(unsafe.Pointer(&C.ADDR[0])))
+			if realInterfaceAddr( IpStr ) {
+				return true
+			}
 		} else {
 			continue
 		}
@@ -70,79 +49,26 @@ func SupportsIpv6() (bool) {
 	return false
 }
 
-/*
-func SupportsIpv4() (bool) {
-	var ifaces *C.struct_ifaddrs
+var netBlacklistv6 = map[string]string{
+	"multicast": "ff00::/8",
+	"private":   "fc00::/7",
+	"link":	  	 "fe80::/10",
+	"lo":		 "::1/128",
+}
 
-	if getrc, _ := C.getifaddrs(&ifaces); getrc != 0 {
-		return false
-	}
-	defer C.freeifaddrs(ifaces)
+func realInterfaceAddr(IpStr string) bool {
 
-	for fi := ifaces; fi != nil; fi = fi.ifa_next {
+	addr := net.ParseIP( IpStr )
 
-		ifa_name := C.GoString(fi.ifa_name)
-		// ifa_family := C.int(fi.ifa_addr.sa_family)
-
-		if fi.ifa_addr == nil  || 
-			fi.ifa_addr.sa_family != C.AF_INET ||
-			rx_lo.Match([]byte(ifa_name)) || 
-			!realInterfaceName(ifa_name) {
-			continue
+	for _, netStr := range netBlacklistv6{
+		_, blacklistNet, err := net.ParseCIDR(netStr)
+		if err != nil {
+			return false
 		}
-
-		sa_in := (*C.struct_sockaddr_in)(unsafe.Pointer(fi.ifa_addr))
-		if C.inet_ntop(
-			C.int(fi.ifa_addr.sa_family), 
-			unsafe.Pointer(&sa_in.sin_addr),
-			&C.ADDR[0],
-			C.socklen_t(unsafe.Sizeof(C.ADDR))) != nil {
-
-			// IP := C.GoString((*C.char)(unsafe.Pointer(&C.ADDR)))
-			return true
-		} else {
-			continue
-		}
-		
-	}
-	return false
-}*/
-
-var (
-	rx_lo      = regexp.MustCompile("lo\\d*") // "lo" & lo\d+; used in interfaces_unix.go, sortable.go
-	RX_fw      = regexp.MustCompile("fw\\d+")
-	RX_gif     = regexp.MustCompile("gif\\d+")
-	RX_stf     = regexp.MustCompile("stf\\d+")
-	RX_bridge  = regexp.MustCompile("bridge\\d+")
-	RX_vboxnet = regexp.MustCompile("vboxnet\\d+")
-	RX_airdrop = regexp.MustCompile("p2p\\d+")
-)
-
-func realInterfaceName(name string) bool {
-	bname := []byte(name)
-	if RX_bridge.Match(bname) ||
-		RX_vboxnet.Match(bname) {
-		return false
-	}
-	is_darwin := runtime.GOOS == "darwin"
-	if is_darwin {
-		if RX_fw.Match(bname) ||
-			RX_gif.Match(bname) ||
-			RX_stf.Match(bname) ||
-			RX_airdrop.Match(bname) {
+		if blacklistNet.Contains(addr) {
 			return false
 		}
 	}
 	return true
 }
 
-func filterInterfaces(ifs []InterfaceInfo) []InterfaceInfo {
-	fifs := []InterfaceInfo{}
-	for _, fi := range ifs {
-		if !realInterfaceName(fi.Name) {
-			continue
-		}
-		fifs = append(fifs, fi)
-	}
-	return fifs
-}
