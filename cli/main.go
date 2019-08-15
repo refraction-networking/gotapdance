@@ -21,6 +21,9 @@ func main() {
 	defer profile.Start().Stop()
 
 	var port = flag.Int("port", 10500, "TapDance will listen for connections on this port.")
+	var excludeV6 = flag.Bool("e6", false, "Exclude Ipv6 blocks in decoy Ip selection - bypass getifaddr. (default false)")
+	var includeV6 = flag.Bool("i6", false, "Include Ipv6 blocks in decoy Ip selection - bypass getifaddr. (default false)")
+	var proxyHeader = flag.Bool("proxy", false, "Send the proxy header with all packets from station to covert host")
 	var decoy = flag.String("decoy", "", "Sets single decoy. ClientConf won't be requested. "+
 		"Accepts \"SNI,IP\" or simply \n\"SNI\" — IP will be resolved. "+
 		"\nExamples: \"site.io,1.2.3.4\", \"site.io\"")
@@ -41,6 +44,8 @@ func main() {
 
 		os.Exit(1)
 	}
+
+	v6Support := v6_flags(includeV6, excludeV6)
 
 	if *debug {
 		tapdance.Logger().Level = logrus.DebugLevel
@@ -64,7 +69,7 @@ func main() {
 		}
 	}
 
-	err := connectDirect(*connect_target, *port)
+	err := connectDirect(*connect_target, *port, *proxyHeader, v6Support)
 	if err != nil {
 		tapdance.Logger().Println(err)
 		os.Exit(1)
@@ -78,7 +83,7 @@ func main() {
 	}
 }
 
-func connectDirect(connect_target string, localPort int) error {
+func connectDirect(connect_target string, localPort int, proxyHeader bool, v6Support *bool) error {
 	if _, _, err := net.SplitHostPort(connect_target); err != nil {
 		return fmt.Errorf("failed to parse host and port from connect_target %s: %v",
 			connect_target, err)
@@ -90,8 +95,8 @@ func connectDirect(connect_target string, localPort int) error {
 		return fmt.Errorf("error listening on port %s: %v", localPort, err)
 	}
 
-	v6Support := false
-	tdDialer := tapdance.Dialer{DarkDecoy: true, UseProxyHeader: false, V6Support: &v6Support}
+	tdDialer := tapdance.Dialer{DarkDecoy: true, UseProxyHeader: proxyHeader, V6Support: v6Support}
+
 	for {
 		clientConn, err := l.AcceptTCP()
 		if err != nil {
@@ -155,5 +160,29 @@ func setSingleDecoyHost(decoy string) error {
 	maxUint32 := ^uint32(0) // max generation: station won't send ClientConf
 	tapdance.Assets().GetClientConfPtr().Generation = &maxUint32
 	tapdance.Logger().Infof("Single decoy parsed. SNI: %s, IP: %s", sni, ip)
+	return nil
+}
+
+func v6_flags(includeV6, excludeV6 *bool) *bool {
+
+	var holdTrue = true
+	var holdFalse = false
+
+	// Determine whether to Include / Exclude Ipv6 Blocks explicity or use getifaddr
+	if *includeV6 != *excludeV6 {
+		if *includeV6 {
+			return &holdTrue
+		} else {
+			return &holdFalse
+		}
+	} else {
+		if *includeV6 && *excludeV6 {
+			tdproxy.Logger.Errorf("Cannot include and exclude v6 blocks in Ip selection\n")
+			flag.Usage()
+			os.Exit(1)
+		} else {
+			return nil
+		}
+	}
 	return nil
 }
