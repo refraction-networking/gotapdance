@@ -232,6 +232,17 @@ func (a *assets) GetGeneration() uint32 {
 	return a.config.GetGeneration()
 }
 
+func (a *assets) GetDarkDecoyBlocks() []string {
+	a.RLock()
+	a.RUnlock()
+
+	confBlocks := a.config.DarkDecoyBlocks
+	if confBlocks == nil {
+		return []string{}
+	}
+	return confBlocks.Blocks
+}
+
 // Set ClientConf generation and store config to disk
 func (a *assets) SetGeneration(gen uint32) (err error) {
 	a.Lock()
@@ -280,6 +291,14 @@ func (a *assets) SetDecoys(decoys []*pb.TLSDecoySpec) (err error) {
 	a.config.DecoyList.TlsDecoys = decoys
 	err = a.saveClientConf()
 	return
+}
+
+//Overwrite currently used Dark Decoy IP selection blocks
+func (a *assets) SetDarkDecoyBlocks(blocks []string) (err error) {
+	// TODO: FILLLL
+	a.Lock()
+	defer a.Unlock()
+	return nil
 }
 
 // Checks if decoy is in currently used ClientConf decoys list

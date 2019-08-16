@@ -164,7 +164,7 @@ func setSingleDecoyHost(decoy string) error {
 }
 
 func v6_flags(includeV6, excludeV6 *bool) *bool {
-
+	// Use *bool for nullable var as third option
 	var holdTrue = true
 	var holdFalse = false
 

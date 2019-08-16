@@ -21,7 +21,7 @@ func dialDarkDecoy(ctx context.Context, tdFlow *TapdanceFlowConn) (net.Conn, err
 	}
 	// ipSupport := false
 
-	_ddIpSelector, err := newDDIpSelector([]string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}, ipSupport)
+	_ddIpSelector, err := newDDIpSelector(ipSupport)
 	if err != nil {
 		return nil, err
 	}

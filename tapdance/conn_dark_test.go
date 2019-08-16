@@ -8,8 +8,9 @@ import (
 
 func TestSelectIpv4(t *testing.T) {
 	fmt.Print("\nTesting IPv4 only' selection:\n")
+	AssetsSetDir("./assets/")
 
-	_ddIpSelector, err := newDDIpSelector([]string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}, false)
+	_ddIpSelector, err := newDDIpSelector(false)
 	if err != nil {
 		t.Error("Failed IP selector initialization ", err)
 	}
@@ -43,8 +44,9 @@ func TestSelectIpv4(t *testing.T) {
 
 func TestSelectIpv6(t *testing.T) {
 	fmt.Print("\nTesting Ipv6 support (v4 and v6 selection):\n")
+	AssetsSetDir("./assets/")
 
-	_ddIpSelector, err := newDDIpSelector([]string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}, true)
+	_ddIpSelector, err := newDDIpSelector(true)
 	if err != nil {
 		t.Error("Failed IP selector initialization ", err)
 	}

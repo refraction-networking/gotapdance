@@ -5,23 +5,24 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
-	"github.com/golang/protobuf/proto"
-	pb "github.com/sergeyfrolov/gotapdance/protobuf"
 	"io/ioutil"
 	"log"
 	"net"
+
+	"github.com/golang/protobuf/proto"
+	pb "github.com/sergeyfrolov/gotapdance/protobuf"
 )
 
 func printClientConf(clientConf pb.ClientConf) {
 	fmt.Printf("Generation: %d\n", clientConf.GetGeneration())
 	if clientConf.GetDefaultPubkey() != nil {
-		fmt.Printf("Default Pubkey: %s\n", hex.EncodeToString(clientConf.GetDefaultPubkey().Key[:]))
+		fmt.Printf("\nDefault Pubkey: %s\n", hex.EncodeToString(clientConf.GetDefaultPubkey().Key[:]))
 	}
 	if clientConf.DecoyList == nil {
 		return
 	}
 	decoys := clientConf.DecoyList.TlsDecoys
-	fmt.Printf("Decoy List: %d decoys\n", len(decoys))
+	fmt.Printf("\nDecoy List: %d decoys\n", len(decoys))
 	for i, decoy := range decoys {
 		ip := make(net.IP, 4)
 		binary.BigEndian.PutUint32(ip, decoy.GetIpv4Addr())
@@ -36,7 +37,13 @@ func printClientConf(clientConf pb.ClientConf) {
 			fmt.Printf("  tcpwin: %d bytes\n", decoy.GetTcpwin())
 		}
 	}
-
+	if clientConf.GetDarkDecoyBlocks() != nil {
+		darkDecoyBlocks := clientConf.DarkDecoyBlocks.Blocks
+		fmt.Printf("\nDark Decoy Blocks: %d blocks\n", len(darkDecoyBlocks))
+		for i, block := range darkDecoyBlocks {
+			fmt.Printf("%d:\n  %s\n", i, block)
+		}
+	}
 }
 
 func parseClientConf(fname string) pb.ClientConf {
@@ -108,6 +115,9 @@ func main() {
 
 	var all = flag.Bool("all", false, "If set, replace all pubkeys/timeouts/tcpwins in decoy list with pubkey/timeout/tcpwin if provided")
 
+	var add_block = flag.String("add_block", "", "If set add new CIDR format IP block for Dark Decoy IP selection")
+	var delete_block = flag.Int("delete_block", -1, "Specifies `index` of Dark Decoy IP block to delete")
+
 	var noout = flag.Bool("noout", false, "Don't print ClientConf")
 	flag.Parse()
 
@@ -178,6 +188,31 @@ func main() {
 			clientConf.DecoyList = &tls_spec
 		}
 		clientConf.DecoyList.TlsDecoys = append(clientConf.DecoyList.TlsDecoys, &decoy)
+	}
+
+	// Add CIDR Dark Decoy Block
+	if *add_block != "" {
+		_, _, err := net.ParseCIDR(*add_block)
+		if err == nil {
+			if clientConf.GetDarkDecoyBlocks() == nil {
+				blocks := pb.DarkDecoyBlocks{}
+				clientConf.DarkDecoyBlocks = &blocks
+			}
+			clientConf.DarkDecoyBlocks.Blocks = append(clientConf.DarkDecoyBlocks.Blocks, *add_block)
+		} else {
+			fmt.Printf("[Error] IP block not in proper CIDR notation: %s\n\n", *add_block)
+		}
+	}
+
+	// Delete CIDR Dark Decoy Block
+	if *delete_block != -1 {
+		idx := *delete_block
+		if clientConf.GetDarkDecoyBlocks() != nil {
+			blocks := clientConf.DarkDecoyBlocks.Blocks
+			if idx < len(blocks) {
+				clientConf.DarkDecoyBlocks.Blocks = append(blocks[:idx], blocks[idx+1:]...)
+			}
+		}
 	}
 
 	if !*noout {

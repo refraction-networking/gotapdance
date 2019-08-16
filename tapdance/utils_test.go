@@ -3,12 +3,13 @@ package tapdance
 import (
 	"crypto/aes"
 	"crypto/cipher"
-	// "crypto/rand"
+	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"github.com/pkg/errors"
 	"strings"
 	"testing"
+
+	"github.com/pkg/errors"
 )
 
 type TestRandReader struct{}

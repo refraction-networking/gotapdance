@@ -265,8 +265,9 @@ type ddIpSelector struct {
 	nets []net.IPNet
 }
 
-func newDDIpSelector(netsStr []string, v6Support bool) (*ddIpSelector, error) {
+func newDDIpSelector(v6Support bool) (*ddIpSelector, error) {
 	dd := ddIpSelector{}
+	var netsStr = Assets().GetDarkDecoyBlocks()
 	for _, _netStr := range netsStr {
 		_, _net, err := net.ParseCIDR(_netStr)
 		if err != nil {
