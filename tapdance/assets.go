@@ -298,7 +298,12 @@ func (a *assets) SetDarkDecoyBlocks(blocks []string) (err error) {
 	// TODO: FILLLL
 	a.Lock()
 	defer a.Unlock()
-	return nil
+	if a.config.DarkDecoyBlocks == nil {
+		a.config.DarkDecoyBlocks = &pb.DarkDecoyBlocks{}
+	}
+	a.config.DarkDecoyBlocks.Blocks = blocks
+	err = a.saveClientConf()
+	return
 }
 
 // Checks if decoy is in currently used ClientConf decoys list
