@@ -7,8 +7,10 @@ import (
 )
 
 func TestSelectIpv4(t *testing.T) {
-	fmt.Print("\nTesting IPv4 only' selection:\n")
-	AssetsSetDir("./assets/")
+	fmt.Print("\nTesting IPv4 only selection:\n")
+
+	subnets := []string{"2001:48a8:687f:1::/64", "192.122.190.0/24"}
+	Assets().SetDarkDecoyBlocks(subnets)
 
 	_ddIpSelector, err := newDDIpSelector(false)
 	if err != nil {
@@ -43,12 +45,15 @@ func TestSelectIpv4(t *testing.T) {
 }
 
 func TestSelectIpv6(t *testing.T) {
-	fmt.Print("\nTesting Ipv6 support (v4 and v6 selection):\n")
-	AssetsSetDir("./assets/")
+	fmt.Print("\nTesting Ipv6 selection (v4 and v6):\n")
+
+	subnets := []string{"2001:48a8:687f:1::/64", "192.122.190.0/24"}
+	Assets().SetDarkDecoyBlocks(subnets)
 
 	_ddIpSelector, err := newDDIpSelector(true)
 	if err != nil {
 		t.Error("Failed IP selector initialization ", err)
+		t.FailNow()
 	}
 
 	fmt.Println("\nAvailable network blocks:")

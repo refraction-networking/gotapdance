@@ -171,3 +171,60 @@ func (rt *randomnessChecker) testInRange(min, max int) error {
 	}
 	return nil
 }
+
+func TestDDIpSelectorSeededV4(t *testing.T) {
+	fmt.Print("Testing seeded Ip selection from controlled subnets ... ")
+	subnets := []string{"18.0.0.0/8", "1234::/64"}
+	Assets().SetDarkDecoyBlocks(subnets)
+
+	ipSupport := false
+
+	seed := []byte{
+		0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7,
+		0x8, 0x9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF,
+	}
+	ddSelector, err := newDDIpSelector(ipSupport)
+	if err != nil {
+		t.Fatalf("Failed to create Selector: %v\n", err)
+	}
+
+	decoyAddr, err := ddSelector.selectIpAddr(seed)
+	if err != nil {
+		t.Fatalf("Failed to select dark decoy IP: %v", err)
+	}
+
+	expectedAddr := "18.35.40.45"
+	if expectedAddr != decoyAddr.String() {
+		t.Fatalf("Expected Addr %v -- Got %v", expectedAddr, decoyAddr)
+	}
+	fmt.Println("Ok")
+}
+
+func TestDDIpSelectorSeededV6(t *testing.T) {
+	fmt.Print("Testing seeded Ip selection from controlled subnets (w/ v6) ... ")
+	subnets := []string{"18.0.0.0/8", "1234::/64"}
+	Assets().SetDarkDecoyBlocks(subnets)
+
+	ipSupport := true
+
+	seed := []byte{
+		0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7,
+		0x8, 0x9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF,
+	}
+
+	ddSelector, err := newDDIpSelector(ipSupport)
+	if err != nil {
+		t.Fatalf("Failed to create Selector: %v\n", err)
+	}
+
+	decoyAddr, err := ddSelector.selectIpAddr(seed)
+	if err != nil {
+		t.Fatalf("Failed to select dark decoy IP: %v", err)
+	}
+
+	expectedAddr := "1234::507:90c:e17:181a"
+	if expectedAddr != decoyAddr.String() {
+		t.Fatalf("Expected Addr %v -- Got %v", expectedAddr, decoyAddr)
+	}
+	fmt.Println("Ok")
+}
