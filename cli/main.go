@@ -102,30 +102,36 @@ func connectDirect(connect_target string, localPort int, proxyHeader bool, v6Sup
 		if err != nil {
 			return fmt.Errorf("error accepting client connection %v: ", err)
 		}
-		// TODO: go back to pre-dialing after measuring performance
-		tdConn, err := tdDialer.Dial("tcp", connect_target)
-		if err != nil {
-			return fmt.Errorf("failed to dial %s: %v", connect_target, err)
-		}
 
-		// Copy data from the client application into the DarkDecoy connection.
-		// 		TODO: Make sure this works
-		// 		TODO: proper connection management with idle timeout
-		var wg sync.WaitGroup
-		wg.Add(2)
-		go func() {
-			io.Copy(tdConn, clientConn)
-			wg.Done()
-			tdConn.Close()
-		}()
-		go func() {
-			io.Copy(clientConn, tdConn)
-			wg.Done()
-			clientConn.CloseWrite()
-		}()
-		wg.Wait()
-		tapdance.Logger().Debug("copy loop ended")
+		go manageConn(tdDialer, connect_target, clientConn)
 	}
+}
+
+func manageConn(tdDialer tapdance.Dialer, connect_target string, clientConn *net.TCPConn) {
+	// TODO: go back to pre-dialing after measuring performance
+	tdConn, err := tdDialer.Dial("tcp", connect_target)
+	if err != nil {
+		fmt.Errorf("failed to dial %s: %v", connect_target, err)
+		return
+	}
+
+	// Copy data from the client application into the DarkDecoy connection.
+	// 		TODO: Make sure this works
+	// 		TODO: proper connection management with idle timeout
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		io.Copy(tdConn, clientConn)
+		wg.Done()
+		tdConn.Close()
+	}()
+	go func() {
+		io.Copy(clientConn, tdConn)
+		wg.Done()
+		clientConn.CloseWrite()
+	}()
+	wg.Wait()
+	tapdance.Logger().Debug("copy loop ended")
 }
 
 func setSingleDecoyHost(decoy string) error {

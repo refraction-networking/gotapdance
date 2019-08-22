@@ -85,13 +85,16 @@ func (flowConn *TapdanceFlowConn) DialContext(ctx context.Context) error {
 		}
 	}
 
-	// don't lose initial msg from station
-	// strip off state transition and push protobuf up for processing
-	flowConn.tdRaw.initialMsg.StateTransition = nil
-	err := flowConn.processProto(flowConn.tdRaw.initialMsg)
-	if err != nil {
-		flowConn.closeWithErrorOnce(err)
-		return err
+	//tapdance only
+	if !flowConn.tdRaw.darkDecoyUsed {
+		// don't lose initial msg from station
+		// strip off state transition and push protobuf up for processing
+		flowConn.tdRaw.initialMsg.StateTransition = nil
+		err := flowConn.processProto(flowConn.tdRaw.initialMsg)
+		if err != nil {
+			flowConn.closeWithErrorOnce(err)
+			return err
+		}
 	}
 
 	switch flowConn.flowType {

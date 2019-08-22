@@ -181,20 +181,20 @@ func (tdRaw *tdRawConn) tryDialOnce(ctx context.Context, expectedTransition pb.S
 	tdRequest, err := tdRaw.prepareTDRequest()
 	if err != nil {
 		Logger().Errorf(tdRaw.idStr() +
-			" Preparation of initial TD request failed with " + err.Error())
+			" Preparation of initial DD request failed with " + err.Error())
 		tdRaw.tlsConn.Close()
 		return
 	}
 	tdRaw.establishedAt = time.Now() // TODO: recheck how ClientConf's timeout is calculated and move, if needed
 
-	Logger().Infoln(tdRaw.idStr() + " Attempting to connect to TapDance Station" +
+	Logger().Infoln(tdRaw.idStr() + " Attempting to connect to Conjure Station" +
 		" with connection ID: " + hex.EncodeToString(tdRaw.remoteConnId[:]) + ", method: " +
 		tdRaw.tagType.Str())
 	rttToStationStartTs := time.Now()
 	_, err = tdRaw.tlsConn.Write(tdRequest)
 	if err != nil {
 		Logger().Errorf(tdRaw.idStr() +
-			" Could not send initial TD request, error: " + err.Error())
+			" Could not send initial DD request, error: " + err.Error())
 		tdRaw.tlsConn.Close()
 		return
 	}
@@ -210,7 +210,7 @@ func (tdRaw *tdRawConn) tryDialOnce(ctx context.Context, expectedTransition pb.S
 		if err != nil {
 			if errIsTimeout(err) {
 				Logger().Errorf("%s %s: %v", tdRaw.idStr(),
-					"TapDance station didn't pick up the request", err)
+					"Conjure station didn't pick up the request", err)
 
 				// lame fix for issue #38 with abrupt drop of not picked up flows
 				tdRaw.tlsConn.SetDeadline(time.Now().Add(
@@ -224,7 +224,7 @@ func (tdRaw *tdRawConn) tryDialOnce(ctx context.Context, expectedTransition pb.S
 			} else {
 				// any other error will be fatal
 				Logger().Errorf(tdRaw.idStr() +
-					" fatal error reading from TapDance station: " +
+					" fatal error reading from Conjure station: " +
 					err.Error())
 				tdRaw.tlsConn.Close()
 				return
@@ -235,12 +235,12 @@ func (tdRaw *tdRawConn) tryDialOnce(ctx context.Context, expectedTransition pb.S
 			err = errors.New("Init error: state transition mismatch!" +
 				" Received: " + tdRaw.initialMsg.GetStateTransition().String() +
 				" Expected: " + expectedTransition.String())
-			Logger().Infof("%s Failed to connect to TapDance Station [%s]: %s",
+			Logger().Infof("%s Failed to connect to Conjure Station [%s]: %s",
 				tdRaw.idStr(), tdRaw.initialMsg.GetStationId(), err.Error())
 			// this exceptional error implies that station has lost state, thus is fatal
 			return err
 		}
-		Logger().Infoln(tdRaw.idStr() + " Successfully connected to TapDance Station [" + tdRaw.initialMsg.GetStationId() + "]")
+		Logger().Infoln(tdRaw.idStr() + " Successfully connected to Conjure Station [" + tdRaw.initialMsg.GetStationId() + "]")
 	case tagHttpPostIncomplete, tagHttpGetComplete:
 		// don't wait for response
 	default:

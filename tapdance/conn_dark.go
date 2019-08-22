@@ -31,9 +31,6 @@ func dialDarkDecoy(ctx context.Context, tdFlow *TapdanceFlowConn) (net.Conn, err
 	tdFlow.tdRaw.darkDecoyUsed = true
 	// tdFlow.tdRaw.darkDecoySNI = darkDecoySNI
 
-	// TODO: check if darkDecoyIpAddr is reachable, and fail early if it's not
-	// (dark decoy being IPv6 is the main reason why it would be unreachable)
-
 	err = tdFlow.DialContext(ctx)
 	if err != nil {
 		return nil, err
@@ -47,30 +44,25 @@ func dialDarkDecoy(ctx context.Context, tdFlow *TapdanceFlowConn) (net.Conn, err
 		return nil, err
 	}
 
-	getRttMillisec := func() int {
-		defaultValue := 300
-		if tdFlow == nil {
-			return defaultValue
-		}
-		if tdFlow.tdRaw == nil {
-			return defaultValue
-		}
-		if tdFlow.tdRaw.sessionStats.TcpToDecoy == nil {
-			return defaultValue
-		}
-		return int(*tdFlow.tdRaw.sessionStats.TcpToDecoy)
-	}
+	Logger().Debugf("[Session %v] Connecting to Conjure station via (%v) with seed: %x",
+		tdFlow.tdRaw.sessionId, darkDecoyIpAddr, tdFlow.tdRaw.tdKeys.DarkDecoySeed)
+
+	// TODO:  if darkDecoyIpAddr is unreachable fail early
+	// (if IPv6 dark decoy is the main reason why it would be unreachable)
+
 	// randomized sleeping here to break the intraflow signal
-	toSleep := time.Millisecond * time.Duration(300+getRttMillisec()*getRandInt(212, 3449)/1000)
+	toSleep := time.Duration(300 + GetRttMillisec(tdFlow)*getRandInt(212, 3449)/1000)
 	Logger().Debugf("%v Registration for dark decoy sent, sleeping for %v",
 		flowIdString, toSleep)
-	time.Sleep(toSleep)
+	time.Sleep(toSleep * time.Millisecond)
 
 	deadline, deadlineAlreadySet := ctx.Deadline()
 	if !deadlineAlreadySet {
 		// randomized timeout to Dial dark decoy address
-		deadline = time.Now().Add(getRandomDuration(1061*getRttMillisec()*2, 1953*getRttMillisec()*3))
+		timeout := getRandomDuration(1061*GetRttMillisec(tdFlow)*2, 1953*GetRttMillisec(tdFlow)*3)
+		deadline = time.Now().Add(timeout)
 	}
+
 	childCtx, childCancelFunc := context.WithDeadline(ctx, deadline)
 	defer childCancelFunc()
 
@@ -84,4 +76,18 @@ func dialDarkDecoy(ctx context.Context, tdFlow *TapdanceFlowConn) (net.Conn, err
 	Logger().Infof("%v Connected to dark decoy %v", flowIdString, darkAddr)
 
 	return darkTcpConn, nil
+}
+
+func GetRttMillisec(tdFlow *TapdanceFlowConn) int {
+	defaultValue := 300
+	if tdFlow == nil {
+		return defaultValue
+	}
+	if tdFlow.tdRaw == nil {
+		return defaultValue
+	}
+	if tdFlow.tdRaw.sessionStats.TcpToDecoy == nil {
+		return defaultValue
+	}
+	return int(*tdFlow.tdRaw.sessionStats.TcpToDecoy)
 }
