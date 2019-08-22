@@ -324,8 +324,11 @@ func (d *ddIpSelector) selectIpAddr(seed []byte) (*net.IP, error) {
 	}
 	id := &big.Int{}
 	id.SetBytes(seed)
-	if id.Cmp(addresses_total) >= 0 {
+	if id.Cmp(addresses_total) > 0 {
 		id.Mod(id, addresses_total)
+	}
+	if id.Cmp(addresses_total) == 0 {
+		return nil, fmt.Errorf("No valid addresses to select from")
 	}
 
 	var result net.IP
