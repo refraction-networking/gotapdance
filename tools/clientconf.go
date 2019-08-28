@@ -17,7 +17,7 @@ func main() {
 	var out_fname = flag.String("o", "", "`output` file name to write new/modified config")
 
 	var connect_to_all = flag.Bool("connect_to_all", false, "Send a specific string to each registration decoy -- station logfile will indicate flows which were observed.")
-	var workers = flag.Uint("w", 20, "Number of parallel workers for the connect_to_all test.")
+	var workers = flag.Int("w", 20, "Number of parallel workers for the connect_to_all test.")
 
 	var generation = flag.Int("generation", 0, "New/modified generation")
 	var pubkey = flag.String("pubkey", "", "New/modified (decoy) pubkey. If -add or -update, applies to specific decoy. If -all applies to all decoys. Otherwise, applies to default pubkey.")

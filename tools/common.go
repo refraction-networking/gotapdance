@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/golang/protobuf/proto"
@@ -103,56 +104,89 @@ type jobTuple struct {
 	JobId uint
 }
 
-func ConnectToAll(decoyList []*pb.TLSDecoySpec, workers uint) {
+func ConnectToAll(decoyList []*pb.TLSDecoySpec, workers int) {
 
 	fmt.Println("Connection to all registration decoys in client conf.")
+	var wg sync.WaitGroup
 
-	decoyChan := make(chan jobTuple)
+	decoyChan := make(chan jobTuple, len(decoyList))
 
-	for j := uint(1); j <= workers; j++ {
-		go ConnectWorker(j, decoyChan)
+	for id := 0; id < workers; id++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+
+			jobsCompleted := 0
+			var decoy *pb.TLSDecoySpec
+			var err error
+
+			for decoyTuple := range decoyChan {
+
+				decoy = decoyTuple.Decoy
+				fmt.Printf("[%d/%d/%d] (%d) Connecting to decoy %s -- %s ... \n",
+					jobsCompleted, decoyTuple.JobId, decoyTuple.Total, id, decoy.GetHostname(), decoy.GetIpAddrStr())
+
+				err = ConnectSpecial(decoy)
+				if err != nil {
+					fmt.Printf("[%d/%d/%d] (%d) Failure: %s\n",
+						jobsCompleted, decoyTuple.JobId, decoyTuple.Total, id, err.Error())
+				} else {
+					fmt.Printf("[%d/%d/%d] (%d) Success\n",
+						jobsCompleted, decoyTuple.JobId, decoyTuple.Total, id)
+				}
+				jobsCompleted++
+			}
+
+		}(id) // end go worker func
 	}
 
-	for idx := 0; idx < len(decoyList); idx++ {
-		decoyChan <- jobTuple{Decoy: decoyList[idx], Total: uint(len(decoyList)), JobId: uint(idx)}
-	}
-}
-
-func ConnectWorker(id uint, decoys <-chan jobTuple) {
-	jobsCompleted := 0
-	var decoy *pb.TLSDecoySpec
-	var err error
-
-	for decoyTuple := range decoys {
-		jobsCompleted++
-
-		decoy = decoyTuple.Decoy
-		fmt.Printf("[%d/%d/%d] (%d) Connecting to decoy %s -- %s ... \n",
-			jobsCompleted, decoyTuple.JobId, decoyTuple.Total, id, decoy.GetHostname(), decoy.GetIpAddrStr())
-
-		err = ConnectSpecial(decoy)
-		if err != nil {
-			fmt.Printf("[%d/%d/%d] (%d) Failure: %s\n",
-				jobsCompleted, decoyTuple.JobId, decoyTuple.Total, id, err.Error())
-		} else {
-			fmt.Printf("[%d/%d/%d] (%d) Success\n",
-				jobsCompleted, decoyTuple.JobId, decoyTuple.Total, id)
+	go func() {
+		for idx := 0; idx < len(decoyList); idx++ {
+			decoyChan <- jobTuple{Decoy: decoyList[idx], Total: uint(len(decoyList)), JobId: uint(idx)}
 		}
-	}
+		close(decoyChan)
+	}()
+
+	wg.Wait()
 }
 
 func ConnectSpecial(decoy *pb.TLSDecoySpec) error {
 
 	timeout := time.Duration(5 * time.Second)
 
-	d := net.Dialer{Timeout: timeout}
-	conn, err := d.Dial("tcp", decoy.GetIpAddrStr())
+	conn, err := net.DialTimeout("tcp", decoy.GetIpAddrStr(), timeout)
 	if err != nil {
 		return err
 	}
+	defer closeConn(conn, decoy.GetIpAddrStr())
 
 	fmt.Fprintf(conn, "'This must be Thursday,' said Arthur to himself, sinking low over his beer. 'I never could get the hang of Thursdays.'")
 
-	conn.Close()
+	err = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	if err != nil {
+		// fmt.Printf("SetReadDeadline failed: %s", err.Error())
+		return nil
+	}
+
+	recvBuf := make([]byte, 1024)
+
+	_, err = conn.Read(recvBuf[:]) // recv data
+	if err != nil {
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+			// fmt.Printf("read timeout: %s", err.Error())
+			return nil
+			// time out
+		} else {
+			// fmt.Printf("read error: %s", err.Error())
+			return nil
+		}
+	}
+
 	return nil
+}
+
+func closeConn(conn net.Conn, addr string) {
+	// fmt.Printf("Closing connection to: %s\n", addr)
+	conn.Close()
+
 }
