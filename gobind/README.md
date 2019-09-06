@@ -13,7 +13,7 @@ You'd need [gomobile](https://godoc.org/golang.org/x/mobile/cmd/gomobile) to com
 ##  Wrapper
 ### To simply build proxybind.aar library for Android:
 ```
-  cd ${GOPATH}/src/github.com/SergeyFrolov/gotapdance/gobind
+  cd ${GOPATH}/src/github.com/refraction-networking/gotapdance/gobind
   gomobile bind -target=android
 ```
 ### Gradle Plugin
