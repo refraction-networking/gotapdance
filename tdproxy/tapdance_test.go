@@ -1,8 +1,8 @@
 package tdproxy
 
 import (
-	pb "github.com/sergeyfrolov/gotapdance/protobuf"
-	"github.com/sergeyfrolov/gotapdance/tapdance"
+	pb "github.com/refraction-networking/gotapdance/protobuf"
+	"github.com/refraction-networking/gotapdance/tapdance"
 	"io/ioutil"
 	"os"
 	"testing"

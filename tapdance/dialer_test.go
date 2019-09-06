@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"crypto/tls"
 	"fmt"
-	pb "github.com/sergeyfrolov/gotapdance/protobuf"
+	pb "github.com/refraction-networking/gotapdance/protobuf"
 	"io/ioutil"
 	"net"
 	"net/http"
