@@ -10,9 +10,9 @@ import (
 	"strings"
 
 	"github.com/pkg/profile"
-	pb "github.com/sergeyfrolov/gotapdance/protobuf"
-	"github.com/sergeyfrolov/gotapdance/tapdance"
-	"github.com/sergeyfrolov/gotapdance/tdproxy"
+	pb "github.com/refraction-networking/gotapdance/protobuf"
+	"github.com/refraction-networking/gotapdance/tapdance"
+	"github.com/refraction-networking/gotapdance/tdproxy"
 	"github.com/sirupsen/logrus"
 )
 
