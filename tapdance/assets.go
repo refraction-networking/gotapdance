@@ -163,6 +163,7 @@ func (a *assets) readConfigs() {
 	} else {
 		Logger().Infoln("Pubkey successfully read from " + pubkeyFilename)
 	}
+    Logger().Debugf("Using station pubkey: %x", a.config.DefaultPubkey.Key)
 }
 
 // Picks random decoy, returns Server Name Indication and addr in format ipv4:port
