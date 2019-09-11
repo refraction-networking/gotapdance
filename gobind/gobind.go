@@ -6,8 +6,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"io"
 
-	"github.com/sergeyfrolov/gotapdance/tapdance"
-	"github.com/sergeyfrolov/gotapdance/tdproxy"
+	"github.com/refraction-networking/gotapdance/tapdance"
+	"github.com/refraction-networking/gotapdance/tdproxy"
 )
 
 var td_proxy *tdproxy.TapDanceProxy

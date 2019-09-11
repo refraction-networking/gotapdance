@@ -16,7 +16,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	tls "github.com/refraction-networking/utls"
-	pb "github.com/sergeyfrolov/gotapdance/protobuf"
+	pb "github.com/refraction-networking/gotapdance/protobuf"
 )
 
 // Simply establishes TLS and TapDance connection.
