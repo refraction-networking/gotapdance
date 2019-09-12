@@ -109,7 +109,6 @@ func connectDirect(connect_target string, localPort int, proxyHeader bool, v6Sup
 		}
 
 		// Copy data from the client application into the DarkDecoy connection.
-		// 		TODO: Make sure this works
 		// 		TODO: proper connection management with idle timeout
 		var wg sync.WaitGroup
 		wg.Add(2)

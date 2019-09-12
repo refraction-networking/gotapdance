@@ -1,4 +1,4 @@
-package tapdance
+package getifaddr
 
 /*
 #include <sys/socket.h>
@@ -56,9 +56,8 @@ var netBlacklistv6 = map[string]string{
 	"lo":		 "::1/128",
 }
 
-func realInterfaceAddr(IpStr string) bool {
-
-	addr := net.ParseIP( IpStr )
+func realInterfaceAddr(IPStr string) bool {
+	addr := net.ParseIP( IPStr )
 
 	for _, netStr := range netBlacklistv6{
 		_, blacklistNet, err := net.ParseCIDR(netStr)

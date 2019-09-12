@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
+	"fmt"
 	"math/big"
 	mrand "math/rand"
 	"net"
@@ -16,8 +17,6 @@ import (
 
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/hkdf"
-
-	"fmt"
 )
 
 // The key argument should be the AES key, either 16 or 32 bytes

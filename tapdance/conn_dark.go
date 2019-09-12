@@ -6,6 +6,8 @@ import (
 	"net"
 	"strconv"
 	"time"
+
+	"github.com/refraction-networking/gotapdance/getifaddr"
 )
 
 func dialDarkDecoy(ctx context.Context, tdFlow *TapdanceFlowConn) (net.Conn, error) {
@@ -14,12 +16,11 @@ func dialDarkDecoy(ctx context.Context, tdFlow *TapdanceFlowConn) (net.Conn, err
 	// 		*bool so that it is a nullable type. that can be overridden by the dialer & tdRawConn
 	var ipSupport bool
 	if tdFlow.tdRaw.darkDecoyV6Support == nil {
-		ipSupport = SupportsIpv6()
+		ipSupport = getifaddr.SupportsIpv6()
 		tdFlow.tdRaw.darkDecoyV6Support = &ipSupport
 	} else {
 		ipSupport = *tdFlow.tdRaw.darkDecoyV6Support
 	}
-	// ipSupport := false
 
 	_ddIpSelector, err := newDDIpSelector([]string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}, ipSupport)
 	if err != nil {
@@ -29,10 +30,6 @@ func dialDarkDecoy(ctx context.Context, tdFlow *TapdanceFlowConn) (net.Conn, err
 	tdFlow.tdRaw.tagType = tagHttpGetComplete
 	tdFlow.flowType = flowRendezvous
 	tdFlow.tdRaw.darkDecoyUsed = true
-	// tdFlow.tdRaw.darkDecoySNI = darkDecoySNI
-
-	// TODO: check if darkDecoyIpAddr is reachable, and fail early if it's not
-	// (dark decoy being IPv6 is the main reason why it would be unreachable)
 
 	err = tdFlow.DialContext(ctx)
 	if err != nil {
