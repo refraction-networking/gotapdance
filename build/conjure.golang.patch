@@ -1,0 +1,11 @@
+--- tapdance.go.orig	2019-09-13 11:11:25.238697151 -0600
++++ tapdance.go	2019-08-29 14:37:21.637595516 -0600
+@@ -251,6 +251,8 @@
+ 
+ 	tapdanceDialer := &refraction_networking_tapdance.Dialer{
+ 		TcpDialer: manager.dial,
++        DarkDecoy: true,
++        UseProxyHeader: true,
+ 	}
+ 
+ 	// If the dial context is cancelled, use dialManager to interrupt

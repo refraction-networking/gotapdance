@@ -5,11 +5,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/agl/ed25519/extra25519"
-	"golang.org/x/crypto/curve25519"
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/agl/ed25519/extra25519"
+	"golang.org/x/crypto/curve25519"
 )
 
 const timeoutMax = 30000
@@ -113,8 +114,8 @@ func (m *tdTagType) Str() string {
 // bit 6 determines whether PROXY-protocol-formatted string will be sent
 // bit 7 (1 << 0) signals to use TypeLen outer proto
 var (
-	tdFlagUploadOnly  = uint8(1 << 7)
-	tdFlagDarkDecoy   = uint8(1 << 6)
+	tdFlagUploadOnly = uint8(1 << 7)
+	// tdFlagDarkDecoy   = uint8(1 << 6)
 	tdFlagProxyHeader = uint8(1 << 1)
 	tdFlagUseTIL      = uint8(1 << 0)
 )
