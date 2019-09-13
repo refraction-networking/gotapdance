@@ -36,7 +36,7 @@ jobs:
   include:
     - &build # YAML anchor/alias
       stage: build
-      name: "Build Tapdance cli and Psiphon ConsoleClient on Linux"
+      name: "Build cli and Psiphon ConsoleClient on Linux"
       install:
         - go get ./...
         # Substitute build string

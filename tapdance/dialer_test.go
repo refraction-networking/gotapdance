@@ -92,8 +92,7 @@ func tapDanceDialTest(t *testing.T, darkDecoys bool) {
 	}
 }
 
-
-// // These tests run forever 
+// // These tests run forever
 // func TestTapdanceDial(t *testing.T) {
 // 	tapDanceDialTest(t, false)
 // }
