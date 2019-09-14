@@ -48,6 +48,8 @@ jobs:
         - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && govendor remove github.com/refraction-networking/gotapdance/...)
         # Enable TapDance logging
         - sed -i.bak 's/refraction_networking_tapdance.Logger().Out = ioutil.Discard//' $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go
+        # Digest this branch's ClientConf into psiphons embedded_config
+        - ./test_scripts/digest_cc.sh ./assets/ClientConf $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/embedded_config.go
       script:
         - go build -o build/cli-$TRAVIS_OS_NAME ./cli
         - go build -o build/ConsoleClient-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
