@@ -7,12 +7,13 @@
 #      remove the old clientconfig and replace with new digested value.
 #
 # Use:
-#   $ digest_cc.sh $PATH_TO_ASSETS/ClientConf $PATH_TO_PSIPHON_CORE/psiphon/common/tapdance/embedded_config.go
+#   $ psiphon_digest_cc.sh $PATH_TO_ASSETS/ClientConf $PATH_TO_PSIPHON_CORE/psiphon/common/tapdance/embedded_config.go
 #
 # Note: This will replace the value inline in the Psiphon embedded config.
 
 if [ "$#" -ne 2 ]; then
-    echo "Illegal number of parameters"
+    echo "Not enough input arguments:"
+    echo '$ psiphon_digest_cc.sh $PATH_TO_ASSETS/ClientConf $PATH_TO_PSIPHON_TD_CORE/embedded_config.go'
     exit 1
 fi
 
