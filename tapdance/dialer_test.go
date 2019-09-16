@@ -4,13 +4,14 @@ import (
 	"bufio"
 	"crypto/tls"
 	"fmt"
-	pb "github.com/refraction-networking/gotapdance/protobuf"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"testing"
+
+	pb "github.com/refraction-networking/gotapdance/protobuf"
 )
 
 func setupTestAssets() error {
@@ -92,11 +93,11 @@ func tapDanceDialTest(t *testing.T, darkDecoys bool) {
 	}
 }
 
-func TestTapdanceDial(t *testing.T) {
+func DisabledTestTapdanceDial(t *testing.T) {
 	tapDanceDialTest(t, false)
 }
 
-func TestDarkDecoyDial(t *testing.T) {
+func DisabledTestDarkDecoyDial(t *testing.T) {
 	tapDanceDialTest(t, true)
 }
 

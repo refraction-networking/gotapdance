@@ -15,8 +15,8 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	tls "github.com/refraction-networking/utls"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
+	tls "github.com/refraction-networking/utls"
 )
 
 // Simply establishes TLS and TapDance connection.
@@ -49,7 +49,7 @@ type tdRawConn struct {
 	// dark decoy variables
 	darkDecoyUsed      bool
 	darkDecoySNI       string
-	darkDecoyV6Support *bool // *bool so that it is a nullable type. that can be overridden by the dialer
+	darkDecoyV6Support bool // *bool so that it is a nullable type. that can be overridden by the dialer
 
 	// stats to report
 	sessionStats pb.SessionStats
@@ -350,7 +350,7 @@ func (tdRaw *tdRawConn) generateVSP() ([]byte, error) {
 		if len(tdRaw.darkDecoySNI) > 0 {
 			initProto.MaskedDecoyServerName = &tdRaw.darkDecoySNI
 		}
-		initProto.V6Support = tdRaw.darkDecoyV6Support
+		initProto.V6Support = &tdRaw.darkDecoyV6Support
 	}
 	Logger().Debugln(tdRaw.idStr()+" Initial protobuf", initProto)
 	const AES_GCM_TAG_SIZE = 16

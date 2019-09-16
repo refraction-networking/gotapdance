@@ -58,6 +58,9 @@ var netBlacklistv6 = map[string]string{
 
 func realInterfaceAddr(IPStr string) bool {
 	addr := net.ParseIP( IPStr )
+	if addr == nil {
+		return false
+	}
 
 	for _, netStr := range netBlacklistv6{
 		_, blacklistNet, err := net.ParseCIDR(netStr)

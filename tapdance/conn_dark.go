@@ -15,11 +15,11 @@ func dialDarkDecoy(ctx context.Context, tdFlow *TapdanceFlowConn) (net.Conn, err
 	// Check Ipv6 support
 	// 		*bool so that it is a nullable type. that can be overridden by the dialer & tdRawConn
 	var ipSupport bool
-	if tdFlow.tdRaw.darkDecoyV6Support == nil {
+	if tdFlow.tdRaw.darkDecoyV6Support == true {
 		ipSupport = getifaddr.SupportsIpv6()
-		tdFlow.tdRaw.darkDecoyV6Support = &ipSupport
+		tdFlow.tdRaw.darkDecoyV6Support = ipSupport
 	} else {
-		ipSupport = *tdFlow.tdRaw.darkDecoyV6Support
+		ipSupport = tdFlow.tdRaw.darkDecoyV6Support
 	}
 
 	_ddIpSelector, err := newDDIpSelector([]string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}, ipSupport)

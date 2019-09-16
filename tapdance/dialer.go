@@ -15,7 +15,7 @@ type Dialer struct {
 
 	DarkDecoy      bool
 	UseProxyHeader bool
-	V6Support      *bool // *bool so that it is a nullable type. that can be overridden
+	V6Support      bool // *bool so that it is a nullable type. that can be overridden
 }
 
 // Dial connects to the address on the named network.
