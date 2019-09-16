@@ -14,7 +14,7 @@ if (!goPath) {
 }
 
 gobind {
-    pkg = "github.com/sergeyfrolov/gotapdance/gobind"
+    pkg = "github.com/refraction-networking/gotapdance/gobind"
     GOPATH = goPath
     GOMOBILE = "$goPath/bin/gomobile"
 }

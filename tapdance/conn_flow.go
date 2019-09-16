@@ -19,7 +19,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/sergeyfrolov/bsbuffer"
-	pb "github.com/sergeyfrolov/gotapdance/protobuf"
+	pb "github.com/refraction-networking/gotapdance/protobuf"
 )
 
 // TapdanceFlowConn represents single TapDance flow.

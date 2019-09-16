@@ -3,7 +3,7 @@
 # Build
 After [downloading Golang, TD and dependencies:](../README.md)
 ```
-   cd ${GOPATH:-~/go}/src/github.com/sergeyfrolov/gotapdance/cli # works even if GOPATH is not set
+   cd ${GOPATH:-~/go}/src/github.com/refraction-networking/gotapdance/cli # works even if GOPATH is not set
    go build -a .
 ```
 

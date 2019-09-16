@@ -1,5 +1,5 @@
 # tdproxy
-`import "github.com/sergeyfrolov/gotapdance/tdproxy"`
+`import "github.com/refraction-networking/gotapdance/tdproxy"`
 
 * [Overview](#pkg-overview)
 * [Imported Packages](#pkg-imports)
@@ -11,7 +11,7 @@ so you can use it as a SOCKS or HTTP proxy elsewhere.
 
 ## <a name="pkg-imports">Imported Packages</a>
 
-- [github.com/sergeyfrolov/gotapdance/tapdance](./../tapdance)
+- [github.com/refraction-networking/gotapdance/tapdance](./../tapdance)
 
 ## <a name="pkg-index">Index</a>
 * [Constants](#pkg-constants)
