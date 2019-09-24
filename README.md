@@ -1,6 +1,6 @@
 <p align="center">
 <a href="https://refraction.network"><img src="https://user-images.githubusercontent.com/5443147/30133006-7c3019f4-930f-11e7-9f60-3df45ee13d9d.png" alt="refract"></a>
-<h1 class="header-title" align="center">Refreaction Networking Client</h1>
+<h1 class="header-title" align="center">Refraction Networking Client</h1>
 
 <p align="center">Refraction Networking is a free-to-use anti-censorship technology, that places proxies at Internet Service Providers, so they are harder to block. This client includes support for both the TapDance and Conjure protocols</p>
 <p align="center">
