@@ -15,7 +15,7 @@ addons:
 
 env:
   - PSIPHON_CORE_VERSION="tags/v2.0.9"
-  - PSIPHON_SYSTEM_VERSION="9265a85"
+  - PSIPHON_SYSTEM_VERSION="bae236c"
 
 notifications:
   slack:
