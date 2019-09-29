@@ -71,7 +71,7 @@ jobs:
         - docker pull refraction/psiandroid
         - mkdir -p $GOPATH/src/bitbucket.org/psiphon
         - hg clone https://bitbucket.org/psiphon/psiphon-circumvention-system $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system
-        - (cd $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system && git checkout 9265a85 -b build-refraction-networking)
+        - (cd $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system && hg checkout 9265a85)
         # Use modified EmbeddedValues.java for TapDance
         - openssl enc -nosalt -aes-256-cbc -md sha512 -pbkdf2 -iter 1000 -pass pass:$aes_cbc_passwd  -d -in build/EmbeddedValues.java.enc -out $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/src/main/java/com/psiphon3/psiphonlibrary/EmbeddedValues.java
         # Patched tunneling protocol for TapDance
