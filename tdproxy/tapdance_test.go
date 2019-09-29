@@ -1,21 +1,19 @@
 package tdproxy
 
 import (
-	"io/ioutil"
-	"os"
-	"testing"
-
-	pb "github.com/sergeyfrolov/gotapdance/protobuf"
-	"github.com/sergeyfrolov/gotapdance/tapdance"
-
 	"crypto/tls"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"math/rand"
+	"os"
+	"testing"
 	"time"
 
 	"golang.org/x/net/websocket"
 
-	"io"
+	pb "github.com/refraction-networking/gotapdance/protobuf"
+	"github.com/refraction-networking/gotapdance/tapdance"
 )
 
 func setupTestAssets() error {
