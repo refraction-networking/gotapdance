@@ -13,6 +13,10 @@ services:
 addons:
   artifacts: true
 
+env:
+  - PSIPHON_CORE_VERSION="tags/v2.0.9"
+  - PSIPHON_SYSTEM_VERSION="9265a85"
+
 notifications:
   slack:
     secure: ZzIEqFE4XRdE9U2p3aeE32DMtoC8RgjoEavhEQ1oLrWFgUpLktqmp9UVY/U+W6iElilLpDbFpry51+Sv9MWpxJMxr+Q/JJuq/3Bj5KjF/wEtil7qvBYhQ1sM/qUQFG6wRkrMNjZGMiaTmnkWF0rZB8lf7+nbnGFaPW3AVVbD+8gVDWTHI4Hcvvgs0UbrJzoPfpvH0dprOchswc1BBKTgo5c44rvS2fquEMVcqMMiNJ5JQqphuRWLTfzLgOzImSf0/xJJyVp/YTkSnVSg8BcWmDCJ4iB9fJkVyZM9WxcgY/J4T5VzFxfMah9zv2j8UTfzHSMeCJDRL647hdnkmr/Qum/LN91Ey2DJw5KUH743CsAbyGhQML6wZ3NCeEP06hnMDphalU5+BYhtAPyc5CB84g6eLIUQ2EqptuPZpjFQohFnapCTnfB5XKTcW+PjxJsoJzk8x+85Xid+H1nnNxeyf10tLv6Pwy4ZGmEEbsa4SYWXibpIEu3fPJXEdtrht0vM40pDLeUYL6Axmh7hNjmDQOXJG41saF+Rk4AArRhKhMQTmlYCc0e1H2/hIDXUMPbqjHeCpEkaA5W8BFBKynhlJa0JX+rtHDFaK82Di8rXT0NO2ACyG8ZQqk87qePyBYPyfR8hRwhrkmQHlYYOZzV6LBz+ynJuWl9ktcC2irJlHZs=
@@ -42,7 +46,9 @@ jobs:
         # Substitute build string
         - sed -i.bak "s/buildInfo = \"\"/buildInfo = \"$TRAVIS_BRANCH-$TRAVIS_COMMIT\"/" tapdance/logger.go
         - mkdir -p $GOPATH/src/github.com/Psiphon-Labs
+        # Get Specific Psiphon Core Library Release
         - git clone https://github.com/Psiphon-Labs/psiphon-tunnel-core.git $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core
+        - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && git checkout $PSIPHON_CORE_VERSION -b build-refraction-networking)
         # Remove gotapdance from vendored packages
         - go get github.com/kardianos/govendor
         - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && govendor remove github.com/refraction-networking/gotapdance/...)
@@ -69,6 +75,7 @@ jobs:
         - docker pull refraction/psiandroid
         - mkdir -p $GOPATH/src/bitbucket.org/psiphon
         - hg clone https://bitbucket.org/psiphon/psiphon-circumvention-system $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system
+        - (cd $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system && hg checkout $PSIPHON_SYSTEM_VERSION)
         # Use modified EmbeddedValues.java for TapDance
         - openssl enc -nosalt -aes-256-cbc -md sha512 -pbkdf2 -iter 1000 -pass pass:$aes_cbc_passwd  -d -in build/EmbeddedValues.java.enc -out $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/src/main/java/com/psiphon3/psiphonlibrary/EmbeddedValues.java
         # Patched tunneling protocol for TapDance
@@ -89,6 +96,7 @@ jobs:
         - docker pull refraction/psiandroid
         - mkdir -p $GOPATH/src/bitbucket.org/psiphon
         - hg clone https://bitbucket.org/psiphon/psiphon-circumvention-system $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system
+        - (cd $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system && hg checkout $PSIPHON_SYSTEM_VERSION)
         # Use modified EmbeddedValues.java for TapDance
         - openssl enc -nosalt -aes-256-cbc -md sha512 -pbkdf2 -iter 1000 -pass pass:$aes_cbc_passwd  -d -in build/EmbeddedValues.java.enc -out $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/src/main/java/com/psiphon3/psiphonlibrary/EmbeddedValues.java
         # Patched tunneling protocol for TapDance
