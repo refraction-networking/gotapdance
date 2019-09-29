@@ -13,9 +13,11 @@ services:
 addons:
   artifacts: true
 
-env:
-  - PSIPHON_CORE_VERSION="tags/v2.0.9"
-  - PSIPHON_SYSTEM_VERSION="9265a85"
+# # Uncomment To override defaults set in travis ci online interface 
+# #     (these will take precedence).
+# env:
+#   - PSIPHON_CORE_VERSION="tags/v2.0.9"
+#   - PSIPHON_SYSTEM_VERSION="9265a85"
 
 notifications:
   slack:
@@ -46,7 +48,7 @@ jobs:
         # Substitute build string
         - sed -i.bak "s/buildInfo = \"\"/buildInfo = \"$TRAVIS_BRANCH-$TRAVIS_COMMIT\"/" tapdance/logger.go
         - mkdir -p $GOPATH/src/github.com/Psiphon-Labs
-        # Get Release 2.0.9 Psiphon Core Library 
+        # Get Specific Psiphon Core Library Release
         - git clone https://github.com/Psiphon-Labs/psiphon-tunnel-core.git $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core
         - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && git checkout $PSIPHON_CORE_VERSION -b build-refraction-networking)
         # Remove gotapdance from vendored packages
