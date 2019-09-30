@@ -13,6 +13,7 @@ services:
 addons:
   artifacts: true
 
+# When Uncommented this will override teh defaults set in travis ci web interface.
 env:
   - PSIPHON_CORE_VERSION="tags/v2.0.9"
   - PSIPHON_SYSTEM_VERSION="bae236c"
@@ -51,6 +52,7 @@ jobs:
         - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && git checkout $PSIPHON_CORE_VERSION -b build-refraction-networking)
         # Remove gotapdance from vendored packages
         - go get github.com/kardianos/govendor
+        - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && govendor remove github.com/sergeyfrolov/gotapdance/...)
         - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && govendor remove github.com/refraction-networking/gotapdance/...)
         # Enable TapDance logging
         - sed -i.bak 's/refraction_networking_tapdance.Logger().Out = ioutil.Discard//' $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go
