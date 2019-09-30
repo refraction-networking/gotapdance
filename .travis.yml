@@ -54,6 +54,8 @@ jobs:
         - go get github.com/kardianos/govendor
         - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && govendor remove github.com/sergeyfrolov/gotapdance/...)
         - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && govendor remove github.com/refraction-networking/gotapdance/...)
+        # replace sergeyfrolov in tapdance wrapper (NOTE: REMOVE AFTER VENDORING IN PSIPHON CHANGES)
+        - sed -i.bak 's/sergeyfrolov/refraction-networking/g' $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go
         # Enable TapDance logging
         - sed -i.bak 's/refraction_networking_tapdance.Logger().Out = ioutil.Discard//' $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go
         # Digest this branch's ClientConf into Psiphon's embedded_config
