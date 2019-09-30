@@ -4,13 +4,14 @@ import (
 	"bufio"
 	"crypto/tls"
 	"fmt"
-	pb "github.com/refraction-networking/gotapdance/protobuf"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"testing"
+
+	pb "github.com/refraction-networking/gotapdance/protobuf"
 )
 
 func setupTestAssets() error {
@@ -59,7 +60,7 @@ func TestMain(m *testing.M) {
 	os.Exit(retCode)
 }
 
-func TestTapDanceDial(t *testing.T) {
+func DisabledTestTapDanceDial(t *testing.T) {
 	urlParse := func(urlStr string) url.URL {
 		_url, err := url.Parse(urlStr)
 		if err != nil {
