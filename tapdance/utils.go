@@ -87,7 +87,7 @@ func getRandString(length int) string {
 }
 
 type tapdanceSharedKeys struct {
-	FspKey, FspIv, VspKey, VspIv, NewMasterSecret, DarkDecoySeed []byte
+	FspKey, FspIv, VspKey, VspIv, NewMasterSecret, ConjureSeed []byte
 }
 
 func genSharedKeys(sharedSecret []byte) (tapdanceSharedKeys, error) {
@@ -98,7 +98,7 @@ func genSharedKeys(sharedSecret []byte) (tapdanceSharedKeys, error) {
 		VspKey:          make([]byte, 16),
 		VspIv:           make([]byte, 12),
 		NewMasterSecret: make([]byte, 48),
-		DarkDecoySeed:   make([]byte, 16),
+		ConjureSeed:     make([]byte, 16),
 	}
 
 	if _, err := tdHkdf.Read(keys.FspKey); err != nil {
@@ -116,7 +116,7 @@ func genSharedKeys(sharedSecret []byte) (tapdanceSharedKeys, error) {
 	if _, err := tdHkdf.Read(keys.NewMasterSecret); err != nil {
 		return keys, err
 	}
-	if _, err := tdHkdf.Read(keys.DarkDecoySeed); err != nil {
+	if _, err := tdHkdf.Read(keys.ConjureSeed); err != nil {
 		return keys, err
 	}
 	return keys, nil

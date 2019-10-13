@@ -183,6 +183,11 @@ func (a *assets) GetDecoyAddress() (sni string, addr string) {
 	return
 }
 
+// Get all Decoys from ClientConf assets Protobuf
+func (a *assets) GetAllDecoys() []*pb.TLSDecoySpec {
+	return a.config.GetDecoyList().GetTlsDecoys()
+}
+
 // Gets random DecoySpec.
 func (a *assets) GetDecoy() pb.TLSDecoySpec {
 	a.RLock()

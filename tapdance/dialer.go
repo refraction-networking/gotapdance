@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"time"
 )
 
 var sessionsTotal CounterUint64
@@ -59,20 +60,27 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 	}
 
 	if !d.SplitFlows {
-		flow, err := makeTdFlow(flowBidirectional, nil, address)
-		flow.tdRaw.useProxyHeader = d.UseProxyHeader
-		flow.tdRaw.darkDecoyV6Support = d.V6Support
-		if err != nil {
-			return nil, err
-		}
-		flow.tdRaw.TcpDialer = d.TcpDialer
-		if d.DarkDecoy {
+		if !d.DarkDecoy {
+			flow, err := makeTdFlow(flowBidirectional, nil, address)
+			if err != nil {
+				return nil, err
+			}
+			flow.tdRaw.TcpDialer = d.TcpDialer
+			return flow, flow.DialContext(ctx)
+		} else {
+			flow, err := makeTdFlow(flowBidirectional, nil, address)
+			if err != nil {
+				return nil, err
+			}
+			cjSession := makeConjureSession()
+			cjSession.useProxyHeader = d.UseProxyHeader
+			cjSession.v6Support = V6{d.V6Support, time.Now()}
+			flow.tdRaw.darkDecoyV6Support = d.V6Support
 			if len(address) == 0 {
 				return nil, errors.New("Dark Decoys require target address to be set")
 			}
-			return dialDarkDecoy(ctx, flow)
+			return DialConjure(ctx, nil)
 		}
-		return flow, flow.DialContext(ctx)
 	}
 	return nil, errors.New("SplitFlows are not supported")
 }

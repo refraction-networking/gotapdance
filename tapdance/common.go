@@ -13,6 +13,8 @@ import (
 	"golang.org/x/crypto/curve25519"
 )
 
+const AES_GCM_TAG_SIZE = 16
+
 const timeoutMax = 30000
 const timeoutMin = 20000
 
