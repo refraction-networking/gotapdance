@@ -159,3 +159,11 @@ func TestRegDigest(t *testing.T) {
 		t.Fatalf("Incorrect stats digest returned")
 	}
 }
+
+func TestCheckV6Decoys(t *testing.T) {
+	AssetsSetDir("./assets")
+	decoysV6 := Assets().GetV6Decoys()
+	if len(decoysV6) < 5 {
+		t.Fatalf("Not enough V6 decoys in ClientConf (has: %v, need at least: %v)", len(decoysV6), 5)
+	}
+}
