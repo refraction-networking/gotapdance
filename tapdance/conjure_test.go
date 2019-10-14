@@ -11,17 +11,17 @@ func TestUseV4(t *testing.T) {
 		support: true,
 		checked: time.Now(),
 	}
-	cjSession := ConjureSession{v6Support: v6}
+	cjSession := ConjureSession{V6Support: v6}
 	if cjSession.useV4() != false {
 		t.Fatal("Incorrect v4 usage determination")
 	}
 
-	cjSession.v6Support.support = false
+	cjSession.V6Support.support = false
 	if cjSession.useV4() != true {
 		t.Fatal("Incorrect v4 usage determination")
 	}
 
-	cjSession.v6Support.checked = time.Now().Add(-3 * time.Hour)
+	cjSession.V6Support.checked = time.Now().Add(-3 * time.Hour)
 	if cjSession.useV4() != false {
 		t.Fatal("Incorrect v4 usage determination")
 	}
@@ -100,7 +100,34 @@ func TestSelectIpv6(t *testing.T) {
 	if err != nil || darDecoyIPAddr == nil {
 		t.Fatalf("Failed to select IP address (v6: true): %v", err)
 	} else if darDecoyIPAddr.String() != "1234::507:90c:e17:181a" {
-		t.Fatalf("Incorrect Address chosen")
+		t.Fatalf("Incorrect Address chosen: %s", darDecoyIPAddr.String())
 
+	}
+}
+
+func TestConjureHMAC(t *testing.T) {
+
+	solution1 := []byte{
+		0x09, 0xd2, 0x9e, 0xc9, 0x26, 0xa2, 0xe5, 0x06, 0x90, 0xb9, 0x70, 0xa7, 0x7b, 0x24, 0xd0, 0x0c,
+		0xc1, 0x05, 0x20, 0x57, 0xb7, 0x8c, 0x4f, 0x19, 0x40, 0xef, 0xe3, 0x7f, 0x7e, 0xfa, 0x66, 0x92}
+	test1 := conjureHMAC([]byte("1abcd2efgh3ijkl4"), "customString")
+	if len(test1) != len(solution1) {
+		t.Fatalf("Wrong hash returned:\n%v\n%v", solution1, test1)
+	}
+	for i, v := range test1 {
+		if v != solution1[i] {
+			t.Fatalf("Wrong hash returned:\n%v\n%v", solution1, test1)
+		}
+	}
+}
+
+func TestGenerateKeys(t *testing.T) {
+	fakePubkey := [32]byte{0}
+	keys, err := generateSharedKeys(fakePubkey)
+	if err != nil {
+		t.Fatalf("Failed to generate Conjure Keys: %v", err)
+	}
+	if keys == nil {
+		t.Fatalf("Incorrect Keys generated: %v", keys.SharedSecret)
 	}
 }

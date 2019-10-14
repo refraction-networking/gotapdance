@@ -59,8 +59,9 @@ func Register(cjSession *ConjureSession) error {
 	// Choose N (width) decoys from decoylist
 	if cjSession.useV4() {
 		cjSession.RegDecoys = SelectDecoys(cjSession.Keys, false, cjSession.Width)
-		cjSession.Phantom, err = SelectPhantom(cjSession.Keys, false)
+		cjSession.Phantom, err = SelectPhantom(cjSession.Keys.ConjureSeed, false)
 		if err != nil {
+			Logger().Infof("%v failed to select dark decoy: %v\n", cjSession.IDString(), err)
 			return err
 		}
 
@@ -68,8 +69,9 @@ func Register(cjSession *ConjureSession) error {
 	}
 
 	cjSession.RegDecoys = SelectDecoys(cjSession.Keys, true, cjSession.Width)
-	cjSession.Phantom, err = SelectPhantom(cjSession.Keys, true)
+	cjSession.Phantom, err = SelectPhantom(cjSession.Keys.ConjureSeed, true)
 	if err != nil {
+		Logger().Infof("%v failed to select dark decoy: %v\n", cjSession.IDString(), err)
 		return err
 	}
 	err = cjSession.register()
@@ -81,8 +83,9 @@ func Register(cjSession *ConjureSession) error {
 
 		// -> update settings and retry v4 only
 		cjSession.RegDecoys = SelectDecoys(cjSession.Keys, false, cjSession.Width)
-		cjSession.Phantom, err = SelectPhantom(cjSession.Keys, false)
+		cjSession.Phantom, err = SelectPhantom(cjSession.Keys.ConjureSeed, false)
 		if err != nil {
+			Logger().Infof("%v failed to select dark decoy: %v\n", cjSession.IDString(), err)
 			return err
 		}
 
@@ -387,7 +390,6 @@ func (reg *ConjureReg) generateFSP(espSize uint16) []byte {
 	binary.BigEndian.PutUint16(buf[0:2], espSize)
 	flags := default_flags
 
-	//[TODO] share flags somehow
 	if reg.useProxyHeader {
 		flags |= tdFlagProxyHeader
 	}
@@ -448,9 +450,17 @@ func SelectDecoys(keys *sharedKeys, v6Support bool, width uint) []*pb.TLSDecoySp
 }
 
 // SelectPhantom - select one phantom IP address based on shared secret
-func SelectPhantom(keys *sharedKeys, v6Support bool) (*net.IP, error) {
-	//[TODO] Implement me
-	return nil, &RegError{code: NotImplemented, msg: "SelectPhantom Not Implemented yet."}
+func SelectPhantom(seed []byte, v6Support bool) (*net.IP, error) {
+	ddIpSelector, err := newDDIpSelector([]string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}, v6Support)
+	if err != nil {
+		return nil, err
+	}
+
+	darkDecoyIpAddr, err := ddIpSelector.selectIpAddr(seed)
+	if err != nil {
+		return nil, err
+	}
+	return darkDecoyIpAddr, nil
 }
 
 func getStationKey() [32]byte {

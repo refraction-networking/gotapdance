@@ -73,8 +73,8 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 				return nil, err
 			}
 			cjSession := makeConjureSession()
-			cjSession.useProxyHeader = d.UseProxyHeader
-			cjSession.v6Support = V6{d.V6Support, time.Now()}
+			cjSession.UseProxyHeader = d.UseProxyHeader
+			cjSession.V6Support = V6{d.V6Support, time.Now()}
 			flow.tdRaw.darkDecoyV6Support = d.V6Support
 			if len(address) == 0 {
 				return nil, errors.New("Dark Decoys require target address to be set")
