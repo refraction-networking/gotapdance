@@ -234,7 +234,7 @@ type ConjureReg struct {
 	phantomSNI     string
 	v6Support      bool
 
-	stats pb.SessionStats
+	stats *pb.SessionStats
 
 	keys *sharedKeys
 }
@@ -403,10 +403,14 @@ func (reg *ConjureReg) generateFSP(espSize uint16) []byte {
 }
 
 func (reg *ConjureReg) digestStats() string {
-	return fmt.Sprintf("{tcp_to_decoy:%d, tls_to_decoy:%d, total_time_to_connect:%d}",
-		reg.stats.TcpToDecoy,
-		reg.stats.TlsToDecoy,
-		reg.stats.TotalTimeToConnect)
+	//[TODO]{priority:eventually} add decoy details to digest
+	if reg == nil || reg.stats == nil {
+		return fmt.Sprint("{result:\"no stats tracked\"}")
+	}
+	return fmt.Sprintf("{result:\"success\", tcp_to_decoy:%v, tls_to_decoy:%v, total_time_to_connect:%v}",
+		reg.stats.GetTcpToDecoy(),
+		reg.stats.GetTlsToDecoy(),
+		reg.stats.GetTotalTimeToConnect())
 }
 
 // When a registration send goroutine finishes it will call this and log

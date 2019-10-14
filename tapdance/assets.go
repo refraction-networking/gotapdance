@@ -193,7 +193,7 @@ func (a *assets) GetV6Decoys() []*pb.TLSDecoySpec {
 	v6Decoys := make([]*pb.TLSDecoySpec, 0)
 	allDecoys := a.config.GetDecoyList().GetTlsDecoys()
 
-	for i, decoy := range allDecoys {
+	for _, decoy := range allDecoys {
 		if decoy.GetIpv6Addr() != nil {
 			v6Decoys = append(v6Decoys, decoy)
 		}

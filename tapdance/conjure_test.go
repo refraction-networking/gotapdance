@@ -4,6 +4,8 @@ import (
 	"crypto/rand"
 	"testing"
 	"time"
+
+	pb "github.com/refraction-networking/gotapdance/protobuf"
 )
 
 func TestUseV4(t *testing.T) {
@@ -129,5 +131,31 @@ func TestGenerateKeys(t *testing.T) {
 	}
 	if keys == nil {
 		t.Fatalf("Incorrect Keys generated: %v", keys.SharedSecret)
+	}
+}
+
+func TestRegDigest(t *testing.T) {
+	reg := ConjureReg{}
+	soln1 := "{result:\"no stats tracked\"}"
+
+	if reg.digestStats() != soln1 {
+		t.Fatalf("Incorrect stats digest returned")
+	}
+
+	testRTT := uint32(1000)
+	reg.stats = &pb.SessionStats{
+		TotalTimeToConnect: &testRTT,
+		TcpToDecoy:         &testRTT}
+
+	soln2 := "{result:\"success\", tcp_to_decoy:1000, tls_to_decoy:0, total_time_to_connect:1000}"
+	if reg.digestStats() != soln2 {
+		t.Fatalf("Incorrect stats digest returned")
+	}
+
+	reg.stats.TlsToDecoy = &testRTT
+
+	soln3 := "{result:\"success\", tcp_to_decoy:1000, tls_to_decoy:1000, total_time_to_connect:1000}"
+	if reg.digestStats() != soln3 {
+		t.Fatalf("Incorrect stats digest returned")
 	}
 }
