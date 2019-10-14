@@ -183,12 +183,26 @@ func (a *assets) GetDecoyAddress() (sni string, addr string) {
 	return
 }
 
-// Get all Decoys from ClientConf assets Protobuf
+// Get all Decoys from ClientConf
 func (a *assets) GetAllDecoys() []*pb.TLSDecoySpec {
 	return a.config.GetDecoyList().GetTlsDecoys()
 }
 
-// Gets random DecoySpec.
+// Get all Decoys from ClientConf that have an IPv6 address
+func (a *assets) GetV6Decoys() []*pb.TLSDecoySpec {
+	v6Decoys := make([]*pb.TLSDecoySpec, 0)
+	allDecoys := a.config.GetDecoyList().GetTlsDecoys()
+
+	for i, decoy := range allDecoys {
+		if decoy.GetIpv6Addr() != nil {
+			v6Decoys = append(v6Decoys, decoy)
+		}
+	}
+
+	return v6Decoys
+}
+
+// Gets random DecoySpec
 func (a *assets) GetDecoy() pb.TLSDecoySpec {
 	a.RLock()
 	defer a.RUnlock()

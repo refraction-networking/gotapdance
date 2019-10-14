@@ -23,13 +23,7 @@ type V6 struct {
 	checked time.Time
 }
 
-//[TODO] remove this it is unused.
-const (
-	v4 = iota
-	v6
-	both
-)
-
+//[TODO]{priority:winter-break} make this not constant
 const defaultRegWidth = 5
 
 // DialConjure - Perform Registration and Dial to create a Conjure session
@@ -118,8 +112,8 @@ type ConjureSession struct {
 	stats pb.SessionStats
 }
 
-// Define transports here
-//[TODO] make this it's own type / interface
+// Define transports here=p0
+//[TODO]{priority:winter-break} make this it's own type / interface
 const (
 	// MinTransport - Minimal transport used to connect  station (default)
 	MinTransport uint = iota
@@ -158,24 +152,20 @@ func (cjSession *ConjureSession) String() string {
 }
 
 func (cjSession *ConjureSession) register() error {
-	// Prepare registration
+	//[reference] Prepare registration
 	reg := &ConjureReg{sessionIDStr: cjSession.IDString(), keys: cjSession.Keys}
 
-	ctx := context.Background()
-	rtt := rttInt(*cjSession.stats.TcpToDecoy)
-	delay := getRandomDuration(1061*rtt*2, 1953*rtt*3) // TODO: why these values??
-	deadline := time.Now().Add(delay)
-	childCtx, childCancelFunc := context.WithDeadline(ctx, deadline)
-	defer childCancelFunc()
+	// //[TODO]{priority:later} How to pass context to multiple registration goroutines?
+	// ctx := context.Background()
 
-	// send registrations to each decoy
+	//[reference] Send registrations to each decoy
 	dialErrors := make(chan error, cjSession.Width)
 	for _, decoy := range cjSession.RegDecoys {
 		//decoyAddr := decoy.GetIpAddrStr()
-		go reg.send(childCtx, decoy, dialErrors)
+		go reg.send(decoy, dialErrors, cjSession.registrationCallback)
 	}
 
-	//	Dial errors happen immediately so block until all N dials complete
+	//[reference] Dial errors happen immediately so block until all N dials complete
 	var unreachableCount uint = 0
 	for err := range dialErrors {
 		if err != nil {
@@ -186,7 +176,7 @@ func (cjSession *ConjureSession) register() error {
 		}
 	}
 
-	// if ALL fail to dial return error (retry in parent if ipv6 unreachable)
+	//[reference] if ALL fail to dial return error (retry in parent if ipv6 unreachable)
 	if unreachableCount == cjSession.Width {
 		return &RegError{code: Unreachable, msg: "All decoys failed to register -- Dial Unreachable"}
 	}
@@ -200,7 +190,7 @@ func (cjSession *ConjureSession) connect(ctx context.Context) (net.Conn, error) 
 	if !deadlineAlreadySet {
 		//[reference] randomized timeout to Dial dark decoy address
 		deadline = time.Now().Add(cjSession.getRandomDuration(0, 1061*2, 1953*3))
-		//[TODO] @sfrolov explain these numbers and why they were chosen for the boundaries.
+		//[TODO]{priority:@sfrolov} explain these numbers and why they were chosen for the boundaries.
 	}
 	childCtx, childCancelFunc := context.WithDeadline(ctx, deadline)
 	defer childCancelFunc()
@@ -222,7 +212,7 @@ func (cjSession *ConjureSession) connect(ctx context.Context) (net.Conn, error) 
 		connectTag := conjureHMAC(cjSession.Keys.SharedSecret, "MinTrasportHMACString")
 		conn.Write(connectTag)
 	case Obfs4Transport:
-		//[TODO] add Obfs4 Transport
+		//[TODO]{priority:winter-break} add Obfs4 Transport
 		return nil, fmt.Errorf("connect not yet implemented")
 
 	default:
@@ -243,6 +233,8 @@ type ConjureReg struct {
 	covertAddress  string
 	phantomSNI     string
 	v6Support      bool
+
+	stats pb.SessionStats
 
 	keys *sharedKeys
 }
@@ -286,17 +278,24 @@ func (reg *ConjureReg) createRequest(tlsConn *tls.UConn, decoy *pb.TLSDecoySpec)
 }
 
 // Being called in parallel -> no changes to ConjureReg allowed in this function
-func (reg *ConjureReg) send(ctx context.Context, decoy *pb.TLSDecoySpec, dialError chan error) {
+func (reg *ConjureReg) send(decoy *pb.TLSDecoySpec, dialError chan error, callback func(*ConjureReg, error)) {
+
+	ctx := context.Background()
 
 	//[reference] TCP to decoy
-	//tcpToDecoyStartTs := time.Now()
+	tcpToDecoyStartTs := time.Now()
 	dialConn, err := (&net.Dialer{}).DialContext(ctx, "tcp", decoy.GetIpAddrStr())
-	// tcpToDecoyTotalTs := time.Since(tcpToDecoyStartTs)
+	reg.stats.TcpToDecoy = durationToU32ptrMs(time.Since(tcpToDecoyStartTs))
 	if err != nil {
 		dialError <- err
 		dialConn.Close()
 		return
 	}
+
+	//[reference] connection stats tracking
+	rtt := rttInt(*reg.stats.TcpToDecoy)
+	delay := getRandomDuration(1061*rtt*2, 1953*rtt*3) //[TODO]{priority:@sfrolov} why these values??
+	deadline := time.Now().Add(delay)
 
 	//[reference] TLS to Decoy
 	config := tls.Config{ServerName: decoy.GetHostname()}
@@ -311,7 +310,7 @@ func (reg *ConjureReg) send(ctx context.Context, decoy *pb.TLSDecoySpec, dialErr
 		Logger().Infoln(reg.sessionIDStr + ": SNI was nil. Setting it to" +
 			config.ServerName)
 	}
-	//[TODO] parroting Chrome 62 ClientHello -- parrot newer.
+	//[TODO]{priority:winter-break} parroting Chrome 62 ClientHello -- parrot newer.
 	tlsConn := tls.UClient(dialConn, &config, tls.HelloChrome_62)
 	err = tlsConn.BuildHandshakeState()
 	if err != nil {
@@ -325,8 +324,8 @@ func (reg *ConjureReg) send(ctx context.Context, decoy *pb.TLSDecoySpec, dialErr
 		dialError <- err
 		return
 	}
-	//[TODO] add deadline timeout to tls connection to registration decoys.
-	// tlsConn.SetDeadline(deadline)
+
+	tlsConn.SetDeadline(deadline)
 	err = tlsConn.Handshake()
 	if err != nil {
 		dialConn.Close()
@@ -351,12 +350,13 @@ func (reg *ConjureReg) send(ctx context.Context, decoy *pb.TLSDecoySpec, dialErr
 	}
 
 	readAndClose(dialConn, time.Second*15)
+	callback(reg, err)
 }
 
 func (reg *ConjureReg) generateVSP() ([]byte, error) {
 	var covert *string
 	if len(reg.covertAddress) > 0 {
-		//[TODO] this isn't the correct place to deal with signaling to the station
+		//[TODO]{priority:winter-break} this isn't the correct place to deal with signaling to the station
 		//transition = pb.C2S_Transition_C2S_SESSION_COVERT_INIT
 		covert = &reg.covertAddress
 	}
@@ -365,9 +365,13 @@ func (reg *ConjureReg) generateVSP() ([]byte, error) {
 	// transition := pb.C2S_Transition_C2S_SESSION_INIT
 	currentGen := Assets().GetGeneration()
 	initProto := &pb.ClientToStation{
-		CovertAddress: covert,
-		// StateTransition:     &transition,
+		CovertAddress:       covert,
 		DecoyListGeneration: &currentGen,
+
+		// StateTransition:     &transition,
+
+		//[TODO]{priority:winter-break} specify width in C2S because different width might
+		// 		be useful in different regions (constant for now.)
 	}
 
 	if len(reg.phantomSNI) > 0 {
@@ -396,6 +400,19 @@ func (reg *ConjureReg) generateFSP(espSize uint16) []byte {
 	buf[2] = flags
 
 	return buf
+}
+
+func (reg *ConjureReg) digestStats() string {
+	return fmt.Sprintf("{tcp_to_decoy:%d, tls_to_decoy:%d, total_time_to_connect:%d}",
+		reg.stats.TcpToDecoy,
+		reg.stats.TlsToDecoy,
+		reg.stats.TotalTimeToConnect)
+}
+
+// When a registration send goroutine finishes it will call this and log
+//	 	session stats and/or errors.
+func (cjSession *ConjureSession) registrationCallback(reg *ConjureReg, err error) {
+	Logger().Infof("[%v] %v - %v", cjSession.IDString(), reg.digestStats(), err)
 }
 
 func (cjSession *ConjureSession) useV4() bool {
@@ -429,14 +446,21 @@ func rttInt(millis uint32) int {
 }
 
 // SelectDecoys - Get an array of `width` decoys to be used for registration
-func SelectDecoys(keys *sharedKeys, v6Support bool, width uint) []*pb.TLSDecoySpec {
-	//[TODO]: Prune for v6
-	decoys := make([]*pb.TLSDecoySpec, width)
-	allDecoys := Assets().GetAllDecoys()
-	numDecoys := big.NewInt(int64(len(allDecoys)))
+func SelectDecoys(keys *sharedKeys, useV6 bool, width uint) []*pb.TLSDecoySpec {
 
+	//[reference] prune to v6 only decoys if useV6 is true
+	var allDecoys []*pb.TLSDecoySpec
+	if useV6 {
+		allDecoys = Assets().GetV6Decoys()
+	} else {
+		allDecoys = Assets().GetAllDecoys()
+	}
+
+	decoys := make([]*pb.TLSDecoySpec, width)
+	numDecoys := big.NewInt(int64(len(allDecoys)))
 	var idx, macInt *big.Int
 
+	//[referece] select decoys
 	for i := uint(0); i < width; i++ {
 		macString := fmt.Sprintf("registrationdecoy%d", i)
 		mac := conjureHMAC(keys.SharedSecret, macString)
@@ -451,16 +475,16 @@ func SelectDecoys(keys *sharedKeys, v6Support bool, width uint) []*pb.TLSDecoySp
 
 // SelectPhantom - select one phantom IP address based on shared secret
 func SelectPhantom(seed []byte, v6Support bool) (*net.IP, error) {
-	ddIpSelector, err := newDDIpSelector([]string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}, v6Support)
+	ddIPSelector, err := newDDIpSelector([]string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}, v6Support)
 	if err != nil {
 		return nil, err
 	}
 
-	darkDecoyIpAddr, err := ddIpSelector.selectIpAddr(seed)
+	darkDecoyIPAddr, err := ddIPSelector.selectIpAddr(seed)
 	if err != nil {
 		return nil, err
 	}
-	return darkDecoyIpAddr, nil
+	return darkDecoyIPAddr, nil
 }
 
 func getStationKey() [32]byte {
