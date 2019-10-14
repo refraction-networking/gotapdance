@@ -68,14 +68,12 @@ func lookupHost(decoy *pb.TLSDecoySpec) []byte {
 	decoyHostname := decoy.GetHostname()
 	decoyIP, err := net.ResolveIPAddr("ip6", decoyHostname)
 	if err == nil && decoyIP != nil {
-		fmt.Printf("%v -(%v)- %v\n", decoyHostname, decoy.GetIpAddrStr(), decoyIP)
-		// ipbyteslice, err := decoyIP.IP.MarshalText()
 		ipBytes := []byte(decoyIP.IP.To16())
+		fmt.Printf("%v -(%v)- [%v]\n", decoyHostname, decoy.GetIpAddrStr(), decoyIP)
 		if ipBytes == nil {
 			fmt.Printf("%v -(%v)- %v -- error getting v6 byte slice\n", decoyHostname, decoy.GetIpAddrStr(), decoyIP)
 		}
 		return ipBytes
-		// fmt.Printf("%v -(%v)- %v\n", decoyHostname, decoy.GetIpAddrStr(), decoyIP)
 	}
 	return nil
 }
@@ -87,9 +85,9 @@ func lookupHosts(decoyList []*pb.TLSDecoySpec) map[string][]byte {
 		decoyHostname := decoy.GetHostname()
 		decoyIP, err := net.ResolveIPAddr("ip6", decoyHostname)
 		if err == nil && decoyIP != nil {
-			ipbyteslice, err := decoyIP.IP.To16().MarshalText()
-			if err == nil {
-				v6Decoys[decoyHostname] = ipbyteslice
+			ipBytes := []byte(decoyIP.IP.To16())
+			if ipBytes != nil {
+				v6Decoys[decoyHostname] = ipBytes
 			}
 			fmt.Printf("%v -(%v)- %v\n", decoyHostname, decoy.GetIpAddrStr(), decoyIP)
 		}
