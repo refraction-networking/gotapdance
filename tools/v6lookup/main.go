@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
+	"github.com/golang/protobuf/proto"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 )
 
@@ -38,14 +38,25 @@ func main() {
 
 	// v6Decoys := lookupHosts(clientConf.DecoyList.GetTlsDecoys())
 	// fmt.Printf("Found %d Ipv6 Decoys\n", len(v6Decoys))
-
 	if *lookupV6 {
+		var ipv6Arr [16]byte
+		uniqueIPv6Addrs := make(map[[16]byte]bool)
+		i := 0
+
 		for _, decoy := range clientConf.DecoyList.GetTlsDecoys() {
 			ipv6 := lookupHost(decoy)
 			if ipv6 != nil {
-				decoy.Ipv6Addr = ipv6
+				copy(ipv6Arr[:], ipv6[:16])
+				if uniqueIPv6Addrs[ipv6Arr] == false {
+					decoy.Ipv6Addr = ipv6
+					uniqueIPv6Addrs[ipv6Arr] = true
+					i++
+				} else {
+					fmt.Printf("Non-unique IP found for: %v - %v\n", decoy.GetHostname(), ipv6)
+				}
 			}
 		}
+		fmt.Printf("Unique Addresses: %v\n", i)
 	}
 
 	if !*noout {

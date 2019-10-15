@@ -163,6 +163,7 @@ func TestRegDigest(t *testing.T) {
 func TestCheckV6Decoys(t *testing.T) {
 	AssetsSetDir("./assets")
 	decoysV6 := Assets().GetV6Decoys()
+	t.Logf("V6 Decoys: %v", len(decoysV6))
 	if len(decoysV6) < 5 {
 		t.Fatalf("Not enough V6 decoys in ClientConf (has: %v, need at least: %v)", len(decoysV6), 5)
 	}
