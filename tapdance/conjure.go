@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"math/big"
 	"net"
@@ -52,7 +53,7 @@ func Register(cjSession *ConjureSession) error {
 
 	// Choose N (width) decoys from decoylist
 	if cjSession.useV4() {
-		cjSession.RegDecoys = SelectDecoys(cjSession.Keys, false, cjSession.Width)
+		cjSession.RegDecoys = SelectDecoys(cjSession.Keys.SharedSecret, false, cjSession.Width)
 		cjSession.Phantom, err = SelectPhantom(cjSession.Keys.ConjureSeed, false)
 		if err != nil {
 			Logger().Infof("%v failed to select dark decoy: %v\n", cjSession.IDString(), err)
@@ -62,7 +63,7 @@ func Register(cjSession *ConjureSession) error {
 		return cjSession.register()
 	}
 
-	cjSession.RegDecoys = SelectDecoys(cjSession.Keys, true, cjSession.Width)
+	cjSession.RegDecoys = SelectDecoys(cjSession.Keys.SharedSecret, true, cjSession.Width)
 	cjSession.Phantom, err = SelectPhantom(cjSession.Keys.ConjureSeed, true)
 	if err != nil {
 		Logger().Infof("%v failed to select dark decoy: %v\n", cjSession.IDString(), err)
@@ -76,7 +77,7 @@ func Register(cjSession *ConjureSession) error {
 		cjSession.V6Support.checked = time.Now()
 
 		// -> update settings and retry v4 only
-		cjSession.RegDecoys = SelectDecoys(cjSession.Keys, false, cjSession.Width)
+		cjSession.RegDecoys = SelectDecoys(cjSession.Keys.SharedSecret, false, cjSession.Width)
 		cjSession.Phantom, err = SelectPhantom(cjSession.Keys.ConjureSeed, false)
 		if err != nil {
 			Logger().Infof("%v failed to select dark decoy: %v\n", cjSession.IDString(), err)
@@ -129,6 +130,10 @@ func makeConjureSession() *ConjureSession {
 		return nil
 	}
 
+	dst := make([]byte, hex.EncodedLen(len(keys.SharedSecret)))
+	hex.Encode(dst, keys.SharedSecret)
+	Logger().Warnf("Shared Secret - %s", dst)
+
 	cjSession := &ConjureSession{
 		Keys:           keys,
 		Width:          defaultRegWidth,
@@ -153,7 +158,11 @@ func (cjSession *ConjureSession) String() string {
 
 func (cjSession *ConjureSession) register() error {
 	//[reference] Prepare registration
-	reg := &ConjureReg{sessionIDStr: cjSession.IDString(), keys: cjSession.Keys}
+	reg := &ConjureReg{
+		sessionIDStr: cjSession.IDString(),
+		keys:         cjSession.Keys,
+		stats:        &pb.SessionStats{},
+	}
 
 	// //[TODO]{priority:later} How to pass context to multiple registration goroutines?
 	// ctx := context.Background()
@@ -285,7 +294,7 @@ func (reg *ConjureReg) send(decoy *pb.TLSDecoySpec, dialError chan error, callba
 	//[reference] TCP to decoy
 	tcpToDecoyStartTs := time.Now()
 	dialConn, err := (&net.Dialer{}).DialContext(ctx, "tcp", decoy.GetIpAddrStr())
-	reg.stats.TcpToDecoy = durationToU32ptrMs(time.Since(tcpToDecoyStartTs))
+	reg.SetTcpToDecoy(durationToU32ptrMs(time.Since(tcpToDecoyStartTs)))
 	if err != nil {
 		dialError <- err
 		dialConn.Close()
@@ -352,6 +361,12 @@ func (reg *ConjureReg) send(decoy *pb.TLSDecoySpec, dialError chan error, callba
 	readAndClose(dialConn, time.Second*15)
 	callback(reg, err)
 }
+func (reg *ConjureReg) SetTcpToDecoy(tcprtt *uint32) {
+	if reg.stats == nil {
+		reg.stats = &pb.SessionStats{}
+	}
+	reg.stats.TcpToDecoy = tcprtt
+}
 
 func (reg *ConjureReg) generateVSP() ([]byte, error) {
 	var covert *string
@@ -416,6 +431,7 @@ func (reg *ConjureReg) digestStats() string {
 // When a registration send goroutine finishes it will call this and log
 //	 	session stats and/or errors.
 func (cjSession *ConjureSession) registrationCallback(reg *ConjureReg, err error) {
+	//[TODO]{priority:NOW}
 	Logger().Infof("[%v] %v - %v", cjSession.IDString(), reg.digestStats(), err)
 }
 
@@ -450,7 +466,7 @@ func rttInt(millis uint32) int {
 }
 
 // SelectDecoys - Get an array of `width` decoys to be used for registration
-func SelectDecoys(keys *sharedKeys, useV6 bool, width uint) []*pb.TLSDecoySpec {
+func SelectDecoys(sharedSecret []byte, useV6 bool, width uint) []*pb.TLSDecoySpec {
 
 	//[reference] prune to v6 only decoys if useV6 is true
 	var allDecoys []*pb.TLSDecoySpec
@@ -462,16 +478,17 @@ func SelectDecoys(keys *sharedKeys, useV6 bool, width uint) []*pb.TLSDecoySpec {
 
 	decoys := make([]*pb.TLSDecoySpec, width)
 	numDecoys := big.NewInt(int64(len(allDecoys)))
-	var idx, macInt *big.Int
+	hmacInt := new(big.Int)
+	idx := new(big.Int)
 
 	//[referece] select decoys
 	for i := uint(0); i < width; i++ {
 		macString := fmt.Sprintf("registrationdecoy%d", i)
-		mac := conjureHMAC(keys.SharedSecret, macString)
-		macInt = macInt.SetBytes(mac)
-		macInt.SetBytes(mac)
-		macInt.Abs(macInt)
-		idx.Mod(macInt, numDecoys)
+		hmac := conjureHMAC(sharedSecret, macString)
+		hmacInt = hmacInt.SetBytes(hmac[:8])
+		hmacInt.SetBytes(hmac)
+		hmacInt.Abs(hmacInt)
+		idx.Mod(hmacInt, numDecoys)
 		decoys[i] = allDecoys[int(idx.Int64())]
 	}
 	return decoys

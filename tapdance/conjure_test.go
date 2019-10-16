@@ -2,6 +2,7 @@ package tapdance
 
 import (
 	"crypto/rand"
+	"encoding/hex"
 	"testing"
 	"time"
 
@@ -101,7 +102,7 @@ func TestSelectIpv6(t *testing.T) {
 	darDecoyIPAddr, err := SelectPhantom(seed, true)
 	if err != nil || darDecoyIPAddr == nil {
 		t.Fatalf("Failed to select IP address (v6: true): %v", err)
-	} else if darDecoyIPAddr.String() != "1234::507:90c:e17:181a" {
+	} else if darDecoyIPAddr.String() != "2001:48a8:687f:1:709:b0d:f11:121e" {
 		t.Fatalf("Incorrect Address chosen: %s", darDecoyIPAddr.String())
 
 	}
@@ -166,5 +167,24 @@ func TestCheckV6Decoys(t *testing.T) {
 	t.Logf("V6 Decoys: %v", len(decoysV6))
 	if len(decoysV6) < 5 {
 		t.Fatalf("Not enough V6 decoys in ClientConf (has: %v, need at least: %v)", len(decoysV6), 5)
+	}
+}
+
+func TestSelectDecoys(t *testing.T) {
+	// SelectDecoys(sharedSecret []byte, useV6 bool, width uint) []*pb.TLSDecoySpec
+	AssetsSetDir("./assets")
+	seedStr := []byte("5a87133b68da3468988a21659a12ed2ece07345c8c1a5b08459ffdea4218d12f")
+	seed := make([]byte, hex.DecodedLen(len(seedStr)))
+	n, err := hex.Decode(seed, seedStr)
+	if err != nil || n != 32 {
+		t.Fatalf("Issue decoding seedStr")
+	}
+	decoys := SelectDecoys(seed, true, 5)
+	if len(decoys) < 5 {
+		t.Fatalf("Not enough decoys returned from selection.")
+	}
+	decoys = SelectDecoys(seed, false, 5)
+	if len(decoys) < 5 {
+		t.Fatalf("Not enough decoys returned from selection.")
 	}
 }
