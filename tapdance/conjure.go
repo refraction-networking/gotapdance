@@ -61,7 +61,7 @@ func Register(cjSession *ConjureSession) error {
 
 	// Choose N (width) decoys from decoylist
 	if cjSession.useV4() {
-		cjSession.RegDecoys = SelectDecoys(cjSession.Keys.SharedSecret, false, cjSession.Width)
+		cjSession.RegDecoys = SelectDecoys(cjSession.Keys.SharedSecret, v4, cjSession.Width)
 		cjSession.Phantom, err = SelectPhantom(cjSession.Keys.ConjureSeed, false)
 		if err != nil || cjSession.Phantom == nil {
 			Logger().Warnf("%v failed to select Phantom: %v\n", cjSession.IDString(), err)
@@ -72,7 +72,7 @@ func Register(cjSession *ConjureSession) error {
 		return cjSession.register()
 	}
 
-	cjSession.RegDecoys = SelectDecoys(cjSession.Keys.SharedSecret, true, cjSession.Width)
+	cjSession.RegDecoys = SelectDecoys(cjSession.Keys.SharedSecret, v6, cjSession.Width)
 	cjSession.Phantom, err = SelectPhantom(cjSession.Keys.ConjureSeed, true)
 	if err != nil || cjSession.Phantom == nil {
 		Logger().Warnf("%v failed to select Phantom: %v\n", cjSession.IDString(), err)
@@ -90,7 +90,7 @@ func Register(cjSession *ConjureSession) error {
 		cjSession.V6Support.checked = time.Now()
 
 		// -> update settings and retry v4 only
-		cjSession.RegDecoys = SelectDecoys(cjSession.Keys.SharedSecret, false, cjSession.Width)
+		cjSession.RegDecoys = SelectDecoys(cjSession.Keys.SharedSecret, v4, cjSession.Width)
 		cjSession.Phantom, err = SelectPhantom(cjSession.Keys.ConjureSeed, false)
 		if err != nil || cjSession.Phantom == nil {
 			Logger().Warnf("%v failed to select Phantom: %v\n", cjSession.IDString(), err)
@@ -207,7 +207,7 @@ func (cjSession *ConjureSession) register() error {
 	//[reference] Send registrations to each decoy
 	dialErrors := make(chan error, width)
 	for _, decoy := range cjSession.RegDecoys {
-		Logger().Debugf("%v Sending Reg: %v (%v)", cjSession.IDString(), decoy.GetHostname(), decoy.GetIpAddrStr())
+		Logger().Debugf("%v Sending Reg: %v, %v", cjSession.IDString(), decoy.GetHostname(), decoy.GetIpAddrStr())
 		//decoyAddr := decoy.GetIpAddrStr()
 		go reg.send(decoy, dialErrors, cjSession.registrationCallback)
 	}
@@ -215,18 +215,19 @@ func (cjSession *ConjureSession) register() error {
 	//[reference] Dial errors happen immediately so block until all N dials complete
 	var unreachableCount uint = 0
 	for err := range dialErrors {
+		Logger().Tracef("%v %v", cjSession.IDString(), err)
 		if err != nil {
-			if opErr, ok := err.(*net.OpError); ok && opErr.Err.Error() == "connect: network is unreachable" {
+			if dialErr, ok := err.(RegError); ok && dialErr.code == Unreachable {
 				// If we failed because ipv6 network was unreachable try v4 only.
 				unreachableCount++
-				continue
+				if unreachableCount < width {
+					continue
+				}
 			}
 		}
 		// if we succeed or fail for any other reason network is reachable and we can continue
 		break
 	}
-
-	Logger().Tracef("We make it past dialErrs in the parent")
 
 	//[reference] if ALL fail to dial return error (retry in parent if ipv6 unreachable)
 	if unreachableCount == width {
@@ -339,8 +340,13 @@ func (reg *ConjureReg) send(decoy *pb.TLSDecoySpec, dialError chan error, callba
 
 	//[Note] decoy.GetIpAddrStr() will get only v4 addr if a decoy has both
 	dialConn, err := (&net.Dialer{}).DialContext(ctx, "tcp", decoy.GetIpAddrStr())
+
 	reg.setTCPToDecoy(durationToU32ptrMs(time.Since(tcpToDecoyStartTs)))
 	if err != nil {
+		if opErr, ok := err.(*net.OpError); ok && opErr.Err.Error() == "connect: network is unreachable" {
+			dialError <- RegError{msg: err.Error(), code: Unreachable}
+			return
+		}
 		dialError <- err
 		return
 	}
@@ -527,14 +533,25 @@ func rttInt(millis uint32) int {
 	return int(millis)
 }
 
+const (
+	v4 uint = iota
+	v6
+	both
+)
+
 // SelectDecoys - Get an array of `width` decoys to be used for registration
-func SelectDecoys(sharedSecret []byte, useV6 bool, width uint) []*pb.TLSDecoySpec {
+func SelectDecoys(sharedSecret []byte, version uint, width uint) []*pb.TLSDecoySpec {
 
 	//[reference] prune to v6 only decoys if useV6 is true
 	var allDecoys []*pb.TLSDecoySpec
-	if useV6 {
+	switch version {
+	case v6:
 		allDecoys = Assets().GetV6Decoys()
-	} else {
+	case v4:
+		allDecoys = Assets().GetV4Decoys()
+	case both:
+		allDecoys = Assets().GetAllDecoys()
+	default:
 		allDecoys = Assets().GetAllDecoys()
 	}
 
@@ -633,8 +650,22 @@ type RegError struct {
 	msg  string
 }
 
-func (err *RegError) Error() string {
-	return fmt.Sprintf("Registration Error [%v]: %v", err.code, err.msg)
+func (err RegError) Error() string {
+	return fmt.Sprintf("Registration Error [%v]: %v", err.CodeStr(), err.msg)
+}
+
+// CodeStr - Get desctriptor associated with error code
+func (err RegError) CodeStr() string {
+	switch err.code {
+	case Unreachable:
+		return "UNREACHABLE"
+	case DialFailure:
+		return "DIAL_FAILURE"
+	case NotImplemented:
+		return "NOT_IMPLEMENTED"
+	default:
+		return "UNKNOWN"
+	}
 }
 
 const (

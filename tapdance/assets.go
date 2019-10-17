@@ -202,6 +202,20 @@ func (a *assets) GetV6Decoys() []*pb.TLSDecoySpec {
 	return v6Decoys
 }
 
+// Get all Decoys from ClientConf that have an IPv6 address
+func (a *assets) GetV4Decoys() []*pb.TLSDecoySpec {
+	v6Decoys := make([]*pb.TLSDecoySpec, 0)
+	allDecoys := a.config.GetDecoyList().GetTlsDecoys()
+
+	for _, decoy := range allDecoys {
+		if decoy.GetIpv4Addr() != 0 {
+			v6Decoys = append(v6Decoys, decoy)
+		}
+	}
+
+	return v6Decoys
+}
+
 // Gets random DecoySpec
 func (a *assets) GetDecoy() pb.TLSDecoySpec {
 	a.RLock()
