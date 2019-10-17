@@ -39,24 +39,33 @@ func main() {
 	// v6Decoys := lookupHosts(clientConf.DecoyList.GetTlsDecoys())
 	// fmt.Printf("Found %d Ipv6 Decoys\n", len(v6Decoys))
 	if *lookupV6 {
+		v6Decoys := make([]*pb.TLSDecoySpec, 0)
 		var ipv6Arr [16]byte
 		uniqueIPv6Addrs := make(map[[16]byte]bool)
+		ipv6Decoys := make(chan *pb.TLSDecoySpec)
 		i := 0
 
-		for _, decoy := range clientConf.DecoyList.GetTlsDecoys() {
-			ipv6 := lookupHost(decoy)
-			if ipv6 != nil {
-				copy(ipv6Arr[:], ipv6[:16])
+		go func() {
+			for decoy := range ipv6Decoys {
+				copy(ipv6Arr[:], decoy.GetIpv6Addr()[:16])
 				if uniqueIPv6Addrs[ipv6Arr] == false {
-					decoy.Ipv6Addr = ipv6
 					uniqueIPv6Addrs[ipv6Arr] = true
+					v6Decoys = append(v6Decoys, decoy)
+					fmt.Printf("%v, %v\n", decoy.GetHostname(), decoy.GetIpAddrStr())
 					i++
-				} else {
-					fmt.Printf("Non-unique IP found for: %v - %v\n", decoy.GetHostname(), ipv6)
 				}
 			}
+		}()
+
+		for _, decoy := range clientConf.DecoyList.GetTlsDecoys() {
+			lookupHost(decoy, ipv6Decoys)
 		}
+
 		fmt.Printf("Unique Addresses: %v\n", i)
+
+		for _, decoy := range v6Decoys {
+			clientConf.DecoyList.TlsDecoys = append(clientConf.DecoyList.TlsDecoys, decoy)
+		}
 	}
 
 	if !*noout {
@@ -75,18 +84,23 @@ func main() {
 	}
 }
 
-func lookupHost(decoy *pb.TLSDecoySpec) []byte {
+func lookupHost(decoy *pb.TLSDecoySpec, ip6Chan chan *pb.TLSDecoySpec) {
+
 	decoyHostname := decoy.GetHostname()
-	decoyIP, err := net.ResolveIPAddr("ip6", decoyHostname)
-	if err == nil && decoyIP != nil {
-		ipBytes := []byte(decoyIP.IP.To16())
-		fmt.Printf("%v -(%v)- [%v]\n", decoyHostname, decoy.GetIpAddrStr(), decoyIP)
-		if ipBytes == nil {
-			fmt.Printf("%v -(%v)- %v -- error getting v6 byte slice\n", decoyHostname, decoy.GetIpAddrStr(), decoyIP)
+	decoyIPs, err := net.LookupIP(decoyHostname)
+	if err == nil && decoyIPs != nil {
+		for _, decoyIP := range decoyIPs {
+			if decoyIP.To4() != nil {
+				continue
+			}
+			newDecoy := decoy.DeepCopy()
+			newDecoy.Ipv6Addr = decoyIP
+			newDecoy.Ipv4Addr = nil
+			// fmt.Printf("%v, %v, (%v), [%v]\n", len(decoyIPs), decoyHostname, decoy.GetIpAddrStr(), decoyIP)
+			ip6Chan <- newDecoy
 		}
-		return ipBytes
 	}
-	return nil
+	return
 }
 
 func lookupHosts(decoyList []*pb.TLSDecoySpec) map[string][]byte {
@@ -223,9 +237,6 @@ func printClientConf(clientConf pb.ClientConf) {
 	decoys := clientConf.DecoyList.TlsDecoys
 	fmt.Printf("\nDecoy List: %d decoys\n", len(decoys))
 	for i, decoy := range decoys {
-		if decoy.GetIpv6Addr() == nil {
-			continue
-		}
 		ip := make(net.IP, 4)
 		binary.BigEndian.PutUint32(ip, decoy.GetIpv4Addr())
 		// ip6 := net.IP{}

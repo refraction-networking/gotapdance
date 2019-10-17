@@ -27,7 +27,8 @@ func main() {
 		"Accepts \"SNI,IP\" or simply \n\"SNI\" — IP will be resolved. "+
 		"\nExamples: \"site.io,1.2.3.4\", \"site.io\"")
 	var assets_location = flag.String("assetsdir", "./assets/", "Folder to read assets from.")
-	var debug = flag.Bool("debug", false, "Enable debug logs")
+	var debug = flag.Bool("debug", false, "Enable debug level logs")
+	var trace = flag.Bool("trace", false, "Enable trace level logs")
 	var tlsLog = flag.String("tlslog", "", "Filename to write SSL secrets to (allows Wireshark to decrypt TLS connections)")
 	var connect_target = flag.String("connect-addr", "", "If set, tapdance will transparently connect to provided address, which \nmust be either hostname:port or ip:port. "+
 		"Default(unset): connects client to \nforwardproxy, to which CONNECT request is yet to be written.")
@@ -48,8 +49,12 @@ func main() {
 
 	if *debug {
 		tapdance.Logger().Level = logrus.DebugLevel
+		tapdance.Logger().Debug("Debug logging enabled")
 	}
-	tapdance.Logger().Debug("Debug logging enabled")
+	if *trace {
+		tapdance.Logger().Level = logrus.TraceLevel
+		tapdance.Logger().Trace("Trace logging enabled")
+	}
 
 	tapdance.AssetsSetDir(*assets_location)
 	if *decoy != "" {

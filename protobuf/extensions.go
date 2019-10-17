@@ -5,6 +5,8 @@ package tdproto
 import (
 	"encoding/binary"
 	"net"
+
+	"github.com/jinzhu/copier"
 )
 
 // InitTLSDecoySpec creates TLSDecoySpec from ip address and server name.
@@ -37,4 +39,11 @@ func (ds *TLSDecoySpec) GetIpAddrStr() string {
 		return net.JoinHostPort(net.IP(ds.Ipv6Addr).String(), "443")
 	}
 	return ""
+}
+
+// DeepCopy - Create a Deep Copy of a given TLSDecoySpec Object
+func (ds *TLSDecoySpec) DeepCopy() *TLSDecoySpec {
+	newDs := TLSDecoySpec{}
+	copier.Copy(&newDs, ds)
+	return &newDs
 }

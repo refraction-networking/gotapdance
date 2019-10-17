@@ -27,23 +27,31 @@ type V6 struct {
 //[TODO]{priority:winter-break} make this not constant
 const defaultRegWidth = 5
 
-// DialConjure - Perform Registration and Dial to create a Conjure session
+// DialConjureAddr - Perform Registration and Dial after creating  a Conjure session from scratch
+func DialConjureAddr(ctx context.Context, address string) (net.Conn, error) {
+	cjSession := makeConjureSession(address)
+	return DialConjure(ctx, cjSession)
+}
+
+// DialConjure - Perform Registration and Dial on an existing Conjure session
 func DialConjure(ctx context.Context, cjSession *ConjureSession) (net.Conn, error) {
 
 	if cjSession == nil {
-		cjSession = makeConjureSession()
+		return nil, fmt.Errorf("No Session Provided")
 	}
-	cjSession.SessionID = sessionsTotal.GetAndInc()
 
 	// Choose Phantom Address in Register depending on v6 support.
 	err := Register(cjSession)
 	if err != nil {
+		Logger().Tracef("%v Failed to register: %v", cjSession.IDString(), err)
 		return nil, err
 	}
 
+	Logger().Tracef("%v Successfully sent registrations", cjSession.IDString())
 	// randomized sleeping here to break the intraflow signal
 	cjSession.randomSleep()
 
+	Logger().Tracef("%v Woke from sleep, attempting Connection...", cjSession.IDString())
 	return Connect(cjSession)
 }
 
@@ -55,34 +63,41 @@ func Register(cjSession *ConjureSession) error {
 	if cjSession.useV4() {
 		cjSession.RegDecoys = SelectDecoys(cjSession.Keys.SharedSecret, false, cjSession.Width)
 		cjSession.Phantom, err = SelectPhantom(cjSession.Keys.ConjureSeed, false)
-		if err != nil {
-			Logger().Infof("%v failed to select dark decoy: %v\n", cjSession.IDString(), err)
+		if err != nil || cjSession.Phantom == nil {
+			Logger().Warnf("%v failed to select Phantom: %v\n", cjSession.IDString(), err)
 			return err
 		}
+		Logger().Tracef("%v Registering: %v (using v4)", cjSession.IDString(), cjSession.Phantom)
 
 		return cjSession.register()
 	}
 
 	cjSession.RegDecoys = SelectDecoys(cjSession.Keys.SharedSecret, true, cjSession.Width)
 	cjSession.Phantom, err = SelectPhantom(cjSession.Keys.ConjureSeed, true)
-	if err != nil {
-		Logger().Infof("%v failed to select dark decoy: %v\n", cjSession.IDString(), err)
+	if err != nil || cjSession.Phantom == nil {
+		Logger().Warnf("%v failed to select Phantom: %v\n", cjSession.IDString(), err)
 		return err
 	}
+
+	Logger().Tracef("%v Registering: %v (trying v6)", cjSession.IDString(), cjSession.Phantom)
+
 	err = cjSession.register()
 
 	// If we failed because all v6 decoys were unreachable
 	if regErr, ok := err.(*RegError); ok && regErr.code == Unreachable {
+
 		cjSession.V6Support.support = false
 		cjSession.V6Support.checked = time.Now()
 
 		// -> update settings and retry v4 only
 		cjSession.RegDecoys = SelectDecoys(cjSession.Keys.SharedSecret, false, cjSession.Width)
 		cjSession.Phantom, err = SelectPhantom(cjSession.Keys.ConjureSeed, false)
-		if err != nil {
-			Logger().Infof("%v failed to select dark decoy: %v\n", cjSession.IDString(), err)
+		if err != nil || cjSession.Phantom == nil {
+			Logger().Warnf("%v failed to select Phantom: %v\n", cjSession.IDString(), err)
 			return err
 		}
+
+		Logger().Tracef("%v Registering: %v (v6 failed using v4)", cjSession.IDString(), cjSession.Phantom)
 
 		err = cjSession.register()
 	}
@@ -104,13 +119,14 @@ type ConjureSession struct {
 	RegDecoys      []*pb.TLSDecoySpec // pb.DecoyList
 	Phantom        *net.IP
 	Transport      uint
+	CovertAddress  string
 	// rtt			   uint // tracked in stats
 
 	// Is this the correct place for this (maybe in dialer stats somehow??)
 	failedDecoys []string
 
 	// performance tracking
-	stats pb.SessionStats
+	stats *pb.SessionStats
 }
 
 // Define transports here=p0
@@ -123,16 +139,12 @@ const (
 	Obfs4Transport
 )
 
-func makeConjureSession() *ConjureSession {
+func makeConjureSession(covert string) *ConjureSession {
 
 	keys, err := generateSharedKeys(getStationKey())
 	if err != nil {
 		return nil
 	}
-
-	dst := make([]byte, hex.EncodedLen(len(keys.SharedSecret)))
-	hex.Encode(dst, keys.SharedSecret)
-	Logger().Warnf("Shared Secret - %s", dst)
 
 	cjSession := &ConjureSession{
 		Keys:           keys,
@@ -140,36 +152,62 @@ func makeConjureSession() *ConjureSession {
 		V6Support:      V6{true, time.Now()},
 		UseProxyHeader: false,
 		Transport:      MinTransport,
+		CovertAddress:  covert,
+		SessionID:      sessionsTotal.GetAndInc(),
 	}
+
+	dst := make([]byte, hex.EncodedLen(len(keys.SharedSecret)))
+	hex.Encode(dst, keys.SharedSecret)
+	Logger().Debugf("%v Shared Secret - %s", cjSession.IDString(), dst)
 
 	return cjSession
 }
 
 // IDString - Get the ID string for the session
 func (cjSession *ConjureSession) IDString() string {
-	return fmt.Sprintf("[Session %v]", strconv.FormatUint(cjSession.SessionID, 10))
+	if cjSession.Keys == nil || cjSession.Keys.SharedSecret == nil {
+		return fmt.Sprintf("[%v-000000]", strconv.FormatUint(cjSession.SessionID, 10))
+	}
+
+	secret := make([]byte, hex.EncodedLen(len(cjSession.Keys.SharedSecret)))
+	n := hex.Encode(secret, cjSession.Keys.SharedSecret)
+	if n < 6 {
+		return fmt.Sprintf("[%v-000000]", strconv.FormatUint(cjSession.SessionID, 10))
+	}
+	return fmt.Sprintf("[%v-%s]", strconv.FormatUint(cjSession.SessionID, 10), secret[:6])
 }
 
 // String - Print the string for debug and/or logging
 func (cjSession *ConjureSession) String() string {
-	return fmt.Sprintf("[Session %v]", strconv.FormatUint(cjSession.SessionID, 10))
-	// expand??
+	return cjSession.IDString()
+	// expand for debug??
 }
 
 func (cjSession *ConjureSession) register() error {
 	//[reference] Prepare registration
 	reg := &ConjureReg{
-		sessionIDStr: cjSession.IDString(),
-		keys:         cjSession.Keys,
-		stats:        &pb.SessionStats{},
+		sessionIDStr:  cjSession.IDString(),
+		keys:          cjSession.Keys,
+		stats:         &pb.SessionStats{},
+		phantom:       cjSession.Phantom,
+		v6Support:     cjSession.V6Support.support,
+		covertAddress: cjSession.CovertAddress,
 	}
 
 	// //[TODO]{priority:later} How to pass context to multiple registration goroutines?
 	// ctx := context.Background()
 
+	width := uint(len(cjSession.RegDecoys))
+	if width < cjSession.Width {
+		Logger().Warnf("%v Using width %v (default %v)", cjSession.IDString(), width, cjSession.Width)
+	}
+
+	Logger().Debugf("%v Registration - v6:%v, covert:%v, phantom:%v", reg.sessionIDStr, reg.v6Support, reg.covertAddress, reg.phantom)
+
 	//[reference] Send registrations to each decoy
-	dialErrors := make(chan error, cjSession.Width)
+	dialErrors := make(chan error, width)
 	for _, decoy := range cjSession.RegDecoys {
+		Logger().Debugf("%v Sending Reg: %v (%v)", cjSession.IDString(), decoy.GetHostname(), decoy.GetIpAddrStr())
 		//decoyAddr := decoy.GetIpAddrStr()
 		go reg.send(decoy, dialErrors, cjSession.registrationCallback)
 	}
@@ -181,12 +219,17 @@ func (cjSession *ConjureSession) register() error {
 			if opErr, ok := err.(*net.OpError); ok && opErr.Err.Error() == "connect: network is unreachable" {
 				// If we failed because ipv6 network was unreachable try v4 only.
 				unreachableCount++
+				continue
 			}
 		}
+		// if we succeed or fail for any other reason network is reachable and we can continue
+		break
 	}
 
+	Logger().Tracef("We make it past dialErrs in the parent")
+
 	//[reference] if ALL fail to dial return error (retry in parent if ipv6 unreachable)
-	if unreachableCount == cjSession.Width {
+	if unreachableCount == width {
 		return &RegError{code: Unreachable, msg: "All decoys failed to register -- Dial Unreachable"}
 	}
 
@@ -237,7 +280,7 @@ func (cjSession *ConjureSession) connect(ctx context.Context) (net.Conn, error) 
 type ConjureReg struct {
 	seed           []byte
 	sessionIDStr   string
-	phantom        net.IP
+	phantom        *net.IP
 	useProxyHeader bool
 	covertAddress  string
 	phantomSNI     string
@@ -293,11 +336,12 @@ func (reg *ConjureReg) send(decoy *pb.TLSDecoySpec, dialError chan error, callba
 
 	//[reference] TCP to decoy
 	tcpToDecoyStartTs := time.Now()
+
+	//[Note] decoy.GetIpAddrStr() will get only v4 addr if a decoy has both
 	dialConn, err := (&net.Dialer{}).DialContext(ctx, "tcp", decoy.GetIpAddrStr())
-	reg.SetTcpToDecoy(durationToU32ptrMs(time.Since(tcpToDecoyStartTs)))
+	reg.setTCPToDecoy(durationToU32ptrMs(time.Since(tcpToDecoyStartTs)))
 	if err != nil {
 		dialError <- err
-		dialConn.Close()
 		return
 	}
 
@@ -361,11 +405,21 @@ func (reg *ConjureReg) send(decoy *pb.TLSDecoySpec, dialError chan error, callba
 	readAndClose(dialConn, time.Second*15)
 	callback(reg, err)
 }
-func (reg *ConjureReg) SetTcpToDecoy(tcprtt *uint32) {
+
+func (reg *ConjureReg) setTCPToDecoy(tcprtt *uint32) {
+	//[TODO]{priority:now} Mutex lock this or you will be unhappy
 	if reg.stats == nil {
 		reg.stats = &pb.SessionStats{}
 	}
 	reg.stats.TcpToDecoy = tcprtt
+}
+
+func (reg *ConjureReg) setTLSToDecoy(tlsrtt *uint32) {
+	//[TODO]{priority:now} Mutex lock this or you will be unhappy
+	if reg.stats == nil {
+		reg.stats = &pb.SessionStats{}
+	}
+	reg.stats.TlsToDecoy = tlsrtt
 }
 
 func (reg *ConjureReg) generateVSP() ([]byte, error) {
@@ -382,7 +436,7 @@ func (reg *ConjureReg) generateVSP() ([]byte, error) {
 	initProto := &pb.ClientToStation{
 		CovertAddress:       covert,
 		DecoyListGeneration: &currentGen,
-
+		V6Support:           &reg.v6Support,
 		// StateTransition:     &transition,
 
 		//[TODO]{priority:winter-break} specify width in C2S because different width might
@@ -394,7 +448,6 @@ func (reg *ConjureReg) generateVSP() ([]byte, error) {
 	}
 
 	initProto.V6Support = &reg.v6Support
-	Logger().Debugln(reg.sessionIDStr+" Initial protobuf", initProto)
 
 	for (proto.Size(initProto)+AES_GCM_TAG_SIZE)%3 != 0 {
 		initProto.Padding = append(initProto.Padding, byte(0))
@@ -432,7 +485,7 @@ func (reg *ConjureReg) digestStats() string {
 //	 	session stats and/or errors.
 func (cjSession *ConjureSession) registrationCallback(reg *ConjureReg, err error) {
 	//[TODO]{priority:NOW}
-	Logger().Infof("[%v] %v - %v", cjSession.IDString(), reg.digestStats(), err)
+	Logger().Infof("%v %v - %v", cjSession.IDString(), reg.digestStats(), err)
 }
 
 func (cjSession *ConjureSession) useV4() bool {
@@ -447,8 +500,17 @@ func (cjSession *ConjureSession) useV4() bool {
 
 func (cjSession *ConjureSession) getRandomDuration(base, min, max int) time.Duration {
 	addon := getRandInt(min, max) / 1000 // why this min and max???
-	rtt := rttInt(*cjSession.stats.TcpToDecoy)
+	rtt := rttInt(cjSession.getTcpToDecoy())
 	return time.Millisecond * time.Duration(base+rtt*addon)
+}
+
+func (cjSession *ConjureSession) getTcpToDecoy() uint32 {
+	if cjSession != nil {
+		if cjSession.stats != nil {
+			return cjSession.stats.GetTcpToDecoy()
+		}
+	}
+	return 0
 }
 
 func (cjSession *ConjureSession) randomSleep() {
@@ -496,6 +558,8 @@ func SelectDecoys(sharedSecret []byte, useV6 bool, width uint) []*pb.TLSDecoySpe
 
 // SelectPhantom - select one phantom IP address based on shared secret
 func SelectPhantom(seed []byte, v6Support bool) (*net.IP, error) {
+	// Full \32 is routed in v6
+	// Full \8 is routed in v4 (some is unused) and live on limited basis (belinging to michigan) 35.0.0.0\8
 	ddIPSelector, err := newDDIpSelector([]string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}, v6Support)
 	if err != nil {
 		return nil, err

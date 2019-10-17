@@ -164,9 +164,18 @@ func TestRegDigest(t *testing.T) {
 func TestCheckV6Decoys(t *testing.T) {
 	AssetsSetDir("./assets")
 	decoysV6 := Assets().GetV6Decoys()
-	t.Logf("V6 Decoys: %v", len(decoysV6))
-	if len(decoysV6) < 5 {
-		t.Fatalf("Not enough V6 decoys in ClientConf (has: %v, need at least: %v)", len(decoysV6), 5)
+	numDecoys := len(decoysV6)
+
+	for _, decoy := range decoysV6 {
+		if decoy.Ipv4Addr != nil {
+			// If a decoys Ipv4 address is defined it will ignore the IPv6 address
+			numDecoys--
+		}
+	}
+
+	t.Logf("V6 Decoys: %v", numDecoys)
+	if numDecoys < 5 {
+		t.Fatalf("Not enough V6 decoys in ClientConf (has: %v, need at least: %v)", numDecoys, 5)
 	}
 }
 
