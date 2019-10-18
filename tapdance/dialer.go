@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net"
-	"time"
 )
 
 var sessionsTotal CounterUint64
@@ -74,7 +73,6 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 			}
 			cjSession := makeConjureSession(address)
 			cjSession.UseProxyHeader = d.UseProxyHeader
-			cjSession.V6Support = V6{d.V6Support, time.Now()}
 			flow.tdRaw.darkDecoyV6Support = d.V6Support
 			if len(address) == 0 {
 				return nil, errors.New("Dark Decoys require target address to be set")
