@@ -240,7 +240,6 @@ func (cjSession *ConjureSession) register() (*ConjureReg, error) {
 			}
 		}
 		// if we succeed or fail for any other reason then the network is reachable and we can continue
-		dialErrors = nil
 		break
 	}
 
