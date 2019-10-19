@@ -1,6 +1,7 @@
 package tapdance
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
 	"encoding/hex"
 	"testing"
@@ -10,16 +11,17 @@ import (
 )
 
 func TestUseV4(t *testing.T) {
-	v6 := V6{
+	v6S := V6{
 		support: true,
+		include: v6,
 		checked: time.Now(),
 	}
-	cjSession := ConjureSession{V6Support: v6}
+	cjSession := ConjureSession{V6Support: v6S}
 	if cjSession.useV4() != false {
 		t.Fatal("Incorrect v4 usage determination")
 	}
 
-	cjSession.V6Support.support = false
+	cjSession.setV6Support(v4)
 	if cjSession.useV4() != true {
 		t.Fatal("Incorrect v4 usage determination")
 	}
@@ -109,18 +111,24 @@ func TestSelectIpv6(t *testing.T) {
 }
 
 func TestConjureHMAC(t *testing.T) {
+	// generated using
+	// echo "customString" | hmac256 "1abcd2efgh3ijkl4"
+	// soln1Str := "d209c99ea22606e5b990a770247b0cd005c157208cb7194fef407fe3fa7e9266"
+	soln1Str := "d10b84f9e2cc57bb4294b8929a3fca25cce7f95eb226fa5bcddc5417e1d2eac2"
 
-	solution1 := []byte{
-		0x09, 0xd2, 0x9e, 0xc9, 0x26, 0xa2, 0xe5, 0x06, 0x90, 0xb9, 0x70, 0xa7, 0x7b, 0x24, 0xd0, 0x0c,
-		0xc1, 0x05, 0x20, 0x57, 0xb7, 0x8c, 0x4f, 0x19, 0x40, 0xef, 0xe3, 0x7f, 0x7e, 0xfa, 0x66, 0x92}
+	soln1 := make([]byte, hex.DecodedLen(len(soln1Str)))
+	hex.Decode(soln1, []byte(soln1Str))
+
 	test1 := conjureHMAC([]byte("1abcd2efgh3ijkl4"), "customString")
-	if len(test1) != len(solution1) {
-		t.Fatalf("Wrong hash returned:\n%v\n%v", solution1, test1)
+	test1Str := make([]byte, hex.EncodedLen(len(test1)))
+	hex.Encode(test1Str, test1)
+
+	if len(test1) != len(soln1) {
+		t.Fatalf("Wrong hash Length:\n%s\n%s", soln1Str, test1Str)
 	}
-	for i, v := range test1 {
-		if v != solution1[i] {
-			t.Fatalf("Wrong hash returned:\n%v\n%v", solution1, test1)
-		}
+
+	if !hmac.Equal(test1, soln1) {
+		t.Fatalf("Wrong hash returned:\n%s\n%s", soln1Str, test1Str)
 	}
 }
 
@@ -173,7 +181,7 @@ func TestCheckV6Decoys(t *testing.T) {
 		}
 	}
 
-	t.Logf("V6 Decoys: %v", numDecoys)
+	// t.Logf("V6 Decoys: %v", numDecoys)
 	if numDecoys < 5 {
 		t.Fatalf("Not enough V6 decoys in ClientConf (has: %v, need at least: %v)", numDecoys, 5)
 	}
@@ -188,11 +196,11 @@ func TestSelectDecoys(t *testing.T) {
 	if err != nil || n != 32 {
 		t.Fatalf("Issue decoding seedStr")
 	}
-	decoys := SelectDecoys(seed, true, 5)
+	decoys := SelectDecoys(seed, v6, 5)
 	if len(decoys) < 5 {
 		t.Fatalf("Not enough decoys returned from selection.")
 	}
-	decoys = SelectDecoys(seed, false, 5)
+	decoys = SelectDecoys(seed, v4, 5)
 	if len(decoys) < 5 {
 		t.Fatalf("Not enough decoys returned from selection.")
 	}
