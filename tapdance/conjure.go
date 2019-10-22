@@ -54,12 +54,15 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession) (net.Conn, erro
 		return nil, err
 	}
 
+	// succeeded registration update V6 support determination.
+	Assets().SetV6Support(cjSession.V6Support)
+
 	// randomized sleeping here to break the intraflow signal
 	toSleep := registration.getRandomDuration(300, 212, 3449)
 	Logger().Tracef("%v Successfully sent registrations, sleeping for: %v ms", cjSession.IDString(), toSleep)
 	time.Sleep(toSleep)
 
-	Logger().Tracef("%v Woke from sleep, attempting Connection...", cjSession.IDString())
+	Logger().Tracef("%v Woke from sleep, attempting to Connect ...", cjSession.IDString())
 	return registration.Connect(ctx)
 	// return Connect(cjSession)
 }
@@ -111,7 +114,7 @@ func Connect(reg *ConjureReg) (net.Conn, error) {
 type ConjureSession struct {
 	Keys           *sharedKeys
 	Width          uint
-	V6Support      V6
+	V6Support      *V6
 	UseProxyHeader bool
 	SessionID      uint64
 	RegDecoys      []*pb.TLSDecoySpec // pb.DecoyList
@@ -147,7 +150,7 @@ func makeConjureSession(covert string) *ConjureSession {
 	cjSession := &ConjureSession{
 		Keys:           keys,
 		Width:          defaultRegWidth,
-		V6Support:      V6{support: true, include: v6, checked: time.Now().Add(-3 * time.Hour)},
+		V6Support:      Assets().GetV6Support(),
 		UseProxyHeader: false,
 		Transport:      MinTransport,
 		CovertAddress:  covert,
@@ -229,18 +232,19 @@ func (cjSession *ConjureSession) register() (*ConjureReg, error) {
 	//[reference] Dial errors happen immediately so block until all N dials complete
 	var unreachableCount uint = 0
 	for err := range dialErrors {
-		Logger().Tracef("%v %v", cjSession.IDString(), err)
+		// Logger().Tracef("%v %v", cjSession.IDString(), err)
 		if err != nil {
 			if dialErr, ok := err.(RegError); ok && dialErr.code == Unreachable {
 				// If we failed because ipv6 network was unreachable try v4 only.
 				unreachableCount++
 				if unreachableCount < width {
 					continue
+				} else {
+					break
 				}
 			}
 		}
-		// if we succeed or fail for any other reason then the network is reachable and we can continue
-		dialErrors = nil
+		//[reference] if we succeed or fail for any other reason then the network is reachable and we can continue
 		break
 	}
 
@@ -389,7 +393,7 @@ func (reg *ConjureReg) createRequest(tlsConn *tls.UConn, decoy *pb.TLSDecoySpec)
 }
 
 // Being called in parallel -> no changes to ConjureReg allowed in this function
-func (reg *ConjureReg) send(decoy *pb.TLSDecoySpec, dialError chan error, callback func(*ConjureReg, error)) {
+func (reg *ConjureReg) send(decoy *pb.TLSDecoySpec, dialError chan error, callback func(*ConjureReg)) {
 
 	ctx := context.Background()
 
@@ -414,41 +418,14 @@ func (reg *ConjureReg) send(decoy *pb.TLSDecoySpec, dialError chan error, callba
 	delay := getRandomDuration(1061*rtt*2, 1953*rtt*3) //[TODO]{priority:@sfrolov} why these values??
 	deadline := time.Now().Add(delay)
 
-	//[reference] TLS to Decoy
-	config := tls.Config{ServerName: decoy.GetHostname()}
-	if config.ServerName == "" {
-		// if SNI is unset -- try IP
-		config.ServerName, _, err = net.SplitHostPort(decoy.GetIpAddrStr())
-		if err != nil {
-			dialConn.Close()
-			dialError <- err
-			return
-		}
-		Logger().Infoln(reg.sessionIDStr + ": SNI was nil. Setting it to" +
-			config.ServerName)
-	}
-	//[TODO]{priority:winter-break} parroting Chrome 62 ClientHello -- parrot newer.
-	tlsConn := tls.UClient(dialConn, &config, tls.HelloChrome_62)
-	err = tlsConn.BuildHandshakeState()
+	tlsToDecoyStartTs := time.Now()
+	tlsConn, err := reg.createTLSConn(dialConn, decoy.GetIpAddrStr(), decoy.GetHostname(), deadline)
 	if err != nil {
 		dialConn.Close()
 		dialError <- err
 		return
 	}
-	err = tlsConn.MarshalClientHello()
-	if err != nil {
-		dialConn.Close()
-		dialError <- err
-		return
-	}
-
-	tlsConn.SetDeadline(deadline)
-	err = tlsConn.Handshake()
-	if err != nil {
-		dialConn.Close()
-		dialError <- err
-		return
-	}
+	reg.setTLSToDecoy(durationToU32ptrMs(time.Since(tlsToDecoyStartTs)))
 
 	//[reference] Create the HTTP request for the registration
 	httpRequest, err := reg.createRequest(tlsConn, decoy)
@@ -463,11 +440,46 @@ func (reg *ConjureReg) send(decoy *pb.TLSDecoySpec, dialError chan error, callba
 		Logger().Errorf(reg.sessionIDStr+
 			"%v Could not send Conjure registration request, error: %v", reg.sessionIDStr, err.Error())
 		tlsConn.Close()
+		dialError <- err
 		return
 	}
 
+	dialError <- nil
 	readAndClose(dialConn, time.Second*15)
-	callback(reg, err)
+	callback(reg)
+}
+
+func (reg *ConjureReg) createTLSConn(dialConn net.Conn, addres string, hostname string, deadline time.Time) (*tls.UConn, error) {
+	var err error
+	//[reference] TLS to Decoy
+	config := tls.Config{ServerName: hostname}
+	if config.ServerName == "" {
+		// if SNI is unset -- try IP
+		config.ServerName, _, err = net.SplitHostPort(addres)
+		if err != nil {
+			return nil, err
+		}
+		Logger().Debugf("%v SNI was nil. Setting it to %v ", reg.sessionIDStr, config.ServerName)
+	}
+	//[TODO]{priority:winter-break} parroting Chrome 62 ClientHello -- parrot newer.
+	tlsConn := tls.UClient(dialConn, &config, tls.HelloChrome_62)
+
+	err = tlsConn.BuildHandshakeState()
+	if err != nil {
+		return nil, err
+	}
+	err = tlsConn.MarshalClientHello()
+	if err != nil {
+		return nil, err
+	}
+
+	tlsConn.SetDeadline(deadline)
+	err = tlsConn.Handshake()
+	if err != nil {
+		return nil, err
+	}
+
+	return tlsConn, nil
 }
 
 func (reg *ConjureReg) setTCPToDecoy(tcprtt *uint32) {
@@ -575,14 +587,15 @@ func (cjSession *ConjureSession) setV6Support(support uint) {
 		cjSession.V6Support.support = true
 		cjSession.V6Support.include = v6
 	}
+	// assets.SetV6Suuport(support)
 	// cjSession.V6Support.checked = time.Now()
 }
 
 // When a registration send goroutine finishes it will call this and log
 //	 	session stats and/or errors.
-func (cjSession *ConjureSession) registrationCallback(reg *ConjureReg, err error) {
+func (cjSession *ConjureSession) registrationCallback(reg *ConjureReg) {
 	//[TODO]{priority:NOW}
-	Logger().Infof("%v %v - %v", cjSession.IDString(), reg.digestStats(), err)
+	Logger().Infof("%v %v", cjSession.IDString(), reg.digestStats())
 }
 
 func (cjSession *ConjureSession) useV4() bool {
