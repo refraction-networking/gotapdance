@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"net"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/golang/protobuf/proto"
@@ -350,8 +351,8 @@ type ConjureReg struct {
 	transport      uint
 
 	stats *pb.SessionStats
-
-	keys *sharedKeys
+	keys  *sharedKeys
+	m     sync.Mutex
 }
 
 func (reg *ConjureReg) createRequest(tlsConn *tls.UConn, decoy *pb.TLSDecoySpec) ([]byte, error) {
@@ -483,7 +484,9 @@ func (reg *ConjureReg) createTLSConn(dialConn net.Conn, addres string, hostname 
 }
 
 func (reg *ConjureReg) setTCPToDecoy(tcprtt *uint32) {
-	//[TODO]{priority:now} Mutex lock this or you will be unhappy
+	reg.m.Lock()
+	defer reg.m.Unlock()
+
 	if reg.stats == nil {
 		reg.stats = &pb.SessionStats{}
 	}
@@ -491,7 +494,9 @@ func (reg *ConjureReg) setTCPToDecoy(tcprtt *uint32) {
 }
 
 func (reg *ConjureReg) setTLSToDecoy(tlsrtt *uint32) {
-	//[TODO]{priority:now} Mutex lock this or you will be unhappy
+	reg.m.Lock()
+	defer reg.m.Unlock()
+
 	if reg.stats == nil {
 		reg.stats = &pb.SessionStats{}
 	}

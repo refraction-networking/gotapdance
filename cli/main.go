@@ -120,7 +120,7 @@ func connectDirect(connect_target string, localPort int, proxyHeader bool, v6Sup
 func manageConn(tdDialer tapdance.Dialer, connect_target string, clientConn *net.TCPConn) {
 	// TODO: go back to pre-dialing after measuring performance
 	tdConn, err := tdDialer.Dial("tcp", connect_target)
-	if err != nil {
+	if err != nil || tdConn == nil {
 		fmt.Errorf("failed to dial %s: %v", connect_target, err)
 		return
 	}
