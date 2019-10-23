@@ -190,6 +190,7 @@ func (tdRaw *tdRawConn) tryDialOnce(ctx context.Context, expectedTransition pb.S
 	Logger().Infoln(tdRaw.idStr() + " Attempting to connect to TapDance Station" +
 		" with connection ID: " + hex.EncodeToString(tdRaw.remoteConnId[:]) + ", method: " +
 		tdRaw.tagType.Str())
+
 	rttToStationStartTs := time.Now()
 	_, err = tdRaw.tlsConn.Write(tdRequest)
 	if err != nil {

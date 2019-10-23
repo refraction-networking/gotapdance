@@ -133,6 +133,7 @@ func (a *assets) readConfigs() {
 		return nil
 	}
 
+	//[TODO]{priority:now} JUST TAKE THE DEFAULT PUBKEY FROM THE CLIENTCONF IF IT'S DEFINED
 	readPubkey := func(filename string) error {
 		staionPubkey, err := ioutil.ReadFile(filename)
 		if err != nil {

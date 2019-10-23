@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -47,15 +48,6 @@ func main() {
 
 	v6Support := !*excludeV6
 
-	if *debug {
-		tapdance.Logger().Level = logrus.DebugLevel
-		tapdance.Logger().Debug("Debug logging enabled")
-	}
-	if *trace {
-		tapdance.Logger().Level = logrus.TraceLevel
-		tapdance.Logger().Trace("Trace logging enabled")
-	}
-
 	tapdance.AssetsSetDir(*assets_location)
 	if *decoy != "" {
 		err := setSingleDecoyHost(*decoy)
@@ -64,6 +56,20 @@ func main() {
 			flag.Usage()
 			os.Exit(255)
 		}
+	}
+
+	if *debug {
+		tapdance.Logger().Level = logrus.DebugLevel
+		tapdance.Logger().Debug("Debug logging enabled")
+	}
+	if *trace {
+		tapdance.Logger().Level = logrus.TraceLevel
+		tapdance.Logger().Trace("Trace logging enabled")
+
+		pubkey := tapdance.Assets().GetPubkey()
+		dst := make([]byte, hex.EncodedLen(len(pubkey)))
+		hex.Encode(dst, pubkey[:])
+		tapdance.Logger().Tracef("Using Pubkey: %s", dst)
 	}
 
 	if *tlsLog != "" {
@@ -106,29 +112,36 @@ func connectDirect(connect_target string, localPort int, proxyHeader bool, v6Sup
 		if err != nil {
 			return fmt.Errorf("error accepting client connection %v: ", err)
 		}
-		// TODO: go back to pre-dialing after measuring performance
-		tdConn, err := tdDialer.Dial("tcp", connect_target)
-		if err != nil {
-			return fmt.Errorf("failed to dial %s: %v", connect_target, err)
-		}
 
-		// Copy data from the client application into the DarkDecoy connection.
-		// 		TODO: proper connection management with idle timeout
-		var wg sync.WaitGroup
-		wg.Add(2)
-		go func() {
-			io.Copy(tdConn, clientConn)
-			wg.Done()
-			tdConn.Close()
-		}()
-		go func() {
-			io.Copy(clientConn, tdConn)
-			wg.Done()
-			clientConn.CloseWrite()
-		}()
-		wg.Wait()
-		tapdance.Logger().Debug("copy loop ended")
+		go manageConn(tdDialer, connect_target, clientConn)
 	}
+}
+
+func manageConn(tdDialer tapdance.Dialer, connect_target string, clientConn *net.TCPConn) {
+	// TODO: go back to pre-dialing after measuring performance
+	tdConn, err := tdDialer.Dial("tcp", connect_target)
+	if err != nil {
+		fmt.Errorf("failed to dial %s: %v", connect_target, err)
+		return
+	}
+
+	// Copy data from the client application into the DarkDecoy connection.
+	// 		TODO: Make sure this works
+	// 		TODO: proper connection management with idle timeout
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		io.Copy(tdConn, clientConn)
+		wg.Done()
+		tdConn.Close()
+	}()
+	go func() {
+		io.Copy(clientConn, tdConn)
+		wg.Done()
+		clientConn.CloseWrite()
+	}()
+	wg.Wait()
+	tapdance.Logger().Debug("copy loop ended")
 }
 
 func setSingleDecoyHost(decoy string) error {
