@@ -380,7 +380,7 @@ func (a *assets) SetV6Support(support *V6) {
 	a.conjureConf.setV6Support(support)
 }
 
-// GetV6Support - retreive
+// GetV6Support - retrieve
 func (a *assets) GetV6Support() *V6 {
 	if a.conjureConf.v6support == nil {
 		a.conjureConf.v6support = &V6{support: true, include: v6, checked: time.Now().Add(-3 * time.Hour)}

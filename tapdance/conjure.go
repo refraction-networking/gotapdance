@@ -386,8 +386,6 @@ func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
 		// If transport is unrecognized use min transport.
 		return nil, fmt.Errorf("Unknown Transport")
 	}
-
-	return conn, nil
 }
 
 // ConjureReg - Registration structure created for each individual registration within a session.
@@ -501,13 +499,13 @@ func (reg *ConjureReg) send(decoy *pb.TLSDecoySpec, dialError chan error, callba
 	callback(reg)
 }
 
-func (reg *ConjureReg) createTLSConn(dialConn net.Conn, addres string, hostname string, deadline time.Time) (*tls.UConn, error) {
+func (reg *ConjureReg) createTLSConn(dialConn net.Conn, address string, hostname string, deadline time.Time) (*tls.UConn, error) {
 	var err error
 	//[reference] TLS to Decoy
 	config := tls.Config{ServerName: hostname}
 	if config.ServerName == "" {
 		// if SNI is unset -- try IP
-		config.ServerName, _, err = net.SplitHostPort(addres)
+		config.ServerName, _, err = net.SplitHostPort(address)
 		if err != nil {
 			return nil, err
 		}
