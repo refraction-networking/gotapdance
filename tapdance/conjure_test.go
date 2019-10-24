@@ -16,7 +16,7 @@ func TestUseV4(t *testing.T) {
 		include: v6,
 		checked: time.Now(),
 	}
-	cjSession := ConjureSession{V6Support: v6S}
+	cjSession := ConjureSession{V6Support: &v6S}
 	if cjSession.useV4() != false {
 		t.Fatal("Incorrect v4 usage determination")
 	}
