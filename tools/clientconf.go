@@ -5,11 +5,12 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
-	"github.com/golang/protobuf/proto"
-	pb "github.com/refraction-networking/gotapdance/protobuf"
 	"io/ioutil"
 	"log"
 	"net"
+
+	"github.com/golang/protobuf/proto"
+	pb "github.com/refraction-networking/gotapdance/protobuf"
 )
 
 func printClientConf(clientConf pb.ClientConf) {
@@ -25,7 +26,8 @@ func printClientConf(clientConf pb.ClientConf) {
 	for i, decoy := range decoys {
 		ip := make(net.IP, 4)
 		binary.BigEndian.PutUint32(ip, decoy.GetIpv4Addr())
-		fmt.Printf("%d:\n  %s (%s)\n", i, decoy.GetHostname(), ip.To4().String())
+		ip6 := net.IP(decoy.GetIpv6Addr())
+		fmt.Printf("%d:\n  %s (%s / [%s])\n", i, decoy.GetHostname(), ip.To4().String(), ip6.To16().String())
 		if decoy.GetPubkey() != nil {
 			fmt.Printf("  pubkey: %s\n", hex.EncodeToString(decoy.GetPubkey().Key[:]))
 		}
@@ -71,8 +73,15 @@ func updateDecoy(decoy *pb.TLSDecoySpec, host string, ip string, pubkey string, 
 		decoy.Hostname = &host
 	}
 	if ip != "" {
-		ip4 := binary.BigEndian.Uint32(net.ParseIP(ip).To4())
-		decoy.Ipv4Addr = &ip4
+		ip4 := net.ParseIP(ip).To4()
+		if ip4 != nil {
+			uintIp4 := binary.BigEndian.Uint32(ip4)
+			decoy.Ipv4Addr = &uintIp4
+		} else {
+			ip6 := net.ParseIP(ip).To16()
+			fmt.Printf("%v", ip6.String())
+			decoy.Ipv6Addr = []byte(ip6)
+		}
 	}
 	if pubkey != "" {
 		decoy.Pubkey.Key = parsePubkey(pubkey)
