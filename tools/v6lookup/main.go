@@ -42,11 +42,12 @@ func main() {
 		v6Decoys := make([]*pb.TLSDecoySpec, 0)
 		var ipv6Arr [16]byte
 		uniqueIPv6Addrs := make(map[[16]byte]bool)
-		ipv6Decoys := make(chan *pb.TLSDecoySpec)
+		ipv6Decoys := make(chan *pb.TLSDecoySpec, 1)
 		i := 0
 
 		go func() {
 			for decoy := range ipv6Decoys {
+				fmt.Printf("%v", decoy.GetHostname())
 				copy(ipv6Arr[:], decoy.GetIpv6Addr()[:16])
 				if uniqueIPv6Addrs[ipv6Arr] == false {
 					uniqueIPv6Addrs[ipv6Arr] = true
@@ -96,7 +97,7 @@ func lookupHost(decoy *pb.TLSDecoySpec, ip6Chan chan *pb.TLSDecoySpec) {
 			newDecoy := decoy.DeepCopy()
 			newDecoy.Ipv6Addr = decoyIP
 			newDecoy.Ipv4Addr = nil
-			// fmt.Printf("%v, %v, (%v), [%v]\n", len(decoyIPs), decoyHostname, decoy.GetIpAddrStr(), decoyIP)
+			fmt.Printf("%v, %v, (%v), [%v]\n", len(decoyIPs), decoyHostname, decoy.GetIpAddrStr(), decoyIP)
 			ip6Chan <- newDecoy
 		}
 	}
