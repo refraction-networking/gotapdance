@@ -28,6 +28,7 @@ func main() {
 		"Accepts \"SNI,IP\" or simply \n\"SNI\" — IP will be resolved. "+
 		"\nExamples: \"site.io,1.2.3.4\", \"site.io\"")
 	var assets_location = flag.String("assetsdir", "./assets/", "Folder to read assets from.")
+	var width = flag.Int("w", 5, "Number of registrations sent for each connection initiated")
 	var debug = flag.Bool("debug", false, "Enable debug level logs")
 	var trace = flag.Bool("trace", false, "Enable trace level logs")
 	var tlsLog = flag.String("tlslog", "", "Filename to write SSL secrets to (allows Wireshark to decrypt TLS connections)")
@@ -49,6 +50,7 @@ func main() {
 	v6Support := !*excludeV6
 
 	tapdance.AssetsSetDir(*assets_location)
+
 	if *decoy != "" {
 		err := setSingleDecoyHost(*decoy)
 		if err != nil {
@@ -79,7 +81,7 @@ func main() {
 		}
 	}
 
-	err := connectDirect(*connect_target, *port, *proxyHeader, v6Support)
+	err := connectDirect(*connect_target, *port, *proxyHeader, v6Support, *width)
 	if err != nil {
 		tapdance.Logger().Println(err)
 		os.Exit(1)
@@ -93,7 +95,7 @@ func main() {
 	}
 }
 
-func connectDirect(connect_target string, localPort int, proxyHeader bool, v6Support bool) error {
+func connectDirect(connect_target string, localPort int, proxyHeader bool, v6Support bool, width int) error {
 	if _, _, err := net.SplitHostPort(connect_target); err != nil {
 		return fmt.Errorf("failed to parse host and port from connect_target %s: %v",
 			connect_target, err)
@@ -105,7 +107,7 @@ func connectDirect(connect_target string, localPort int, proxyHeader bool, v6Sup
 		return fmt.Errorf("error listening on port %v: %v", localPort, err)
 	}
 
-	tdDialer := tapdance.Dialer{DarkDecoy: true, UseProxyHeader: proxyHeader, V6Support: v6Support}
+	tdDialer := tapdance.Dialer{DarkDecoy: true, UseProxyHeader: proxyHeader, V6Support: v6Support, Width: width}
 
 	for {
 		clientConn, err := l.AcceptTCP()

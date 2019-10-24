@@ -16,6 +16,7 @@ type Dialer struct {
 	DarkDecoy      bool
 	UseProxyHeader bool
 	V6Support      bool // *bool so that it is a nullable type. that can be overridden
+	Width          int
 }
 
 // Dial connects to the address on the named network.
@@ -67,13 +68,19 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 			flow.tdRaw.TcpDialer = d.TcpDialer
 			return flow, flow.DialContext(ctx)
 		} else {
-			flow, err := makeTdFlow(flowBidirectional, nil, address)
-			if err != nil {
-				return nil, err
-			}
+			// _, err := makeTdFlow(flowBidirectional, nil, address)
+			// if err != nil {
+			// 	return nil, err
+			// }
 			cjSession := makeConjureSession(address)
 			cjSession.UseProxyHeader = d.UseProxyHeader
-			flow.tdRaw.darkDecoyV6Support = d.V6Support
+			cjSession.Width = uint(d.Width)
+
+			if d.V6Support {
+				cjSession.V6Support = &V6{include: both, support: true}
+			} else {
+				cjSession.V6Support = &V6{include: v4, support: false}
+			}
 			if len(address) == 0 {
 				return nil, errors.New("Dark Decoys require target address to be set")
 			}

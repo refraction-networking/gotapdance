@@ -59,7 +59,7 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession) (net.Conn, erro
 	Assets().SetV6Support(cjSession.V6Support)
 
 	// randomized sleeping here to break the intraflow signal
-	toSleep := registration.getRandomDuration(300, 212, 3449)
+	toSleep := registration.getRandomDuration(3000, 212, 3449)
 	Logger().Tracef("%v Successfully sent registrations, sleeping for: %v ms", cjSession.IDString(), toSleep)
 	time.Sleep(toSleep)
 
@@ -73,37 +73,72 @@ func Register(cjSession *ConjureSession) (*ConjureReg, error) {
 	var err error
 	var reg *ConjureReg
 
-	if cjSession.useV4() {
-		//[reference] v6 not supported (checked less than 2hr ago)
-
-		Logger().Tracef("%v Using v4", cjSession.IDString())
-		return cjSession.register()
-	} else if cjSession.useV6() {
-		//[reference] v6 is supported (checked less than 2hr ago)
-
-		Logger().Tracef("%v Including v6", cjSession.IDString())
+	if testV6() {
+		Logger().Debugf("%v Including v6", cjSession.IDString())
+		cjSession.setV6Support(both)
 		reg, err = cjSession.register()
 	} else {
-		//[reference] v6support not checked in less than 2hr
-
-		Logger().Tracef("%v Trying v6", cjSession.IDString())
+		Logger().Debugf("%v Using v4", cjSession.IDString())
+		cjSession.setV6Support(v4)
 		reg, err = cjSession.register()
-
-		if regErr, ok := err.(*RegError); ok && regErr.code == Unreachable {
-			//[reference] If we failed because all v6 decoys were unreachable -> update settings and retry v4 only
-
-			cjSession.setV6Support(v4)
-			cjSession.V6Support.checked = time.Now()
-
-			Logger().Tracef("%v v6 failed using v4", cjSession.IDString())
-			reg, err = cjSession.register()
-		} else {
-			//[reference] Otherwise we support v6 and can continue
-			cjSession.setV6Support(both)
-			cjSession.V6Support.checked = time.Now()
-		}
 	}
+
 	return reg, err
+	// if cjSession.useV4() {
+	// 	//[reference] v6 not supported (checked less than 2hr ago)
+
+	// 	Logger().Tracef("%v Using v4", cjSession.IDString())
+	// 	return cjSession.register()
+	// } else if cjSession.useV6() {
+	// 	//[reference] v6 is supported (checked less than 2hr ago)
+
+	// 	Logger().Tracef("%v Including v6", cjSession.IDString())
+	// 	reg, err = cjSession.register()
+	// } else {
+	// 	//[reference] v6support not checked in less than 2hr
+
+	// 	Logger().Tracef("%v Trying v6", cjSession.IDString())
+	// 	reg, err = cjSession.register()
+
+	// 	if regErr, ok := err.(*RegError); ok && regErr.code == Unreachable {
+	// 		//[reference] If we failed because all v6 decoys were unreachable -> update settings and retry v4 only
+
+	// 		cjSession.setV6Support(v4)
+	// 		cjSession.V6Support.checked = time.Now()
+
+	// 		Logger().Tracef("%v v6 failed using v4", cjSession.IDString())
+	// 		reg, err = cjSession.register()
+	// 	} else {
+	// 		//[reference] Otherwise we support v6 and can continue
+	// 		cjSession.setV6Support(both)
+	// 		cjSession.V6Support.checked = time.Now()
+	// 	}
+	// }
+	// return reg, err
+}
+
+func testV6() bool {
+	dialError := make(chan error, 1)
+	d := Assets().GetV6Decoy()
+	go func() {
+		conn, err := net.Dial("tcp", d.GetIpAddrStr())
+		if err != nil {
+			dialError <- err
+			return
+		}
+		conn.Close()
+		dialError <- nil
+	}()
+
+	time.Sleep(500 * time.Microsecond)
+	// The only error that would return before this is a network unreachable error
+	select {
+	case err := <-dialError:
+		Logger().Tracef("v6 unreachable received: %v", err)
+		return false
+	default:
+		return true
+	}
 }
 
 // Connect - Dial the Phantom IP address after registration
@@ -124,9 +159,6 @@ type ConjureSession struct {
 	CovertAddress  string
 	// rtt			   uint // tracked in stats
 
-	// Is this the correct place for this (maybe in dialer stats somehow??)
-	failedDecoys []string
-
 	// performance tracking
 	stats *pb.SessionStats
 }
@@ -136,6 +168,9 @@ type ConjureSession struct {
 const (
 	// MinTransport - Minimal transport used to connect  station (default)
 	MinTransport uint = iota
+
+	// NullTransport - Used for debugging. No association of phantom IP to session/registration
+	NullTransport
 
 	// Obfs4Transport - Use Obfs4 to provide probe resistant connection to station (not yet implemented)
 	Obfs4Transport
@@ -153,14 +188,19 @@ func makeConjureSession(covert string) *ConjureSession {
 		Width:          defaultRegWidth,
 		V6Support:      Assets().GetV6Support(),
 		UseProxyHeader: false,
-		Transport:      MinTransport,
-		CovertAddress:  covert,
-		SessionID:      sessionsTotal.GetAndInc(),
+		// Transport:      MinTransport,
+		Transport:     NullTransport,
+		CovertAddress: covert,
+		SessionID:     sessionsTotal.GetAndInc(),
 	}
 
-	dst := make([]byte, hex.EncodedLen(len(keys.SharedSecret)))
-	hex.Encode(dst, keys.SharedSecret)
-	Logger().Debugf("%v Shared Secret - %s", cjSession.IDString(), dst)
+	sharedSecretStr := make([]byte, hex.EncodedLen(len(keys.SharedSecret)))
+	hex.Encode(sharedSecretStr, keys.SharedSecret)
+	Logger().Debugf("%v Shared Secret  - %s", cjSession.IDString(), sharedSecretStr)
+
+	reprStr := make([]byte, hex.EncodedLen(len(keys.Representative)))
+	hex.Encode(reprStr, keys.Representative)
+	Logger().Debugf("%v Representative - %s", cjSession.IDString(), reprStr)
 
 	return cjSession
 }
@@ -214,12 +254,13 @@ func (cjSession *ConjureSession) register() (*ConjureReg, error) {
 		Logger().Warnf("%v Using width %v (default %v)", cjSession.IDString(), width, cjSession.Width)
 	}
 
-	Logger().Debugf("%v Registration - v6:%v, covert:%v, phantom:%v, width:%v",
+	Logger().Debugf("%v Registration - v6:%v, covert:%v, phantom:%v, width:%v, transport:%v",
 		reg.sessionIDStr,
 		reg.v6Support,
 		reg.covertAddress,
 		reg.phantom,
 		cjSession.Width,
+		cjSession.Transport,
 	)
 
 	//[reference] Send registrations to each decoy
@@ -285,9 +326,13 @@ func (cjSession *ConjureSession) connect(ctx context.Context) (net.Conn, error) 
 		// Send hmac(seed, str) bytes to indicate to station (min transport)
 		connectTag := conjureHMAC(cjSession.Keys.SharedSecret, "MinTrasportHMACString")
 		conn.Write(connectTag)
+
 	case Obfs4Transport:
 		//[TODO]{priority:winter-break} add Obfs4 Transport
 		return nil, fmt.Errorf("connect not yet implemented")
+
+	case NullTransport:
+		// Do nothing to the connection before returning it to the user.
 
 	default:
 		// If transport is unrecognized use min transport.
@@ -295,7 +340,7 @@ func (cjSession *ConjureSession) connect(ctx context.Context) (net.Conn, error) 
 		conn.Write(connectTag)
 	}
 
-	return nil, nil
+	return conn, nil
 }
 
 // Connect - Use a registration (result of calling Register) to connect to a phantom
@@ -690,6 +735,7 @@ func SelectDecoys(sharedSecret []byte, version uint, width uint) []*pb.TLSDecoyS
 func SelectPhantom(seed []byte, v6Support bool) (*net.IP, error) {
 	// Full \32 is routed in v6
 	// Full \8 is routed in v4 (some is unused) and live on limited basis (belinging to michigan) 35.0.0.0\8
+	// 											  "192.122.190.0/24", "2001:48a8:687f:1::/64"
 	ddIPSelector, err := newDDIpSelector([]string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}, v6Support)
 	if err != nil {
 		return nil, err

@@ -226,7 +226,7 @@ func (a *assets) GetV4Decoys() []*pb.TLSDecoySpec {
 	return v6Decoys
 }
 
-// Gets random DecoySpec
+// GetDecoy - Gets random DecoySpec
 func (a *assets) GetDecoy() pb.TLSDecoySpec {
 	a.RLock()
 	defer a.RUnlock()
@@ -249,6 +249,23 @@ func (a *assets) GetDecoy() pb.TLSDecoySpec {
 		tcpWin := uint32(sendLimitMax)
 		chosenDecoy.Tcpwin = &tcpWin
 	}
+	return chosenDecoy
+}
+
+// GetDecoy - Gets random IPv6 DecoySpec
+func (a *assets) GetV6Decoy() pb.TLSDecoySpec {
+	a.RLock()
+	defer a.RUnlock()
+
+	decoys := a.GetV6Decoys()
+	chosenDecoy := pb.TLSDecoySpec{}
+	if len(decoys) == 0 {
+		return chosenDecoy
+	}
+	decoyIndex := getRandInt(0, len(decoys)-1)
+	chosenDecoy = *decoys[decoyIndex]
+
+	// No enforcing TCPWIN etc. values because this is conjure only
 	return chosenDecoy
 }
 
