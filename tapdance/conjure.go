@@ -166,11 +166,11 @@ type ConjureSession struct {
 // Define transports here=p0
 //[TODO]{priority:winter-break} make this it's own type / interface
 const (
-	// MinTransport - Minimal transport used to connect  station (default)
-	MinTransport uint = iota
-
 	// NullTransport - Used for debugging. No association of phantom IP to session/registration
-	NullTransport
+	NullTransport uint = iota
+
+	// MinTransport - Minimal transport used to connect  station (default)
+	MinTransport
 
 	// Obfs4Transport - Use Obfs4 to provide probe resistant connection to station (not yet implemented)
 	Obfs4Transport
@@ -299,49 +299,50 @@ func (cjSession *ConjureSession) register() (*ConjureReg, error) {
 	return reg, nil
 }
 
-func (cjSession *ConjureSession) connect(ctx context.Context) (net.Conn, error) {
-	//[reference] Create Context with deadline
-	deadline, deadlineAlreadySet := ctx.Deadline()
-	if !deadlineAlreadySet {
-		//[reference] randomized timeout to Dial dark decoy address
-		deadline = time.Now().Add(cjSession.getRandomDuration(0, 1061*2, 1953*3))
-		//[TODO]{priority:@sfrolov} explain these numbers and why they were chosen for the boundaries.
-	}
-	childCtx, childCancelFunc := context.WithDeadline(ctx, deadline)
-	defer childCancelFunc()
+//
+// func (cjSession *ConjureSession) connect(ctx context.Context) (net.Conn, error) {
+// 	//[reference] Create Context with deadline
+// 	deadline, deadlineAlreadySet := ctx.Deadline()
+// 	if !deadlineAlreadySet {
+// 		//[reference] randomized timeout to Dial dark decoy address
+// 		deadline = time.Now().Add(cjSession.getRandomDuration(0, 1061*2, 1953*3))
+// 		//[TODO]{priority:@sfrolov} explain these numbers and why they were chosen for the boundaries.
+// 	}
+// 	childCtx, childCancelFunc := context.WithDeadline(ctx, deadline)
+// 	defer childCancelFunc()
 
-	//[reference] Connect to Phantom Host using TLS
-	phantomAddr := net.JoinHostPort(cjSession.Phantom.String(), "443")
+// 	//[reference] Connect to Phantom Host using TLS
+// 	phantomAddr := net.JoinHostPort(cjSession.Phantom.String(), "443")
 
-	conn, err := (&net.Dialer{}).DialContext(childCtx, "tcp", phantomAddr)
-	if err != nil {
-		Logger().Infof("%v failed to dial phantom %v: %v\n", cjSession.IDString(), cjSession.Phantom.String(), err)
-		return nil, err
-	}
-	Logger().Infof("%v Connected to phantom %v", cjSession.IDString(), phantomAddr)
+// 	conn, err := (&net.Dialer{}).DialContext(childCtx, "tcp", phantomAddr)
+// 	if err != nil {
+// 		Logger().Infof("%v failed to dial phantom %v: %v\n", cjSession.IDString(), cjSession.Phantom.String(), err)
+// 		return nil, err
+// 	}
+// 	Logger().Infof("%v Connected to phantom %v", cjSession.IDString(), phantomAddr)
 
-	//[reference] Provide chosen transport to sent bytes (or connect) if necessary
-	switch cjSession.Transport {
-	case MinTransport:
-		// Send hmac(seed, str) bytes to indicate to station (min transport)
-		connectTag := conjureHMAC(cjSession.Keys.SharedSecret, "MinTrasportHMACString")
-		conn.Write(connectTag)
+// 	//[reference] Provide chosen transport to sent bytes (or connect) if necessary
+// 	switch cjSession.Transport {
+// 	case MinTransport:
+// 		// Send hmac(seed, str) bytes to indicate to station (min transport)
+// 		connectTag := conjureHMAC(cjSession.Keys.SharedSecret, "MinTrasportHMACString")
+// 		conn.Write(connectTag)
 
-	case Obfs4Transport:
-		//[TODO]{priority:winter-break} add Obfs4 Transport
-		return nil, fmt.Errorf("connect not yet implemented")
+// 	case Obfs4Transport:
+// 		//[TODO]{priority:winter-break} add Obfs4 Transport
+// 		return nil, fmt.Errorf("connect not yet implemented")
 
-	case NullTransport:
-		// Do nothing to the connection before returning it to the user.
+// 	case NullTransport:
+// 		// Do nothing to the connection before returning it to the user.
 
-	default:
-		// If transport is unrecognized use min transport.
-		connectTag := conjureHMAC(cjSession.Keys.SharedSecret, "MinTrasportHMACString")
-		conn.Write(connectTag)
-	}
+// 	default:
+// 		// If transport is unrecognized use min transport.
+// 		connectTag := conjureHMAC(cjSession.Keys.SharedSecret, "MinTrasportHMACString")
+// 		conn.Write(connectTag)
+// 	}
 
-	return conn, nil
-}
+// 	return conn, nil
+// }
 
 // Connect - Use a registration (result of calling Register) to connect to a phantom
 func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
@@ -369,19 +370,24 @@ func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
 	switch reg.transport {
 	case MinTransport:
 		// Send hmac(seed, str) bytes to indicate to station (min transport)
+		fmt.Printf("Using Min Transport\n")
 		connectTag := conjureHMAC(reg.keys.SharedSecret, "MinTrasportHMACString")
 		conn.Write(connectTag)
+		return conn, nil
 	case Obfs4Transport:
 		//[TODO]{priority:winter-break} add Obfs4 Transport
 		return nil, fmt.Errorf("connect not yet implemented")
 
+	case NullTransport:
+		// Do nothing to the connection before returning it to the user.
+		fmt.Printf("Using Null Transport\n")
+		return conn, nil
 	default:
 		// If transport is unrecognized use min transport.
-		connectTag := conjureHMAC(reg.keys.SharedSecret, "MinTrasportHMACString")
-		conn.Write(connectTag)
+		return nil, fmt.Errorf("Unknown Transport")
 	}
 
-	return nil, nil
+	return conn, nil
 }
 
 // ConjureReg - Registration structure created for each individual registration within a session.
