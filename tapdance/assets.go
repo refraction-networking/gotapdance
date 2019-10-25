@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/golang/protobuf/proto"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
@@ -29,7 +28,7 @@ type assets struct {
 	filenameRoots         string
 	filenameClientConf    string
 
-	conjureConf *conjureConfig
+	socksAddr string
 }
 
 // could reset this internally to refresh assets and avoid woes of singleton testing
@@ -82,18 +81,13 @@ func initAssets(path string) {
 		DefaultPubkey: &defaultPubKey,
 		Generation:    &defaultGeneration}
 
-	conjureConf := conjureConfig{
-		v6support: &V6{support: true, include: v6, checked: time.Now().Add(-3 * time.Hour)},
-		socksAddr: "",
-	}
-
 	assetsInstance = &assets{
 		path:                  path,
 		config:                defaultClientConf,
 		filenameRoots:         "roots",
 		filenameClientConf:    "ClientConf",
 		filenameStationPubkey: "station_pubkey",
-		conjureConf:           &conjureConf,
+		socksAddr:             "",
 	}
 	assetsInstance.readConfigs()
 }
@@ -372,33 +366,5 @@ func (a *assets) saveClientConf() error {
 
 // SetStatsSocksAddr - Provide a socks address for reporting stats from the client in the form "addr:port"
 func (a *assets) SetStatsSocksAddr(addr string) {
-	a.conjureConf.setSocksAddr(addr)
-}
-
-// SetV6Support - Store the client's support for v6 so it can be referenced across sesions.
-func (a *assets) SetV6Support(support *V6) {
-	a.conjureConf.setV6Support(support)
-}
-
-// GetV6Support - retrieve
-func (a *assets) GetV6Support() *V6 {
-	if a.conjureConf.v6support == nil {
-		a.conjureConf.v6support = &V6{support: true, include: v6, checked: time.Now().Add(-3 * time.Hour)}
-	}
-	return a.conjureConf.v6support
-}
-
-type conjureConfig struct {
-	v6support *V6
-	socksAddr string
-}
-
-func (cc *conjureConfig) setSocksAddr(addr string) {
-	cc.socksAddr = addr
-}
-
-func (cc *conjureConfig) setV6Support(support *V6) {
-	cc.v6support.support = support.support
-	cc.v6support.checked = support.checked
-	cc.v6support.include = support.include
+	a.socksAddr = addr
 }

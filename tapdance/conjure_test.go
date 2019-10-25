@@ -5,32 +5,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"testing"
-	"time"
 
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 )
-
-func TestUseV4(t *testing.T) {
-	v6S := V6{
-		support: true,
-		include: v6,
-		checked: time.Now(),
-	}
-	cjSession := ConjureSession{V6Support: &v6S}
-	if cjSession.useV4() != false {
-		t.Fatal("Incorrect v4 usage determination")
-	}
-
-	cjSession.setV6Support(v4)
-	if cjSession.useV4() != true {
-		t.Fatal("Incorrect v4 usage determination")
-	}
-
-	cjSession.V6Support.checked = time.Now().Add(-3 * time.Hour)
-	if cjSession.useV4() != false {
-		t.Fatal("Incorrect v4 usage determination")
-	}
-}
 
 func TestSelectIpv4(t *testing.T) {
 

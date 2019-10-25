@@ -23,7 +23,6 @@ import (
 type V6 struct {
 	support bool
 	include uint
-	checked time.Time
 }
 
 const (
@@ -55,9 +54,6 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession) (net.Conn, erro
 		return nil, err
 	}
 
-	// succeeded registration update V6 support determination.
-	Assets().SetV6Support(cjSession.V6Support)
-
 	// randomized sleeping here to break the intraflow signal
 	toSleep := registration.getRandomDuration(3000, 212, 3449)
 	Logger().Tracef("%v Successfully sent registrations, sleeping for: %v ms", cjSession.IDString(), toSleep)
@@ -84,37 +80,6 @@ func Register(cjSession *ConjureSession) (*ConjureReg, error) {
 	}
 
 	return reg, err
-	// if cjSession.useV4() {
-	// 	//[reference] v6 not supported (checked less than 2hr ago)
-
-	// 	Logger().Tracef("%v Using v4", cjSession.IDString())
-	// 	return cjSession.register()
-	// } else if cjSession.useV6() {
-	// 	//[reference] v6 is supported (checked less than 2hr ago)
-
-	// 	Logger().Tracef("%v Including v6", cjSession.IDString())
-	// 	reg, err = cjSession.register()
-	// } else {
-	// 	//[reference] v6support not checked in less than 2hr
-
-	// 	Logger().Tracef("%v Trying v6", cjSession.IDString())
-	// 	reg, err = cjSession.register()
-
-	// 	if regErr, ok := err.(*RegError); ok && regErr.code == Unreachable {
-	// 		//[reference] If we failed because all v6 decoys were unreachable -> update settings and retry v4 only
-
-	// 		cjSession.setV6Support(v4)
-	// 		cjSession.V6Support.checked = time.Now()
-
-	// 		Logger().Tracef("%v v6 failed using v4", cjSession.IDString())
-	// 		reg, err = cjSession.register()
-	// 	} else {
-	// 		//[reference] Otherwise we support v6 and can continue
-	// 		cjSession.setV6Support(both)
-	// 		cjSession.V6Support.checked = time.Now()
-	// 	}
-	// }
-	// return reg, err
 }
 
 func testV6() bool {
@@ -186,7 +151,7 @@ func makeConjureSession(covert string) *ConjureSession {
 	cjSession := &ConjureSession{
 		Keys:           keys,
 		Width:          defaultRegWidth,
-		V6Support:      Assets().GetV6Support(),
+		V6Support:      &V6{support: true, include: both},
 		UseProxyHeader: false,
 		// Transport:      MinTransport,
 		Transport:     NullTransport,
@@ -298,51 +263,6 @@ func (cjSession *ConjureSession) register() (*ConjureReg, error) {
 
 	return reg, nil
 }
-
-//
-// func (cjSession *ConjureSession) connect(ctx context.Context) (net.Conn, error) {
-// 	//[reference] Create Context with deadline
-// 	deadline, deadlineAlreadySet := ctx.Deadline()
-// 	if !deadlineAlreadySet {
-// 		//[reference] randomized timeout to Dial dark decoy address
-// 		deadline = time.Now().Add(cjSession.getRandomDuration(0, 1061*2, 1953*3))
-// 		//[TODO]{priority:@sfrolov} explain these numbers and why they were chosen for the boundaries.
-// 	}
-// 	childCtx, childCancelFunc := context.WithDeadline(ctx, deadline)
-// 	defer childCancelFunc()
-
-// 	//[reference] Connect to Phantom Host using TLS
-// 	phantomAddr := net.JoinHostPort(cjSession.Phantom.String(), "443")
-
-// 	conn, err := (&net.Dialer{}).DialContext(childCtx, "tcp", phantomAddr)
-// 	if err != nil {
-// 		Logger().Infof("%v failed to dial phantom %v: %v\n", cjSession.IDString(), cjSession.Phantom.String(), err)
-// 		return nil, err
-// 	}
-// 	Logger().Infof("%v Connected to phantom %v", cjSession.IDString(), phantomAddr)
-
-// 	//[reference] Provide chosen transport to sent bytes (or connect) if necessary
-// 	switch cjSession.Transport {
-// 	case MinTransport:
-// 		// Send hmac(seed, str) bytes to indicate to station (min transport)
-// 		connectTag := conjureHMAC(cjSession.Keys.SharedSecret, "MinTrasportHMACString")
-// 		conn.Write(connectTag)
-
-// 	case Obfs4Transport:
-// 		//[TODO]{priority:winter-break} add Obfs4 Transport
-// 		return nil, fmt.Errorf("connect not yet implemented")
-
-// 	case NullTransport:
-// 		// Do nothing to the connection before returning it to the user.
-
-// 	default:
-// 		// If transport is unrecognized use min transport.
-// 		connectTag := conjureHMAC(cjSession.Keys.SharedSecret, "MinTrasportHMACString")
-// 		conn.Write(connectTag)
-// 	}
-
-// 	return conn, nil
-// }
 
 // Connect - Use a registration (result of calling Register) to connect to a phantom
 func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
@@ -641,8 +561,6 @@ func (cjSession *ConjureSession) setV6Support(support uint) {
 		cjSession.V6Support.support = true
 		cjSession.V6Support.include = v6
 	}
-	// assets.SetV6Suuport(support)
-	// cjSession.V6Support.checked = time.Now()
 }
 
 // When a registration send goroutine finishes it will call this and log
@@ -650,26 +568,6 @@ func (cjSession *ConjureSession) setV6Support(support uint) {
 func (cjSession *ConjureSession) registrationCallback(reg *ConjureReg) {
 	//[TODO]{priority:NOW}
 	Logger().Infof("%v %v", cjSession.IDString(), reg.digestStats())
-}
-
-func (cjSession *ConjureSession) useV4() bool {
-	if cjSession.V6Support.checked.Before(time.Now().Add(-2 * time.Hour)) {
-		return false
-	} else if cjSession.V6Support.include != v4 {
-		return false
-	} else {
-		return true
-	}
-}
-
-func (cjSession *ConjureSession) useV6() bool {
-	if cjSession.V6Support.checked.Before(time.Now().Add(-2 * time.Hour)) {
-		return false
-	} else if cjSession.V6Support.include == v4 {
-		return false
-	} else {
-		return true
-	}
 }
 
 func (cjSession *ConjureSession) getRandomDuration(base, min, max int) time.Duration {
