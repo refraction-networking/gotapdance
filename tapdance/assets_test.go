@@ -4,13 +4,14 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/golang/protobuf/proto"
-	pb "github.com/refraction-networking/gotapdance/protobuf"
 	"io/ioutil"
 	"net"
 	"os"
 	"path"
 	"testing"
+
+	"github.com/golang/protobuf/proto"
+	pb "github.com/refraction-networking/gotapdance/protobuf"
 )
 
 func TestAssets_Decoys(t *testing.T) {
@@ -180,8 +181,8 @@ func TestAssets_Pubkey(t *testing.T) {
 		fmt.Println("pubkey1:", pubkey1)
 		t.Fail()
 	}
-	os.Remove(path.Join(dir1, Assets().filenameStationPubkey))
-	os.Remove(path.Join(dir2, Assets().filenameStationPubkey))
+	// os.Remove(path.Join(dir1, Assets().filenameStationPubkey))
+	// os.Remove(path.Join(dir2, Assets().filenameStationPubkey))
 	os.Remove(dir1)
 	os.Remove(dir2)
 	AssetsSetDir(oldpath)

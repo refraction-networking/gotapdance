@@ -3,12 +3,12 @@ package tapdance
 import (
 	"crypto/x509"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"io/ioutil"
 	"net"
 	"os"
 	"path"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -24,9 +24,8 @@ type assets struct {
 
 	roots *x509.CertPool
 
-	filenameStationPubkey string
-	filenameRoots         string
-	filenameClientConf    string
+	filenameRoots      string
+	filenameClientConf string
 
 	socksAddr string
 }
@@ -63,6 +62,14 @@ func AssetsSetDir(dir string) *assets {
 	return assetsInstance
 }
 
+func getDefaultKey() []byte {
+	// keyStr := "515868be7f45ab6f310afed4b229b7a479fc9fde553dea4ccdb369ab1899e70c"
+	keyStr := "a1cb97be697c5ed5aefd78ffa4db7e68101024603511e40a89951bc158807177"
+	key := make([]byte, hex.DecodedLen(len(keyStr)))
+	hex.Decode(key, []byte(keyStr))
+	return key
+}
+
 func initAssets(path string) {
 	var defaultDecoys = []*pb.TLSDecoySpec{
 		pb.InitTLSDecoySpec("192.122.190.104", "tapdance1.freeaeskey.xyz"),
@@ -70,9 +77,7 @@ func initAssets(path string) {
 		pb.InitTLSDecoySpec("192.122.190.106", "tapdance3.freeaeskey.xyz"),
 	}
 
-	defaultKey := []byte{81, 88, 104, 190, 127, 69, 171, 111, 49, 10, 254, 212, 178, 41, 183,
-		164, 121, 252, 159, 222, 85, 61, 234, 76, 205, 179, 105, 171, 24, 153, 231, 12}
-
+	defaultKey := getDefaultKey()
 	defualtKeyType := pb.KeyType_AES_GCM_128
 	defaultPubKey := pb.PubKey{Key: defaultKey, Type: &defualtKeyType}
 	defaultGeneration := uint32(0)
@@ -82,12 +87,11 @@ func initAssets(path string) {
 		Generation:    &defaultGeneration}
 
 	assetsInstance = &assets{
-		path:                  path,
-		config:                defaultClientConf,
-		filenameRoots:         "roots",
-		filenameClientConf:    "ClientConf",
-		filenameStationPubkey: "station_pubkey",
-		socksAddr:             "",
+		path:               path,
+		config:             defaultClientConf,
+		filenameRoots:      "roots",
+		filenameClientConf: "ClientConf",
+		socksAddr:          "",
 	}
 	assetsInstance.readConfigs()
 }
@@ -127,20 +131,6 @@ func (a *assets) readConfigs() {
 		return nil
 	}
 
-	//[TODO]{priority:now} JUST TAKE THE DEFAULT PUBKEY FROM THE CLIENTCONF IF IT'S DEFINED
-	readPubkey := func(filename string) error {
-		staionPubkey, err := ioutil.ReadFile(filename)
-		if err != nil {
-			return err
-		}
-		if len(staionPubkey) != 32 {
-			return errors.New("Unexpected keyfile length! Expected: 32. Got: " +
-				strconv.Itoa(len(staionPubkey)))
-		}
-		copy(a.config.DefaultPubkey.Key[:], staionPubkey[0:32])
-		return nil
-	}
-
 	var err error
 	Logger().Infoln("Assets: reading from folder " + a.path)
 
@@ -159,14 +149,6 @@ func (a *assets) readConfigs() {
 	} else {
 		Logger().Infoln("Client config successfully read from " + clientConfFilename)
 	}
-
-	pubkeyFilename := path.Join(a.path, a.filenameStationPubkey)
-	err = readPubkey(pubkeyFilename)
-	if err != nil {
-		Logger().Debugln("Assets: failed to read pubkey file: " + err.Error())
-	} else {
-		Logger().Infoln("Pubkey successfully read from " + pubkeyFilename)
-	}
 }
 
 // Picks random decoy, returns Server Name Indication and addr in format ipv4:port
@@ -181,7 +163,7 @@ func (a *assets) GetDecoyAddress() (sni string, addr string) {
 	decoyIndex := getRandInt(0, len(decoys)-1)
 	ip := make(net.IP, 4)
 	binary.BigEndian.PutUint32(ip, decoys[decoyIndex].GetIpv4Addr())
-	// TODO: what checks need to be done, and what's guaranteed?
+	//[TODO]{priority:winter-break}: what checks need to be done, and what's guaranteed?
 	addr = ip.To4().String() + ":443"
 	sni = decoys[decoyIndex].GetHostname()
 	return
@@ -233,8 +215,9 @@ func (a *assets) GetDecoy() pb.TLSDecoySpec {
 	decoyIndex := getRandInt(0, len(decoys)-1)
 	chosenDecoy = *decoys[decoyIndex]
 
-	// TODO: stop enforcing values >= defaults.
+	//[TODO]{priority:soon} stop enforcing values >= defaults.
 	// Fix ackhole instead
+	// No value checks when using
 	if chosenDecoy.GetTimeout() < timeoutMin {
 		timeout := uint32(timeoutMax)
 		chosenDecoy.Timeout = &timeout
