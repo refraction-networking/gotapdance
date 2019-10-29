@@ -1,6 +1,5 @@
 language: go
 go:
-  - "1.10.x"
   - "1.x"
 
 os: linux
@@ -13,32 +12,17 @@ services:
 addons:
   artifacts: true
 
-# When Uncommented this will override the defaults set in travis ci web interface.
-env:
-  - PSIPHON_CORE_VERSION=""
-  - PSIPHON_SYSTEM_VERSION="bae236c"
-
 notifications:
   slack:
     secure: ZzIEqFE4XRdE9U2p3aeE32DMtoC8RgjoEavhEQ1oLrWFgUpLktqmp9UVY/U+W6iElilLpDbFpry51+Sv9MWpxJMxr+Q/JJuq/3Bj5KjF/wEtil7qvBYhQ1sM/qUQFG6wRkrMNjZGMiaTmnkWF0rZB8lf7+nbnGFaPW3AVVbD+8gVDWTHI4Hcvvgs0UbrJzoPfpvH0dprOchswc1BBKTgo5c44rvS2fquEMVcqMMiNJ5JQqphuRWLTfzLgOzImSf0/xJJyVp/YTkSnVSg8BcWmDCJ4iB9fJkVyZM9WxcgY/J4T5VzFxfMah9zv2j8UTfzHSMeCJDRL647hdnkmr/Qum/LN91Ey2DJw5KUH743CsAbyGhQML6wZ3NCeEP06hnMDphalU5+BYhtAPyc5CB84g6eLIUQ2EqptuPZpjFQohFnapCTnfB5XKTcW+PjxJsoJzk8x+85Xid+H1nnNxeyf10tLv6Pwy4ZGmEEbsa4SYWXibpIEu3fPJXEdtrht0vM40pDLeUYL6Axmh7hNjmDQOXJG41saF+Rk4AArRhKhMQTmlYCc0e1H2/hIDXUMPbqjHeCpEkaA5W8BFBKynhlJa0JX+rtHDFaK82Di8rXT0NO2ACyG8ZQqk87qePyBYPyfR8hRwhrkmQHlYYOZzV6LBz+ynJuWl9ktcC2irJlHZs=
 
-## Golang Test & CLI build
-# Go versions: all specified
-install:
-  - go get -t ./...
-  - go get golang.org/x/lint/golint
-  - go get github.com/alecthomas/gometalinter
-
-script:
-  - go test -race -v ./tapdance
-  - go test -race -v ./tdproxy
-  - gometalinter --install
-  - gometalinter --disable-all -E vet -E gofmt -E misspell -E ineffassign -E deadcode --tests ./tapdance
-
-
 # Reuse the steps from build for vendoring changes (any redefined key-values with be overwritten)
 _job_template: &_job_template
   stage: build
+  # When Uncommented this will override the defaults set in travis ci web interface.
+  env:
+    - PSIPHON_CORE_VERSION=""
+    - PSIPHON_SYSTEM_VERSION=""
   install:
     - go get ./...
     # Substitute build string
@@ -57,10 +41,31 @@ _job_template: &_job_template
     - sudo pip install awscli
     - if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then aws s3 sync build s3://$ARTIFACTS_BUCKET/$TRAVIS_REPO_SLUG/$TRAVIS_BRANCH/; fi
 
+
+stages:
+  test
+  build
+
 ## Build job for Psiphon ConsoleClient and Android App
 # Go versions: first value in array
 jobs:
   include:
+    - stage: test
+      name: "Validation tests"
+      go:
+        - "1.10.x"
+        - "1.x"
+      install:
+        - go get -t ./...
+        - go get golang.org/x/lint/golint
+        - go get github.com/alecthomas/gometalinter
+
+      script:
+        - go test -race -v ./tapdance
+        - go test -race -v ./tdproxy
+        - gometalinter --install
+        - gometalinter --disable-all -E vet -E gofmt -E misspell -E ineffassign -E deadcode --tests ./tapdance
+
     - <<: *_job_template # YAML anchor/alias
       name: "Build cli and Psiphon ConsoleClient on Linux"
       before_script:
@@ -71,11 +76,10 @@ jobs:
         # Build cli
         - go build -o build/cli-$TRAVIS_OS_NAME ./cli
         # Build Tapdance ConsolClient
-        - go build -o build/ConsoleClient-td-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
+        - go build -a -v -race -o build/ConsoleClient-td-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
         # Add dialer options for Conjure and re-build the ConsoleClient
-        #[TODO]{priority:now} fix patch for updated tapdance wrapper
         - patch $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go build/conjure.golang.patch
-        - go build -o build/ConsoleClient-cj-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
+        - go build -a -v -race -o build/ConsoleClient-cj-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
 
     - <<: *_job_template # Same build on OS X
       name: "Build cli and Psiphon ConsoleClient on OS X"
@@ -88,10 +92,10 @@ jobs:
         # Build cli
         - go build -o build/cli-$TRAVIS_OS_NAME ./cli
         # Build Tapdance ConsolClient
-        - go build -o build/ConsoleClient-td-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
+        - go build -a -v -race -o build/ConsoleClient-td-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
         # Add dialer options for Conjure and re-build the ConsoleClient
         - patch $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go build/conjure.golang.patch
-        - go build -o build/ConsoleClient-cj-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
+        - go build -a -v -race -o build/ConsoleClient-cj-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
 
     - <<: *_job_template 
       name: "Build Psiphon Android Library and App for Tapdance"
@@ -129,7 +133,6 @@ jobs:
         # Patched tunneling protocol for TapDance
         - patch $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/src/main/java/com/psiphon3/psiphonlibrary/TunnelManager.java build/TunnelManager.java.patch
         # Add dialer options to enable Conjure 
-        #[TODO]{priority:now} fix patch for updated tapdance wrapper
         - patch $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go build/conjure.golang.patch
         # Digest this branch's ClientConf into Psiphon's embedded_config
         - ./test_scripts/psiphon_digest_cc.sh ./assets/ClientConf $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/embedded_config.go
