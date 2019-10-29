@@ -70,7 +70,6 @@ jobs:
         # Add the Current ClientConf and roots to the build folder for Psiphon's ConsoleClient
         - cp assets/ClientConf build/tapdance/ClientConf
         - cp assets/roots build/tapdance
-        - cp $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient/tapdance/psiphon.config build/tapdance
       script:
         # Build cli
         - go build -o build/cli-$TRAVIS_OS_NAME ./cli
