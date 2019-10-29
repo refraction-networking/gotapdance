@@ -83,7 +83,7 @@ jobs:
     - <<: *_job_template # Same build on OS X
       name: "Build cli and Psiphon ConsoleClient on OS X"
       os: osx
-       before_script:
+      before_script:
         # Add the Current ClientConf and roots to the build folder for Psiphon's ConsoleClient
         - cp assets/ClientConf build/tapdance/ClientConf
         - cp assets/roots build/tapdance
