@@ -13,10 +13,10 @@ services:
 addons:
   artifacts: true
 
-# # When Uncommented this will override the defaults set in travis ci web interface.
-# env:
-#   - PSIPHON_CORE_VERSION="tags/v2.0.9"
-#   - PSIPHON_SYSTEM_VERSION="bae236c"
+# When Uncommented this will override the defaults set in travis ci web interface.
+env:
+  - PSIPHON_CORE_VERSION=""
+  - PSIPHON_SYSTEM_VERSION="bae236c"
 
 notifications:
   slack:
@@ -50,9 +50,6 @@ _job_template: &_job_template
     # Remove gotapdance from vendored packages (it will look in GOPATH if after vendor directory)
     - go get github.com/kardianos/govendor
     - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && govendor remove github.com/refraction-networking/gotapdance/...)
-    - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && govendor remove github.com/refraction-networking/gotapdance/...)
-    # replace sergeyfrolov in tapdance wrapper (NOTE: REMOVE AFTER VENDORING IN PSIPHON CHANGES)
-    - sed -i.bak 's/sergeyfrolov/refraction-networking/g' $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go
     # Enable TapDance logging
     - sed -i.bak 's/refraction_networking_tapdance.Logger().Out = ioutil.Discard//' $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go
   after_success:
@@ -76,6 +73,7 @@ jobs:
         # Build Tapdance ConsolClient
         - go build -o build/ConsoleClient-td-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
         # Add dialer options for Conjure and re-build the ConsoleClient
+        #[TODO]{priority:now} fix patch for updated tapdance wrapper
         - patch $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go build/conjure.golang.patch
         - go build -o build/ConsoleClient-cj-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
 
@@ -131,6 +129,7 @@ jobs:
         # Patched tunneling protocol for TapDance
         - patch $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/src/main/java/com/psiphon3/psiphonlibrary/TunnelManager.java build/TunnelManager.java.patch
         # Add dialer options to enable Conjure 
+        #[TODO]{priority:now} fix patch for updated tapdance wrapper
         - patch $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go build/conjure.golang.patch
         # Digest this branch's ClientConf into Psiphon's embedded_config
         - ./test_scripts/psiphon_digest_cc.sh ./assets/ClientConf $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/embedded_config.go
