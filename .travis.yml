@@ -51,15 +51,27 @@ stages:
 jobs:
   include:
     - stage: test
-      name: "Validation tests"
+      name: "Validation tests Go 1.10.X"
       go:
         - "1.10.x"
+      install:
+        - go get -t ./...
+        - go get golang.org/x/lint/golint
+        - go get github.com/alecthomas/gometalinter
+      script:
+        - go test -race -v ./tapdance
+        - go test -race -v ./tdproxy
+        - gometalinter --install
+        - gometalinter --disable-all -E vet -E gofmt -E misspell -E ineffassign -E deadcode --tests ./tapdance
+
+    - stage: test
+      name: "Validation tests Go 1.X"
+      go:
         - "1.x"
       install:
         - go get -t ./...
         - go get golang.org/x/lint/golint
         - go get github.com/alecthomas/gometalinter
-
       script:
         - go test -race -v ./tapdance
         - go test -race -v ./tdproxy
