@@ -113,7 +113,7 @@ jobs:
       name: "Build Psiphon Android Library and App for Tapdance"
       before_script:
         # Get Android build environment
-        - docker pull refraction/psiandroid
+        - docker pull refraction/psiandroid:latest
         - mkdir -p $GOPATH/src/bitbucket.org/psiphon
         - hg clone https://bitbucket.org/psiphon/psiphon-circumvention-system $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system
         - (cd $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system && hg checkout $PSIPHON_SYSTEM_VERSION)
@@ -129,14 +129,14 @@ jobs:
         - mv $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android/ca.psiphon.aar build/
         # Build Psiphon Android App PsiphonAndroid-debug.apk
         - cp build/ca.psiphon.aar $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/libs/
-        - docker run -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android:/go/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android refraction/psiandroid /bin/bash -c 'yes | /android-sdk-linux/tools/bin/sdkmanager --update && cd /go/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android && ./gradlew assembleDebug'
+        - docker run -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android:/go/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android refraction/psiandroid /bin/bash -c 'yes | /android-sdk-linux/tools/bin/sdkmanager --update && cd /go/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android && ./gradlew assembleDebug --min-api 24'
         - sudo mv $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/build/outputs/apk/debug/PsiphonAndroid-debug.apk build/PsiphonAndroid-TD-debug.apk
 
     - <<: *_job_template 
       name: "Build Psiphon Android Library and App for Conjure"
       before_script:
         # Get Android build environment
-        - docker pull refraction/psiandroid
+        - docker pull refraction/psiandroid:latest
         - mkdir -p $GOPATH/src/bitbucket.org/psiphon
         - hg clone https://bitbucket.org/psiphon/psiphon-circumvention-system $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system
         - (cd $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system && hg checkout $PSIPHON_SYSTEM_VERSION)
@@ -154,5 +154,5 @@ jobs:
         - mv $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android/ca.psiphon.aar build/
         # Build Psiphon Android App PsiphonAndroid-debug.apk
         - cp build/ca.psiphon.aar $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/libs/
-        - docker run -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android:/go/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android refraction/psiandroid /bin/bash -c 'yes | /android-sdk-linux/tools/bin/sdkmanager --update && cd /go/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android && ./gradlew assembleDebug'
+        - docker run -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android:/go/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android refraction/psiandroid /bin/bash -c 'yes | /android-sdk-linux/tools/bin/sdkmanager --update && cd /go/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android && ./gradlew assembleDebug --min-api 24'
         - sudo mv $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/build/outputs/apk/debug/PsiphonAndroid-debug.apk build/PsiphonAndroid-CJ-debug.apk
