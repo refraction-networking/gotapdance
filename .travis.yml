@@ -39,7 +39,7 @@ _job_template: &_job_template
   after_success:
     # Upload built binaries to S3
     - sudo pip install awscli
-    - if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then aws s3 sync build s3://$ARTIFACTS_BUCKET/$TRAVIS_REPO_SLUG/$TRAVIS_BRANCH/; fi
+    - if [ "$TRAVIS_PULL_REQUEST" = "false" ]; then aws s3 sync build s3://$ARTIFACTS_BUCKET/$TRAVIS_REPO_SLUG/$TRAVIS_BRANCH/ --region us-west-1; fi
 
 
 stages:
