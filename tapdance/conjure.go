@@ -50,16 +50,16 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession) (net.Conn, erro
 	// Choose Phantom Address in Register depending on v6 support.
 	registration, err := Register(cjSession)
 	if err != nil {
-		Logger().Tracef("%v Failed to register: %v", cjSession.IDString(), err)
+		Logger().Debugf("%v Failed to register: %v", cjSession.IDString(), err)
 		return nil, err
 	}
 
 	// randomized sleeping here to break the intraflow signal
 	toSleep := registration.getRandomDuration(3000, 212, 3449)
-	Logger().Tracef("%v Successfully sent registrations, sleeping for: %v ms", cjSession.IDString(), toSleep)
+	Logger().Debugf("%v Successfully sent registrations, sleeping for: %v ms", cjSession.IDString(), toSleep)
 	time.Sleep(toSleep)
 
-	Logger().Tracef("%v Woke from sleep, attempting to Connect ...", cjSession.IDString())
+	Logger().Debugf("%v Woke from sleep, attempting to Connect ...", cjSession.IDString())
 	return registration.Connect(ctx)
 	// return Connect(cjSession)
 }
@@ -99,7 +99,7 @@ func testV6() bool {
 	// The only error that would return before this is a network unreachable error
 	select {
 	case err := <-dialError:
-		Logger().Tracef("v6 unreachable received: %v", err)
+		Logger().Debugf("v6 unreachable received: %v", err)
 		return false
 	default:
 		return true
@@ -239,7 +239,7 @@ func (cjSession *ConjureSession) register() (*ConjureReg, error) {
 	//[reference] Dial errors happen immediately so block until all N dials complete
 	var unreachableCount uint = 0
 	for err := range dialErrors {
-		// Logger().Tracef("%v %v", cjSession.IDString(), err)
+		// Logger().Debugf("%v %v", cjSession.IDString(), err)
 		if err != nil {
 			if dialErr, ok := err.(RegError); ok && dialErr.code == Unreachable {
 				// If we failed because ipv6 network was unreachable try v4 only.
@@ -257,7 +257,7 @@ func (cjSession *ConjureSession) register() (*ConjureReg, error) {
 
 	//[reference] if ALL fail to dial return error (retry in parent if ipv6 unreachable)
 	if unreachableCount == width {
-		Logger().Tracef("%v NETWORK UNREACHABLE", cjSession.IDString())
+		Logger().Debugf("%v NETWORK UNREACHABLE", cjSession.IDString())
 		return nil, &RegError{code: Unreachable, msg: "All decoys failed to register -- Dial Unreachable"}
 	}
 
