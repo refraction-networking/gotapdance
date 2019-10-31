@@ -1,0 +1,15 @@
+diff -r 00488348a5f0 Android/app/build.gradle
+--- a/Android/app/build.gradle	Tue Oct 22 15:38:52 2019 -0400
++++ b/Android/app/build.gradle	Wed Oct 30 14:28:38 2019 -0600
+@@ -40,6 +40,11 @@
+         release
+     }
+ 
++    compileOptions {
++        sourceCompatibility JavaVersion.VERSION_1_8
++        targetCompatibility JavaVersion.VERSION_1_8
++    }
++
+     buildTypes {
+         debug {
+             pseudoLocalesEnabled true
