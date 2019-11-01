@@ -519,12 +519,14 @@ func (reg *ConjureReg) generateVSP() ([]byte, error) {
 
 	//[reference] Generate ClientToStation protobuf
 	// transition := pb.C2S_Transition_C2S_SESSION_INIT
+	transport := uint32(reg.transport)
 	currentGen := Assets().GetGeneration()
 	initProto := &pb.ClientToStation{
 		CovertAddress:       covert,
 		DecoyListGeneration: &currentGen,
 		V6Support:           reg.getV6Support(),
 		V4Support:           reg.getV4Support(),
+		C2STransport:        &transport,
 		// StateTransition:     &transition,
 
 		//[TODO]{priority:winter-break} specify width in C2S because different width might
