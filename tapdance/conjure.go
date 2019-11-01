@@ -76,32 +76,32 @@ func Register(cjSession *ConjureSession) (*ConjureReg, error) {
 	return reg, err
 }
 
-// testV6 -- This is over simple and incomplete (currently unused)
-// checking for unreachable alone does not account for local ipv6 addresses
-// [TODO]{priority:winter-break} use getifaddr reverse bindings
-func testV6() bool {
-	dialError := make(chan error, 1)
-	d := Assets().GetV6Decoy()
-	go func() {
-		conn, err := net.Dial("tcp", d.GetIpAddrStr())
-		if err != nil {
-			dialError <- err
-			return
-		}
-		conn.Close()
-		dialError <- nil
-	}()
+// // testV6 -- This is over simple and incomplete (currently unused)
+// // checking for unreachable alone does not account for local ipv6 addresses
+// // [TODO]{priority:winter-break} use getifaddr reverse bindings
+// func testV6() bool {
+// 	dialError := make(chan error, 1)
+// 	d := Assets().GetV6Decoy()
+// 	go func() {
+// 		conn, err := net.Dial("tcp", d.GetIpAddrStr())
+// 		if err != nil {
+// 			dialError <- err
+// 			return
+// 		}
+// 		conn.Close()
+// 		dialError <- nil
+// 	}()
 
-	time.Sleep(500 * time.Microsecond)
-	// The only error that would return before this is a network unreachable error
-	select {
-	case err := <-dialError:
-		Logger().Debugf("v6 unreachable received: %v", err)
-		return false
-	default:
-		return true
-	}
-}
+// 	time.Sleep(500 * time.Microsecond)
+// 	// The only error that would return before this is a network unreachable error
+// 	select {
+// 	case err := <-dialError:
+// 		Logger().Debugf("v6 unreachable received: %v", err)
+// 		return false
+// 	default:
+// 		return true
+// 	}
+// }
 
 // Connect - Dial the Phantom IP address after registration
 func Connect(reg *ConjureReg) (net.Conn, error) {
@@ -150,8 +150,8 @@ func makeConjureSession(covert string) *ConjureSession {
 		Width:          defaultRegWidth,
 		V6Support:      &V6{support: true, include: both},
 		UseProxyHeader: false,
-		// Transport:      MinTransport,
-		Transport:     NullTransport,
+		Transport:      MinTransport,
+		// Transport:     NullTransport,
 		CovertAddress: covert,
 		SessionID:     sessionsTotal.GetAndInc(),
 	}
@@ -700,32 +700,42 @@ func SelectDecoys(sharedSecret []byte, version uint, width uint) []*pb.TLSDecoyS
 }
 
 // SelectPhantom - select one phantom IP address based on shared secret
-func SelectPhantom(seed []byte, v6Support uint) (*net.IP, *net.IP, error) {
+func SelectPhantom(seed []byte, support uint) (*net.IP, *net.IP, error) {
 	// Full \32 is routed in v6
 	// Full \8 is routed in v4 (some is unused) and live on limited basis (belinging to michigan) 35.0.0.0\8
 	// 											  "192.122.190.0/24", "2001:48a8:687f:1::/64"
-	ddIPSelector4, err := newDDIpSelector([]string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}, false)
-	ddIPSelector6, err := newDDIpSelector([]string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}, true)
+	ddIPSelector4, err4 := newDDIpSelector([]string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}, false)
+	ddIPSelector6, err6 := newDDIpSelector([]string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}, true)
 
-	if err != nil {
-		return nil, nil, err
+	// If we got an error that effects the addresses we will be choosing from return error, else go on.
+	if err4 != nil && support != v6 {
+		return nil, nil, err4
+	} else if err6 != nil && support != v4 {
+		return nil, nil, err6
 	}
 
-	phantomIPv4, err := ddIPSelector4.selectIpAddr(seed)
-	if err != nil {
-		return nil, nil, err
-	}
-	phantomIPv6, err := ddIPSelector6.selectIpAddr(seed)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	switch v6Support {
+	switch support {
 	case v4:
+		phantomIPv4, err := ddIPSelector4.selectIpAddr(seed)
+		if err != nil {
+			return nil, nil, err
+		}
 		return phantomIPv4, nil, nil
 	case v6:
+		phantomIPv6, err := ddIPSelector6.selectIpAddr(seed)
+		if err != nil {
+			return nil, nil, err
+		}
 		return nil, phantomIPv6, nil
 	case both:
+		phantomIPv4, err := ddIPSelector4.selectIpAddr(seed)
+		if err != nil {
+			return nil, nil, err
+		}
+		phantomIPv6, err := ddIPSelector6.selectIpAddr(seed)
+		if err != nil {
+			return nil, nil, err
+		}
 		return phantomIPv4, phantomIPv6, nil
 	default:
 		return nil, nil, fmt.Errorf("unknown v4/v6 support")
