@@ -69,19 +69,16 @@ func Register(cjSession *ConjureSession) (*ConjureReg, error) {
 	var err error
 	var reg *ConjureReg
 
-	if testV6() {
-		Logger().Debugf("%v Including v6", cjSession.IDString())
-		cjSession.setV6Support(both)
-		reg, err = cjSession.register()
-	} else {
-		Logger().Debugf("%v Using v4", cjSession.IDString())
-		cjSession.setV6Support(v4)
-		reg, err = cjSession.register()
-	}
+	Logger().Debugf("%v Registering V4 and V6", cjSession.IDString())
+	cjSession.setV6Support(both)
+	reg, err = cjSession.register()
 
 	return reg, err
 }
 
+// testV6 -- This is over simple and incomplete (currently unused)
+// checking for unreachable alone does not account for local ipv6 addresses
+// [TODO]{priority:winter-break} use getifaddr reverse bindings
 func testV6() bool {
 	dialError := make(chan error, 1)
 	d := Assets().GetV6Decoy()
@@ -195,8 +192,8 @@ func (cjSession *ConjureSession) register() (*ConjureReg, error) {
 
 	// Choose N (width) decoys from decoylist
 	cjSession.RegDecoys = SelectDecoys(cjSession.Keys.SharedSecret, cjSession.V6Support.include, cjSession.Width)
-	cjSession.Phantom, err = SelectPhantom(cjSession.Keys.ConjureSeed, cjSession.V6Support.support)
-	if err != nil || cjSession.Phantom == nil {
+	phantom4, phantom6, err := SelectPhantom(cjSession.Keys.ConjureSeed, cjSession.V6Support.include)
+	if err != nil {
 		Logger().Warnf("%v failed to select Phantom: %v\n", cjSession.IDString(), err)
 		return nil, err
 	}
@@ -206,8 +203,9 @@ func (cjSession *ConjureSession) register() (*ConjureReg, error) {
 		sessionIDStr:  cjSession.IDString(),
 		keys:          cjSession.Keys,
 		stats:         &pb.SessionStats{},
-		phantom:       cjSession.Phantom,
-		v6Support:     cjSession.V6Support.support,
+		phantom4:      phantom4,
+		phantom6:      phantom6,
+		v6Support:     cjSession.V6Support.include,
 		covertAddress: cjSession.CovertAddress,
 	}
 
@@ -219,11 +217,12 @@ func (cjSession *ConjureSession) register() (*ConjureReg, error) {
 		Logger().Warnf("%v Using width %v (default %v)", cjSession.IDString(), width, cjSession.Width)
 	}
 
-	Logger().Debugf("%v Registration - v6:%v, covert:%v, phantom:%v, width:%v, transport:%v",
+	Logger().Debugf("%v Registration - v6:%v, covert:%v, phantoms:%v,[%v], width:%v, transport:%v",
 		reg.sessionIDStr,
-		reg.v6Support,
+		reg.v6SupportStr(),
 		reg.covertAddress,
-		reg.phantom,
+		reg.phantom4.String(),
+		reg.phantom6.String(),
 		cjSession.Width,
 		cjSession.Transport,
 	)
@@ -264,27 +263,64 @@ func (cjSession *ConjureSession) register() (*ConjureReg, error) {
 	return reg, nil
 }
 
+type resultTuple struct {
+	conn net.Conn
+	err  error
+}
+
 // Connect - Use a registration (result of calling Register) to connect to a phantom
+// Note: This is hacky but should work for v4, v6, or both as any nil phantom addr will
+// return a dial error and be ignored.
 func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
-	//[reference] Create Context with deadline
-	deadline, deadlineAlreadySet := ctx.Deadline()
-	if !deadlineAlreadySet {
-		//[reference] randomized timeout to Dial dark decoy address
-		deadline = time.Now().Add(reg.getRandomDuration(0, 1061*2, 1953*3))
-		//[TODO]{priority:@sfrolov} explain these numbers and why they were chosen for the boundaries.
-	}
-	childCtx, childCancelFunc := context.WithDeadline(ctx, deadline)
-	defer childCancelFunc()
 
-	//[reference] Connect to Phantom Host using TLS
-	phantomAddr := net.JoinHostPort(reg.phantom.String(), "443")
+	connChannel := make(chan resultTuple, 2)
 
-	conn, err := (&net.Dialer{}).DialContext(childCtx, "tcp", phantomAddr)
-	if err != nil {
-		Logger().Infof("%v failed to dial phantom %v: %v\n", reg.sessionIDStr, reg.phantom.String(), err)
-		return nil, err
+	connect := func(addr string) {
+		//[reference] Create Context with deadline
+		deadline, deadlineAlreadySet := ctx.Deadline()
+		if !deadlineAlreadySet {
+			//[reference] randomized timeout to Dial dark decoy address
+			deadline = time.Now().Add(reg.getRandomDuration(0, 1061*2, 1953*3))
+			//[TODO]{priority:@sfrolov} explain these numbers and why they were chosen for the boundaries.
+		}
+		childCtx, childCancelFunc := context.WithDeadline(ctx, deadline)
+		defer childCancelFunc()
+
+		//[reference] Connect to Phantom Host using TLS
+		phantomAddr := net.JoinHostPort(addr, "443")
+
+		conn, err := (&net.Dialer{}).DialContext(childCtx, "tcp", phantomAddr)
+		if err != nil {
+			Logger().Infof("%v failed to dial phantom %v: %v\n", reg.sessionIDStr, addr, err)
+			connChannel <- resultTuple{nil, err}
+		}
+		Logger().Infof("%v Connected to phantom %v", reg.sessionIDStr, phantomAddr)
+		connChannel <- resultTuple{conn, nil}
 	}
-	Logger().Infof("%v Connected to phantom %v", reg.sessionIDStr, phantomAddr)
+
+	//[reference] Connect to Both IPv4 and IPv6
+	go connect(reg.phantom4.String())
+	go connect(reg.phantom6.String())
+
+	//[reference] Use whichever comes back first and close the one that is slower
+	res := <-connChannel
+	if res.err != nil || res.conn == nil {
+		//[reference] first connection returned was an error, wait for the second
+		res = <-connChannel
+		if res.err != nil || res.conn == nil {
+			return res.conn, res.err
+		}
+	} else {
+		//[reference] first connection returned was good, wait for the second and close it.
+		go func() {
+			slowRes := <-connChannel
+			if slowRes.conn != nil {
+				slowRes.conn.Close()
+			}
+		}()
+	}
+
+	conn := res.conn
 
 	//[reference] Provide chosen transport to sent bytes (or connect) if necessary
 	switch reg.transport {
@@ -312,11 +348,12 @@ func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
 type ConjureReg struct {
 	seed           []byte
 	sessionIDStr   string
-	phantom        *net.IP
+	phantom4       *net.IP
+	phantom6       *net.IP
 	useProxyHeader bool
 	covertAddress  string
 	phantomSNI     string
-	v6Support      bool
+	v6Support      uint
 	transport      uint
 
 	stats *pb.SessionStats
@@ -486,7 +523,8 @@ func (reg *ConjureReg) generateVSP() ([]byte, error) {
 	initProto := &pb.ClientToStation{
 		CovertAddress:       covert,
 		DecoyListGeneration: &currentGen,
-		V6Support:           &reg.v6Support,
+		V6Support:           reg.getV6Support(),
+		V4Support:           reg.getV4Support(),
 		// StateTransition:     &transition,
 
 		//[TODO]{priority:winter-break} specify width in C2S because different width might
@@ -496,8 +534,6 @@ func (reg *ConjureReg) generateVSP() ([]byte, error) {
 	if len(reg.phantomSNI) > 0 {
 		initProto.MaskedDecoyServerName = &reg.phantomSNI
 	}
-
-	initProto.V6Support = &reg.v6Support
 
 	for (proto.Size(initProto)+AES_GCM_TAG_SIZE)%3 != 0 {
 		initProto.Padding = append(initProto.Padding, byte(0))
@@ -518,6 +554,36 @@ func (reg *ConjureReg) generateFSP(espSize uint16) []byte {
 	buf[2] = flags
 
 	return buf
+}
+
+func (reg *ConjureReg) getV4Support() *bool {
+	// for now return true and register both
+	support := true
+	if reg.v6Support == v6 {
+		support = false
+	}
+	return &support
+}
+
+func (reg *ConjureReg) getV6Support() *bool {
+	support := true
+	if reg.v6Support == v4 {
+		support = false
+	}
+	return &support
+}
+
+func (reg *ConjureReg) v6SupportStr() string {
+	switch reg.v6Support {
+	case both:
+		return "Both"
+	case v4:
+		return "V4"
+	case v6:
+		return "V6"
+	default:
+		return "unknown"
+	}
 }
 
 func (reg *ConjureReg) digestStats() string {
@@ -634,20 +700,36 @@ func SelectDecoys(sharedSecret []byte, version uint, width uint) []*pb.TLSDecoyS
 }
 
 // SelectPhantom - select one phantom IP address based on shared secret
-func SelectPhantom(seed []byte, v6Support bool) (*net.IP, error) {
+func SelectPhantom(seed []byte, v6Support uint) (*net.IP, *net.IP, error) {
 	// Full \32 is routed in v6
 	// Full \8 is routed in v4 (some is unused) and live on limited basis (belinging to michigan) 35.0.0.0\8
 	// 											  "192.122.190.0/24", "2001:48a8:687f:1::/64"
-	ddIPSelector, err := newDDIpSelector([]string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}, v6Support)
+	ddIPSelector4, err := newDDIpSelector([]string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}, false)
+	ddIPSelector6, err := newDDIpSelector([]string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}, true)
+
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	darkDecoyIPAddr, err := ddIPSelector.selectIpAddr(seed)
+	phantomIPv4, err := ddIPSelector4.selectIpAddr(seed)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return darkDecoyIPAddr, nil
+	phantomIPv6, err := ddIPSelector6.selectIpAddr(seed)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	switch v6Support {
+	case v4:
+		return phantomIPv4, nil, nil
+	case v6:
+		return nil, phantomIPv6, nil
+	case both:
+		return phantomIPv4, phantomIPv6, nil
+	default:
+		return nil, nil, fmt.Errorf("unknown v4/v6 support")
+	}
 }
 
 func getStationKey() [32]byte {
