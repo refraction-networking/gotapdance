@@ -474,7 +474,7 @@ func (reg *ConjureReg) setTLSToDecoy(tlsrtt *uint32) {
 }
 
 func (reg *ConjureReg) getPbTransport() pb.TransportType {
-	return pb.TransportType_NullTransport
+	return pb.TransportType(reg.transport)
 }
 
 func (reg *ConjureReg) generateVSP() ([]byte, error) {
