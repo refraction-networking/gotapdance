@@ -153,8 +153,8 @@ func makeConjureSession(covert string) *ConjureSession {
 		Width:          defaultRegWidth,
 		V6Support:      &V6{support: true, include: both},
 		UseProxyHeader: false,
-		// Transport:      MinTransport,
-		Transport:     NullTransport,
+		Transport:      MinTransport,
+		//Transport:     NullTransport,
 		CovertAddress: covert,
 		SessionID:     sessionsTotal.GetAndInc(),
 	}
@@ -209,6 +209,7 @@ func (cjSession *ConjureSession) register() (*ConjureReg, error) {
 		phantom:       cjSession.Phantom,
 		v6Support:     cjSession.V6Support.support,
 		covertAddress: cjSession.CovertAddress,
+		transport:     cjSession.Transport,
 	}
 
 	// //[TODO]{priority:later} How to pass context to multiple registration goroutines?
@@ -284,7 +285,7 @@ func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
 		Logger().Infof("%v failed to dial phantom %v: %v\n", reg.sessionIDStr, reg.phantom.String(), err)
 		return nil, err
 	}
-	Logger().Infof("%v Connected to phantom %v", reg.sessionIDStr, phantomAddr)
+	Logger().Infof("%v Connected to phantom %v using transport %d", reg.sessionIDStr, phantomAddr, reg.transport)
 
 	//[reference] Provide chosen transport to sent bytes (or connect) if necessary
 	switch reg.transport {
@@ -472,6 +473,10 @@ func (reg *ConjureReg) setTLSToDecoy(tlsrtt *uint32) {
 	reg.stats.TlsToDecoy = tlsrtt
 }
 
+func (reg *ConjureReg) getPbTransport() pb.TransportType {
+	return pb.TransportType(reg.transport)
+}
+
 func (reg *ConjureReg) generateVSP() ([]byte, error) {
 	var covert *string
 	if len(reg.covertAddress) > 0 {
@@ -483,10 +488,12 @@ func (reg *ConjureReg) generateVSP() ([]byte, error) {
 	//[reference] Generate ClientToStation protobuf
 	// transition := pb.C2S_Transition_C2S_SESSION_INIT
 	currentGen := Assets().GetGeneration()
+	transport := reg.getPbTransport()
 	initProto := &pb.ClientToStation{
 		CovertAddress:       covert,
 		DecoyListGeneration: &currentGen,
 		V6Support:           &reg.v6Support,
+		Transport:           &transport,
 		// StateTransition:     &transition,
 
 		//[TODO]{priority:winter-break} specify width in C2S because different width might
