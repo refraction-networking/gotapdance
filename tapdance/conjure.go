@@ -207,6 +207,7 @@ func (cjSession *ConjureSession) register() (*ConjureReg, error) {
 		phantom6:      phantom6,
 		v6Support:     cjSession.V6Support.include,
 		covertAddress: cjSession.CovertAddress,
+		transport:     cjSession.Transport,
 	}
 
 	// //[TODO]{priority:later} How to pass context to multiple registration goroutines?
@@ -293,8 +294,9 @@ func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
 		if err != nil {
 			Logger().Infof("%v failed to dial phantom %v: %v\n", reg.sessionIDStr, addr, err)
 			connChannel <- resultTuple{nil, err}
+			return
 		}
-		Logger().Infof("%v Connected to phantom %v", reg.sessionIDStr, phantomAddr)
+		Logger().Infof("%v Connected to phantom %v using transport %d", reg.sessionIDStr, phantomAddr, reg.transport)
 		connChannel <- resultTuple{conn, nil}
 	}
 
@@ -509,6 +511,10 @@ func (reg *ConjureReg) setTLSToDecoy(tlsrtt *uint32) {
 	reg.stats.TlsToDecoy = tlsrtt
 }
 
+func (reg *ConjureReg) getPbTransport() pb.TransportType {
+	return pb.TransportType(reg.transport)
+}
+
 func (reg *ConjureReg) generateVSP() ([]byte, error) {
 	var covert *string
 	if len(reg.covertAddress) > 0 {
@@ -519,14 +525,14 @@ func (reg *ConjureReg) generateVSP() ([]byte, error) {
 
 	//[reference] Generate ClientToStation protobuf
 	// transition := pb.C2S_Transition_C2S_SESSION_INIT
-	transport := uint32(reg.transport)
 	currentGen := Assets().GetGeneration()
+	transport := reg.getPbTransport()
 	initProto := &pb.ClientToStation{
 		CovertAddress:       covert,
 		DecoyListGeneration: &currentGen,
 		V6Support:           reg.getV6Support(),
 		V4Support:           reg.getV4Support(),
-		C2STransport:        &transport,
+		Transport:           &transport,
 		// StateTransition:     &transition,
 
 		//[TODO]{priority:winter-break} specify width in C2S because different width might

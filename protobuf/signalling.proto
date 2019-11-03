@@ -131,6 +131,12 @@ enum ErrorReasonS2C {
     CLIENT_TIMEOUT = 101; // You never came back. (This is impossible to send)
 }
 
+enum TransportType {
+    NullTransport = 0;
+    MinTransport = 1;   // Send a 32-byte HMAC id to let the station distinguish registrations to same host
+    Obfs4Transport = 2; // Not implemented yet?
+}
+
 message StationToClient {
     // Should accompany (at least) SESSION_INIT and CONFIRM_RECONNECT.
     optional uint32 protocol_version = 1;
@@ -177,6 +183,9 @@ message ClientToStation {
 
     optional SessionStats stats = 11;
 
+    // NullTransport, MinTransport, Obfs4Transport, etc. Transport type we want from phantom proxy
+    optional TransportType transport = 12;
+
     // Station is only required to check this variable during session initialization.
     // If set, station must facilitate connection to said target by itself, i.e. write into squid
     // socket an HTTP/SOCKS/any other connection request.
@@ -191,9 +200,6 @@ message ClientToStation {
     // Used to indicate to server if client is registering v4, v6 or both
     optional bool v6_support = 22;
     optional bool v4_support = 23;
-
-    // Protocol Type -> protocol used in client to proxy station
-    optional uint32 c2s_transport = 24;
 
     // Random-sized junk to defeat packet size fingerprinting.
     optional bytes padding = 100;
