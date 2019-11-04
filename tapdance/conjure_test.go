@@ -190,10 +190,8 @@ func TestCheckV6Decoys(t *testing.T) {
 func TestSelectDecoys(t *testing.T) {
 	// SelectDecoys(sharedSecret []byte, useV6 bool, width uint) []*pb.TLSDecoySpec
 	AssetsSetDir("./assets")
-	seedStr := []byte("5a87133b68da3468988a21659a12ed2ece07345c8c1a5b08459ffdea4218d12f")
-	seed := make([]byte, hex.DecodedLen(len(seedStr)))
-	n, err := hex.Decode(seed, seedStr)
-	if err != nil || n != 32 {
+	seed, err := hex.DecodeString("5a87133b68da3468988a21659a12ed2ece07345c8c1a5b08459ffdea4218d12f")
+	if err != nil {
 		t.Fatalf("Issue decoding seedStr")
 	}
 	decoys := SelectDecoys(seed, v6, 5)

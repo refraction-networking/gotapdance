@@ -328,7 +328,6 @@ func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
 	switch reg.transport {
 	case MinTransport:
 		// Send hmac(seed, str) bytes to indicate to station (min transport)
-		fmt.Printf("Using Min Transport\n")
 		connectTag := conjureHMAC(reg.keys.SharedSecret, "MinTrasportHMACString")
 		conn.Write(connectTag)
 		return conn, nil
