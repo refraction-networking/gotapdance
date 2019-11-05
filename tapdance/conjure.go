@@ -48,7 +48,7 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession) (net.Conn, erro
 	}
 
 	// Choose Phantom Address in Register depending on v6 support.
-	registration, err := Register(cjSession)
+	registration, err := Register(ctx, cjSession)
 	if err != nil {
 		Logger().Debugf("%v Failed to register: %v", cjSession.IDString(), err)
 		return nil, err
@@ -65,13 +65,13 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession) (net.Conn, erro
 }
 
 // Register - Send registrations equal to the width specified in the Conjure Session
-func Register(cjSession *ConjureSession) (*ConjureReg, error) {
+func Register(ctx context.Context, cjSession *ConjureSession) (*ConjureReg, error) {
 	var err error
 	var reg *ConjureReg
 
 	Logger().Debugf("%v Registering V4 and V6", cjSession.IDString())
 	cjSession.setV6Support(both)
-	reg, err = cjSession.register()
+	reg, err = cjSession.register(ctx)
 
 	return reg, err
 }
@@ -104,8 +104,8 @@ func Register(cjSession *ConjureSession) (*ConjureReg, error) {
 // }
 
 // Connect - Dial the Phantom IP address after registration
-func Connect(reg *ConjureReg) (net.Conn, error) {
-	return reg.Connect(context.Background())
+func Connect(ctx context.Context, reg *ConjureReg) (net.Conn, error) {
+	return reg.Connect(ctx)
 }
 
 // ConjureSession - Create a session with details for registration and connection
@@ -120,6 +120,11 @@ type ConjureSession struct {
 	Transport      uint
 	CovertAddress  string
 	// rtt			   uint // tracked in stats
+
+	// THIS IS REQUIRED TO INTERFACE WITH PSIPHON ANDROID
+	//		we use their dialer to prevent connection loopback into our own proxy
+	//		connection when tunneling the whole device.
+	TcpDialer func(context.Context, string, string) (net.Conn, error)
 
 	// performance tracking
 	stats *pb.SessionStats
@@ -187,7 +192,7 @@ func (cjSession *ConjureSession) String() string {
 	// expand for debug??
 }
 
-func (cjSession *ConjureSession) register() (*ConjureReg, error) {
+func (cjSession *ConjureSession) register(ctx context.Context) (*ConjureReg, error) {
 	var err error
 
 	// Choose N (width) decoys from decoylist
@@ -208,10 +213,13 @@ func (cjSession *ConjureSession) register() (*ConjureReg, error) {
 		v6Support:     cjSession.V6Support.include,
 		covertAddress: cjSession.CovertAddress,
 		transport:     cjSession.Transport,
+		TcpDialer:     cjSession.TcpDialer,
 	}
 
 	// //[TODO]{priority:later} How to pass context to multiple registration goroutines?
-	// ctx := context.Background()
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	width := uint(len(cjSession.RegDecoys))
 	if width < cjSession.Width {
@@ -233,7 +241,7 @@ func (cjSession *ConjureSession) register() (*ConjureReg, error) {
 	for _, decoy := range cjSession.RegDecoys {
 		Logger().Debugf("%v Sending Reg: %v, %v", cjSession.IDString(), decoy.GetHostname(), decoy.GetIpAddrStr())
 		//decoyAddr := decoy.GetIpAddrStr()
-		go reg.send(decoy, dialErrors, cjSession.registrationCallback)
+		go reg.send(ctx, decoy, dialErrors, cjSession.registrationCallback)
 	}
 
 	//[reference] Dial errors happen immediately so block until all N dials complete
@@ -357,6 +365,11 @@ type ConjureReg struct {
 	v6Support      uint
 	transport      uint
 
+	// THIS IS REQUIRED TO INTERFACE WITH PSIPHON ANDROID
+	//		we use their dialer to prevent connection loopback into our own proxy
+	//		connection when tunneling the whole device.
+	TcpDialer func(context.Context, string, string) (net.Conn, error)
+
 	stats *pb.SessionStats
 	keys  *sharedKeys
 	m     sync.Mutex
@@ -401,15 +414,20 @@ func (reg *ConjureReg) createRequest(tlsConn *tls.UConn, decoy *pb.TLSDecoySpec)
 }
 
 // Being called in parallel -> no changes to ConjureReg allowed in this function
-func (reg *ConjureReg) send(decoy *pb.TLSDecoySpec, dialError chan error, callback func(*ConjureReg)) {
+func (reg *ConjureReg) send(ctx context.Context, decoy *pb.TLSDecoySpec, dialError chan error, callback func(*ConjureReg)) {
 
-	ctx := context.Background()
+	deadline, deadlineAlreadySet := ctx.Deadline()
+	if !deadlineAlreadySet {
+		deadline = time.Now().Add(getRandomDuration(deadlineTCPtoDecoyMin, deadlineTCPtoDecoyMax))
+	}
+	childCtx, childCancelFunc := context.WithDeadline(ctx, deadline)
+	defer childCancelFunc()
 
 	//[reference] TCP to decoy
 	tcpToDecoyStartTs := time.Now()
 
 	//[Note] decoy.GetIpAddrStr() will get only v4 addr if a decoy has both
-	dialConn, err := (&net.Dialer{}).DialContext(ctx, "tcp", decoy.GetIpAddrStr())
+	dialConn, err := reg.TcpDialer(childCtx, "tcp", decoy.GetIpAddrStr())
 
 	reg.setTCPToDecoy(durationToU32ptrMs(time.Since(tcpToDecoyStartTs)))
 	if err != nil {
@@ -424,10 +442,10 @@ func (reg *ConjureReg) send(decoy *pb.TLSDecoySpec, dialError chan error, callba
 	//[reference] connection stats tracking
 	rtt := rttInt(*reg.stats.TcpToDecoy)
 	delay := getRandomDuration(1061*rtt*2, 1953*rtt*3) //[TODO]{priority:@sfrolov} why these values??
-	deadline := time.Now().Add(delay)
+	TLSDeadline := time.Now().Add(delay)
 
 	tlsToDecoyStartTs := time.Now()
-	tlsConn, err := reg.createTLSConn(dialConn, decoy.GetIpAddrStr(), decoy.GetHostname(), deadline)
+	tlsConn, err := reg.createTLSConn(dialConn, decoy.GetIpAddrStr(), decoy.GetHostname(), TLSDeadline)
 	if err != nil {
 		dialConn.Close()
 		dialError <- err

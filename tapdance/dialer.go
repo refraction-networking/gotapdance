@@ -11,7 +11,11 @@ var sessionsTotal CounterUint64
 // Dialer contains options and implements advanced functions for establishing TapDance connection.
 type Dialer struct {
 	SplitFlows bool
-	TcpDialer  func(context.Context, string, string) (net.Conn, error)
+
+	// THIS IS REQUIRED TO INTERFACE WITH PSIPHON ANDROID
+	//		we use their dialer to prevent connection loopback into our own proxy
+	//		connection when tunneling the whole device.
+	TcpDialer func(context.Context, string, string) (net.Conn, error)
 
 	DarkDecoy      bool
 	UseProxyHeader bool
@@ -59,6 +63,12 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 		}
 	}
 
+	if d.TcpDialer == nil {
+		// custom dialer is not set, use default
+		defaultDialer := net.Dialer{}
+		d.TcpDialer = defaultDialer.DialContext
+	}
+
 	if !d.SplitFlows {
 		if !d.DarkDecoy {
 			flow, err := makeTdFlow(flowBidirectional, nil, address)
@@ -73,6 +83,7 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 			// 	return nil, err
 			// }
 			cjSession := makeConjureSession(address)
+			cjSession.TcpDialer = d.TcpDialer
 			cjSession.UseProxyHeader = d.UseProxyHeader
 			cjSession.Width = uint(d.Width)
 
