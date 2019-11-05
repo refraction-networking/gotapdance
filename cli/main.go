@@ -81,6 +81,8 @@ func main() {
 		}
 	}
 
+    fmt.Printf("Using Station Pubkey: %s\n", hex.EncodeToString(tapdance.Assets().GetPubkey()[:]))
+
 	err := connectDirect(*connect_target, *port, *proxyHeader, v6Support, *width)
 	if err != nil {
 		tapdance.Logger().Println(err)
