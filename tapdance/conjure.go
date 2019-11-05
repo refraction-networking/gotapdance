@@ -59,9 +59,13 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession) (net.Conn, erro
 	Logger().Debugf("%v Successfully sent registrations, sleeping for: %v ms", cjSession.IDString(), toSleep)
 	time.Sleep(toSleep)
 
-	Logger().Debugf("%v Woke from sleep, attempting to Connect ...", cjSession.IDString())
-	return registration.Connect(ctx)
-	// return Connect(cjSession)
+	Logger().Tracef("%v Woke from sleep, attempting to Connect ...", cjSession.IDString())
+
+	conn, err := registration.Connect(ctx)
+	if conn != nil && err == nil {
+		statsReporting(cjSession.stats)
+	}
+	return conn, err
 }
 
 // Register - Send registrations equal to the width specified in the Conjure Session

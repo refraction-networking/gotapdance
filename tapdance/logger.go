@@ -1,9 +1,14 @@
 package tapdance
 
 import (
+	"bytes"
 	"fmt"
+	"net/http"
+	"net/url"
 	"sync"
 
+	"github.com/golang/protobuf/proto"
+	pb "github.com/refraction-networking/gotapdance/protobuf"
 	"github.com/sirupsen/logrus"
 )
 
@@ -34,4 +39,34 @@ func Logger() *logrus.Logger {
 		}
 	})
 	return logrusLogger
+}
+
+func statsReporting(stats *pb.SessionStats) {
+	socks_url, err := url.Parse("socks5://" + Assets().GetStatsSocksAddr())
+	if err != nil {
+		// TODO this should be logged, not printed
+		fmt.Println("Could not parse socks addr %v", Assets().GetStatsSocksAddr())
+		return
+	}
+	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(socks_url)}}
+
+	data, err := proto.Marshal(stats)
+	if err != nil {
+		// TODO this should be logged, not printed
+		fmt.Println("Could not marshal stats protobuf")
+		return
+	}
+
+	// TODO send stats protobuf to some refraction.network endpoint
+	client.Post("https://nzimm.net", "stats", bytes.NewReader(data))
+	return
+
+	/*
+		resp, _ := client.Post("https://nzimm.net", "stats", bytes.NewReader(data))
+		if err != nil {
+			// TODO this should be logged, not printed
+			fmt.Println("Could not parse socks addr %v", Assets().GetStatsSocksAddr())
+			return
+		}
+	*/
 }
