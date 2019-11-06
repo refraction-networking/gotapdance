@@ -26,6 +26,7 @@ EMBEDDED_CC=$(hexdump -ve '"\\\\\\\\\x" 1/1 "%.2x"' $1);
 printf "s/embeddedClientConf = \"[x0-9a-fA-F\\]+\"/embeddedClientConf = \"$EMBEDDED_CC\"/g" > $TMP_SEDFILE
 
 # Replace the old ClientConf from the psiphon config
-sed -r -i '' -f $TMP_SEDFILE $2
+#sed -r -i '' -f $TMP_SEDFILE $2
+sed -r -f $TMP_SEDFILE -i $2
 
-rm $TMP_SEDFILE
+#rm $TMP_SEDFILE
