@@ -63,7 +63,7 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession) (net.Conn, erro
 
 	conn, err := registration.Connect(ctx)
 	if conn != nil && err == nil {
-		statsReporting(cjSession.stats)
+		StatsReporting(cjSession.stats)
 	}
 	return conn, err
 }

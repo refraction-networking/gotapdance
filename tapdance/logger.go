@@ -41,11 +41,14 @@ func Logger() *logrus.Logger {
 	return logrusLogger
 }
 
-func statsReporting(stats *pb.SessionStats) {
+func StatsReporting(stats *pb.SessionStats) {
 	socks_url, err := url.Parse("socks5://" + Assets().GetStatsSocksAddr())
+	// Test socks5 proxy
+	//socks_url, err := url.Parse("socks5://localhost:8080")
+	fmt.Printf("Got %v as socks5 proxy\n", socks_url)
 	if err != nil {
 		// TODO this should be logged, not printed
-		fmt.Println("Could not parse socks addr %v", Assets().GetStatsSocksAddr())
+		fmt.Printf("Could not parse socks addr %v\n", Assets().GetStatsSocksAddr())
 		return
 	}
 	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(socks_url)}}
