@@ -165,6 +165,8 @@ func makeConjureSession(covert string) *ConjureSession {
 	hex.Encode(sharedSecretStr, keys.SharedSecret)
 	Logger().Debugf("%v Shared Secret  - %s", cjSession.IDString(), sharedSecretStr)
 
+	Logger().Debugf("%v covert %s", cjSession.IDString(), covert)
+
 	reprStr := make([]byte, hex.EncodedLen(len(keys.Representative)))
 	hex.Encode(reprStr, keys.Representative)
 	Logger().Debugf("%v Representative - %s", cjSession.IDString(), reprStr)
@@ -298,7 +300,7 @@ func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
 		//[reference] Connect to Phantom Host using TLS
 		phantomAddr := net.JoinHostPort(addr, "443")
 
-		conn, err := (&net.Dialer{}).DialContext(childCtx, "tcp", phantomAddr)
+		conn, err := reg.TcpDialer(childCtx, "tcp", phantomAddr)
 		if err != nil {
 			Logger().Infof("%v failed to dial phantom %v: %v\n", reg.sessionIDStr, addr, err)
 			connChannel <- resultTuple{nil, err}
