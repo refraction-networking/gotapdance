@@ -47,29 +47,18 @@ func StatsReporting(stats *pb.SessionStats) {
 	//socks_url, err := url.Parse("socks5://localhost:8080")
 	fmt.Printf("Got %v as socks5 proxy\n", socks_url)
 	if err != nil {
-		// TODO this should be logged, not printed
-		fmt.Printf("Could not parse socks addr %v\n", Assets().GetStatsSocksAddr())
+		Logger().Debugf("Could not parse socks addr %v: %v\n", Assets().GetStatsSocksAddr(), err)
 		return
 	}
 	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(socks_url)}}
 
 	data, err := proto.Marshal(stats)
 	if err != nil {
-		// TODO this should be logged, not printed
-		fmt.Println("Could not marshal stats protobuf")
+		Logger().Debugf("Could not marshal stats protobuf: %v", err)
 		return
 	}
 
-	// TODO send stats protobuf to some refraction.network endpoint
-	client.Post("https://nzimm.net", "stats", bytes.NewReader(data))
+	// TODO setup stats endpoint
+	client.Post("https://stats.refraction.network", "stats", bytes.NewReader(data))
 	return
-
-	/*
-		resp, _ := client.Post("https://nzimm.net", "stats", bytes.NewReader(data))
-		if err != nil {
-			// TODO this should be logged, not printed
-			fmt.Println("Could not parse socks addr %v", Assets().GetStatsSocksAddr())
-			return
-		}
-	*/
 }
