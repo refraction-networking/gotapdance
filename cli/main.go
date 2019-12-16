@@ -81,7 +81,7 @@ func main() {
 		}
 	}
 
-    fmt.Printf("Using Station Pubkey: %s\n", hex.EncodeToString(tapdance.Assets().GetPubkey()[:]))
+	fmt.Printf("Using Station Pubkey: %s\n", hex.EncodeToString(tapdance.Assets().GetConjurePubkey()[:]))
 
 	err := connectDirect(*connect_target, *port, *proxyHeader, v6Support, *width)
 	if err != nil {

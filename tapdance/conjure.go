@@ -785,7 +785,7 @@ func SelectPhantom(seed []byte, support uint) (*net.IP, *net.IP, error) {
 }
 
 func getStationKey() [32]byte {
-	return *Assets().GetPubkey()
+	return *Assets().GetConjurePubkey()
 }
 
 type sharedKeys struct {
