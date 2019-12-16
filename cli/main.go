@@ -34,6 +34,9 @@ func main() {
 	var tlsLog = flag.String("tlslog", "", "Filename to write SSL secrets to (allows Wireshark to decrypt TLS connections)")
 	var connect_target = flag.String("connect-addr", "", "If set, tapdance will transparently connect to provided address, which \nmust be either hostname:port or ip:port. "+
 		"Default(unset): connects client to \nforwardproxy, to which CONNECT request is yet to be written.")
+
+	var td = flag.Bool("td", false, "Enable tapdance cli mode for compatibility")
+
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Dark Decoy CLI\n$./cli -connect-addr=<decoy_address> [OPTIONS] \n\nOptions:\n")
 		flag.PrintDefaults()
@@ -67,11 +70,6 @@ func main() {
 	if *trace {
 		tapdance.Logger().Level = logrus.TraceLevel
 		tapdance.Logger().Trace("Trace logging enabled")
-
-		pubkey := tapdance.Assets().GetPubkey()
-		dst := make([]byte, hex.EncodedLen(len(pubkey)))
-		hex.Encode(dst, pubkey[:])
-		tapdance.Logger().Tracef("Using Pubkey: %s", dst)
 	}
 
 	if *tlsLog != "" {
@@ -81,9 +79,13 @@ func main() {
 		}
 	}
 
-	fmt.Printf("Using Station Pubkey: %s\n", hex.EncodeToString(tapdance.Assets().GetConjurePubkey()[:]))
+	if *td {
+		fmt.Printf("Using Station Pubkey: %s\n", hex.EncodeToString(tapdance.Assets().GetPubkey()[:]))
+	} else {
+		fmt.Printf("Using Station Pubkey: %s\n", hex.EncodeToString(tapdance.Assets().GetConjurePubkey()[:]))
+	}
 
-	err := connectDirect(*connect_target, *port, *proxyHeader, v6Support, *width)
+	err := connectDirect(*td, *connect_target, *port, *proxyHeader, v6Support, *width)
 	if err != nil {
 		tapdance.Logger().Println(err)
 		os.Exit(1)
@@ -97,7 +99,7 @@ func main() {
 	}
 }
 
-func connectDirect(connect_target string, localPort int, proxyHeader bool, v6Support bool, width int) error {
+func connectDirect(td bool, connect_target string, localPort int, proxyHeader bool, v6Support bool, width int) error {
 	if _, _, err := net.SplitHostPort(connect_target); err != nil {
 		return fmt.Errorf("failed to parse host and port from connect_target %s: %v",
 			connect_target, err)
@@ -109,7 +111,7 @@ func connectDirect(connect_target string, localPort int, proxyHeader bool, v6Sup
 		return fmt.Errorf("error listening on port %v: %v", localPort, err)
 	}
 
-	tdDialer := tapdance.Dialer{DarkDecoy: true, UseProxyHeader: proxyHeader, V6Support: v6Support, Width: width}
+	tdDialer := tapdance.Dialer{DarkDecoy: !td, UseProxyHeader: proxyHeader, V6Support: v6Support, Width: width}
 
 	for {
 		clientConn, err := l.AcceptTCP()
