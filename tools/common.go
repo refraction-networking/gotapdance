@@ -17,17 +17,21 @@ import (
 func printClientConf(clientConf pb.ClientConf) {
 	fmt.Printf("Generation: %d\n", clientConf.GetGeneration())
 	if clientConf.GetDefaultPubkey() != nil {
-		fmt.Printf("\nDefault Pubkey: %s\n", hex.EncodeToString(clientConf.GetDefaultPubkey().Key[:]))
+		fmt.Printf("Default Pubkey: %s\n", hex.EncodeToString(clientConf.GetDefaultPubkey().Key[:]))
+	}
+	if clientConf.GetConjurePubkey() != nil {
+		fmt.Printf("Conjure Pubkey: %s\n", hex.EncodeToString(clientConf.GetConjurePubkey().Key[:]))
 	}
 	if clientConf.DecoyList == nil {
 		return
 	}
 	decoys := clientConf.DecoyList.TlsDecoys
-	fmt.Printf("\nDecoy List: %d decoys\n", len(decoys))
+	fmt.Printf("Decoy List: %d decoys\n", len(decoys))
 	for i, decoy := range decoys {
 		ip := make(net.IP, 4)
 		binary.BigEndian.PutUint32(ip, decoy.GetIpv4Addr())
-		fmt.Printf("%d:\n  %s (%s)\n", i, decoy.GetHostname(), ip.To4().String())
+		ip6 := net.IP(decoy.GetIpv6Addr())
+		fmt.Printf("%d:\n  %s (%s / [%s])\n", i, decoy.GetHostname(), ip.To4().String(), ip6.To16().String())
 		if decoy.GetPubkey() != nil {
 			fmt.Printf("  pubkey: %s\n", hex.EncodeToString(decoy.GetPubkey().Key[:]))
 		}
