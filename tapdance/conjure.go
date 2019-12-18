@@ -741,13 +741,16 @@ func SelectDecoys(sharedSecret []byte, version uint, width uint) []*pb.TLSDecoyS
 	return decoys
 }
 
+var phantomSubnets = []string{
+	"192.122.190.0/24",
+	"2001:48a8:687f:1::/64",
+	"141.219.0.0/16",
+}
+
 // SelectPhantom - select one phantom IP address based on shared secret
 func SelectPhantom(seed []byte, support uint) (*net.IP, *net.IP, error) {
-	// Full \32 is routed in v6
-	// Full \8 is routed in v4 (some is unused) and live on limited basis (belinging to michigan) 35.0.0.0\8
-	// 											  "192.122.190.0/24", "2001:48a8:687f:1::/64"
-	ddIPSelector4, err4 := newDDIpSelector([]string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}, false)
-	ddIPSelector6, err6 := newDDIpSelector([]string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}, true)
+	ddIPSelector4, err4 := newDDIpSelector(phantomSubnets, false)
+	ddIPSelector6, err6 := newDDIpSelector(phantomSubnets, true)
 
 	// If we got an error that effects the addresses we will be choosing from return error, else go on.
 	if err4 != nil && support != v6 {
