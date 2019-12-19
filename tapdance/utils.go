@@ -15,7 +15,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agl/ed25519/extra25519"
 	"github.com/pkg/errors"
+	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/hkdf"
 )
 
@@ -350,4 +352,75 @@ func (d *ddIpSelector) selectIpAddr(seed []byte) (*net.IP, error) {
 		return nil, errors.New("let's rewrite dark decoy selector")
 	}
 	return &result, nil
+}
+
+// obfuscateTagAndProtobuf() generates key-pair and combines it /w stationPubkey to generate
+// sharedSecret. Client will use Eligator to find and send uniformly random representative for its
+// public key (and avoid sending it directly over the wire, as points on ellyptic curve are
+// distinguishable)
+// Then the sharedSecret will be used to encrypt stegoPayload and protobuf slices:
+//  - stegoPayload is encrypted with AES-GCM KEY=sharedSecret[0:16], IV=sharedSecret[16:28]
+//  - protobuf is encrypted with AES-GCM KEY=sharedSecret[0:16], IV={new random IV}, that will be
+//    prepended to encryptedProtobuf and eventually sent out together
+// Returns
+//  - tag(concatenated representative and encrypted stegoPayload),
+//  - encryptedProtobuf(concatenated 12 byte IV + encrypted protobuf)
+//  - error
+func obfuscateTagAndProtobuf(stegoPayload []byte, protobuf []byte, stationPubkey []byte) ([]byte, []byte, error) {
+	if len(stationPubkey) != 32 {
+		return nil, nil, errors.New("Unexpected station pubkey length. Expected: 32." +
+			" Received: " + strconv.Itoa(len(stationPubkey)) + ".")
+	}
+	var sharedSecret, clientPrivate, clientPublic, representative [32]byte
+	for ok := false; ok != true; {
+		var sliceKeyPrivate []byte = clientPrivate[:]
+		_, err := rand.Read(sliceKeyPrivate)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		ok = extra25519.ScalarBaseMult(&clientPublic, &representative, &clientPrivate)
+	}
+	var stationPubkeyByte32 [32]byte
+	copy(stationPubkeyByte32[:], stationPubkey)
+	curve25519.ScalarMult(&sharedSecret, &clientPrivate, &stationPubkeyByte32)
+
+	// extra25519.ScalarBaseMult does not randomize most significant bit(sign of y_coord?)
+	// Other implementations of elligator may have up to 2 non-random bits.
+	// Here we randomize the bit, expecting it to be flipped back to 0 on station
+	randByte := make([]byte, 1)
+	_, err := rand.Read(randByte)
+	if err != nil {
+		return nil, nil, err
+	}
+	representative[31] |= (0x80 & randByte[0])
+
+	tagBuf := new(bytes.Buffer) // What we have to encrypt with the shared secret using AES
+	tagBuf.Write(representative[:])
+
+	stationPubkeyHash := sha256.Sum256(sharedSecret[:])
+	aesKey := stationPubkeyHash[:16]
+	aesIvTag := stationPubkeyHash[16:28] // 12 bytes for stegoPayload nonce
+
+	encryptedStegoPayload, err := aesGcmEncrypt(stegoPayload, aesKey, aesIvTag)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	tagBuf.Write(encryptedStegoPayload)
+	tag := tagBuf.Bytes()
+
+	if len(protobuf) == 0 {
+		return tag, nil, err
+	}
+
+	// probably could have used all zeros as IV here, but better to err on safe side
+	aesIvProtobuf := make([]byte, 12)
+	_, err = rand.Read(aesIvProtobuf)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	encryptedProtobuf, err := aesGcmEncrypt(protobuf, aesKey, aesIvProtobuf)
+	return tag, append(aesIvProtobuf, encryptedProtobuf...), err
 }
