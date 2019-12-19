@@ -18,7 +18,6 @@ import (
 	"github.com/agl/ed25519/extra25519"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/curve25519"
-	"golang.org/x/crypto/hkdf"
 )
 
 // The key argument should be the AES key, either 16 or 32 bytes
@@ -90,38 +89,6 @@ func getRandString(length int) string {
 
 type tapdanceSharedKeys struct {
 	FspKey, FspIv, VspKey, VspIv, NewMasterSecret, ConjureSeed []byte
-}
-
-func genSharedKeys(sharedSecret []byte) (tapdanceSharedKeys, error) {
-	tdHkdf := hkdf.New(sha256.New, sharedSecret, []byte("tapdancetapdancetapdancetapdance"), nil)
-	keys := tapdanceSharedKeys{
-		FspKey:          make([]byte, 16),
-		FspIv:           make([]byte, 12),
-		VspKey:          make([]byte, 16),
-		VspIv:           make([]byte, 12),
-		NewMasterSecret: make([]byte, 48),
-		ConjureSeed:     make([]byte, 16),
-	}
-
-	if _, err := tdHkdf.Read(keys.FspKey); err != nil {
-		return keys, err
-	}
-	if _, err := tdHkdf.Read(keys.FspIv); err != nil {
-		return keys, err
-	}
-	if _, err := tdHkdf.Read(keys.VspKey); err != nil {
-		return keys, err
-	}
-	if _, err := tdHkdf.Read(keys.VspIv); err != nil {
-		return keys, err
-	}
-	if _, err := tdHkdf.Read(keys.NewMasterSecret); err != nil {
-		return keys, err
-	}
-	if _, err := tdHkdf.Read(keys.ConjureSeed); err != nil {
-		return keys, err
-	}
-	return keys, nil
 }
 
 func getMsgWithHeader(msgType msgType, msgBytes []byte) []byte {
