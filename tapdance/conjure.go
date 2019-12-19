@@ -745,6 +745,7 @@ var phantomSubnets = []string{
 	"192.122.190.0/24",
 	"2001:48a8:687f:1::/64",
 	"141.219.0.0/16",
+	"35.8.0.0/16",
 }
 
 // SelectPhantom - select one phantom IP address based on shared secret
