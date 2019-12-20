@@ -46,7 +46,7 @@ func TestSelectIpv4(t *testing.T) {
 		t.Fatalf("Failed to select IP address (support: v4): %v", err)
 	} else if phantomIPAddr6 != nil {
 		t.Fatalf("Chose v6 address when v4 specified")
-	} else if phantomIPAddr4.String() != "192.122.190.120" {
+	} else if phantomIPAddr4.String() != "141.219.19.101" {
 		t.Fatalf("Incorrect Address chosen: %v", phantomIPAddr4.String())
 	}
 }
@@ -85,7 +85,7 @@ func TestSelectIpv6(t *testing.T) {
 		t.Fatalf("Failed to select IP address (support: v6): %v", err)
 	} else if phantomIPAddr4 != nil {
 		t.Fatalf("Chose v4 address when v6 specified")
-	} else if phantomIPAddr6.String() != "2001:48a8:687f:1:709:b0d:f11:121e" {
+	} else if phantomIPAddr6.String() != "2001:48a8:687f:1:305:709:b11:2024" {
 		t.Fatalf("Incorrect Address chosen: %s", phantomIPAddr6.String())
 	}
 }
@@ -103,9 +103,9 @@ func TestSelectBoth(t *testing.T) {
 		t.Fatalf("Failed to select IPv4 address (support: both): %v", err)
 	} else if phantomIPAddr6 == nil {
 		t.Fatalf("Failed to select IPv6 address (support: both): %v", err)
-	} else if phantomIPAddr6.String() != "2001:48a8:687f:1:709:b0d:f11:121e" {
+	} else if phantomIPAddr6.String() != "2001:48a8:687f:1:305:709:b11:2024" {
 		t.Fatalf("Incorrect Address chosen: %s", phantomIPAddr6.String())
-	} else if phantomIPAddr4.String() != "192.122.190.120" {
+	} else if phantomIPAddr4.String() != "141.219.19.101" {
 		t.Fatalf("Incorrect Address chosen: %v", phantomIPAddr4.String())
 	}
 }

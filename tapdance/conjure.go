@@ -692,6 +692,15 @@ func rttInt(millis uint32) int {
 	return int(millis)
 }
 
+//[TMP] hard coded decoy
+var hcDecoy = struct {
+	hostname string
+	ipv4Addr uint32
+}{
+	hostname: "decoy2.refraction.network",
+	ipv4Addr: 3229269609,
+}
+
 // SelectDecoys - Get an array of `width` decoys to be used for registration
 func SelectDecoys(sharedSecret []byte, version uint, width uint) []*pb.TLSDecoySpec {
 
@@ -708,13 +717,19 @@ func SelectDecoys(sharedSecret []byte, version uint, width uint) []*pb.TLSDecoyS
 		allDecoys = Assets().GetAllDecoys()
 	}
 
-	decoys := make([]*pb.TLSDecoySpec, width)
+	decoys := make([]*pb.TLSDecoySpec, width+1)
+	decoys[0] = &pb.TLSDecoySpec{
+		Hostname: &hcDecoy.hostname,
+		Ipv4Addr: &hcDecoy.ipv4Addr,
+	}
 	numDecoys := big.NewInt(int64(len(allDecoys)))
 	hmacInt := new(big.Int)
 	idx := new(big.Int)
 
+	fmt.Printf("%v\n", decoys[0].GetIpAddrStr())
+
 	//[reference] select decoys
-	for i := uint(0); i < width; i++ {
+	for i := uint(1); i < width+1; i++ {
 		macString := fmt.Sprintf("registrationdecoy%d", i)
 		hmac := conjureHMAC(sharedSecret, macString)
 		hmacInt = hmacInt.SetBytes(hmac[:8])
@@ -726,13 +741,17 @@ func SelectDecoys(sharedSecret []byte, version uint, width uint) []*pb.TLSDecoyS
 	return decoys
 }
 
+var phantomSubnets = []string{
+	"192.122.190.0/24",
+	"2001:48a8:687f:1::/64",
+	"141.219.0.0/16",
+	"35.8.0.0/16",
+}
+
 // SelectPhantom - select one phantom IP address based on shared secret
 func SelectPhantom(seed []byte, support uint) (*net.IP, *net.IP, error) {
-	// Full \32 is routed in v6
-	// Full \8 is routed in v4 (some is unused) and live on limited basis (belinging to michigan) 35.0.0.0\8
-	// 											  "192.122.190.0/24", "2001:48a8:687f:1::/64"
-	ddIPSelector4, err4 := newDDIpSelector([]string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}, false)
-	ddIPSelector6, err6 := newDDIpSelector([]string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}, true)
+	ddIPSelector4, err4 := newDDIpSelector(phantomSubnets, false)
+	ddIPSelector6, err6 := newDDIpSelector(phantomSubnets, true)
 
 	// If we got an error that effects the addresses we will be choosing from return error, else go on.
 	if err4 != nil && support != v6 {
@@ -770,7 +789,7 @@ func SelectPhantom(seed []byte, support uint) (*net.IP, *net.IP, error) {
 }
 
 func getStationKey() [32]byte {
-	return *Assets().GetPubkey()
+	return *Assets().GetConjurePubkey()
 }
 
 type sharedKeys struct {
@@ -861,47 +880,3 @@ const (
 	// Unknown - Error occurred without obvious explanation
 	Unknown
 )
-
-/*
-func dialDarkDecoy(ctx context.Context, tdFlow *TapdanceFlowConn) (net.Conn, error) {
-
-	// [reference] Session config
-	tdFlow.tdRaw.tagType = tagHttpGetComplete
-	tdFlow.flowType = flowRendezvous
-	tdFlow.tdRaw.darkDecoyUsed = true
-
-	// [reference] Register
-	err = tdFlow.DialContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	go readAndClose(tdFlow, time.Second*15)
-
-	flowIdString := fmt.Sprintf("[Session %v]", strconv.FormatUint(tdFlow.tdRaw.sessionId, 10))
-	darkDecoyIpAddr, err := _ddIpSelector.selectIpAddr(tdFlow.tdRaw.tdKeys.DarkDecoySeed)
-	if err != nil {
-		Logger().Infof("%v failed to select dark decoy: %v\n", tdFlow.idStr(), err)
-		return nil, err
-	}
-
-	// [reference] Connect to phantom
-	deadline, deadlineAlreadySet := ctx.Deadline()
-	if !deadlineAlreadySet {
-		// randomized timeout to Dial dark decoy address
-		deadline = time.Now().Add(getRandomDuration(1061*getRttMillisec()*2, 1953*getRttMillisec()*3))
-	}
-	childCtx, childCancelFunc := context.WithDeadline(ctx, deadline)
-	defer childCancelFunc()
-
-	darkAddr := net.JoinHostPort(darkDecoyIpAddr.String(), "443")
-	darkTcpConn, err := (&net.Dialer{}).DialContext(childCtx, "tcp", darkAddr)
-	if err != nil {
-		Logger().Infof("%v failed to dial dark decoy %v: %v\n",
-			flowIdString, darkDecoyIpAddr.String(), err)
-		return nil, err
-	}
-	Logger().Infof("%v Connected to dark decoy %v", flowIdString, darkAddr)
-
-	return darkTcpConn, nil
-}
-*/

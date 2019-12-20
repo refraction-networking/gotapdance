@@ -18,6 +18,9 @@ func printClientConf(clientConf pb.ClientConf) {
 	if clientConf.GetDefaultPubkey() != nil {
 		fmt.Printf("Default Pubkey: %s\n", hex.EncodeToString(clientConf.GetDefaultPubkey().Key[:]))
 	}
+	if clientConf.GetConjurePubkey() != nil {
+		fmt.Printf("Conjure Pubkey: %s\n", hex.EncodeToString(clientConf.GetConjurePubkey().Key[:]))
+	}
 	if clientConf.DecoyList == nil {
 		return
 	}
@@ -104,6 +107,7 @@ func main() {
 	var out_fname = flag.String("o", "", "`output` file name to write new/modified config")
 	var generation = flag.Int("generation", 0, "New/modified generation")
 	var pubkey = flag.String("pubkey", "", "New/modified (decoy) pubkey. If -add or -update, applies to specific decoy. If -all applies to all decoys. Otherwise, applies to default pubkey.")
+	var cjPubkey = flag.String("cjpubkey", "", "New/modified (decoy) conjure pubkey. If -add or -update, applies to specific decoy. If -all applies to all decoys. Otherwise, applies to default pubkey.")
 	var delpubkey = flag.Bool("delpubkey", false, "Delete pubkey from decoy with index specified in -update (or from all decoys if -all)")
 
 	var add = flag.Bool("add", false, "If set, modify fields of all decoys in list with provided pubkey/timeout/tcpwin/host/ip")
@@ -147,6 +151,23 @@ func main() {
 				clientConf.DefaultPubkey = &k
 			}
 			clientConf.DefaultPubkey.Key = parsePubkey(*pubkey)
+		}
+	}
+
+	// Update Conjure Pubkey.
+	if *cjPubkey != "" {
+		if *add || *update != -1 {
+			// Skip. -add or -delete will use pubkey
+
+		} else {
+			// Update default public key
+			if clientConf.ConjurePubkey == nil {
+				k := pb.PubKey{}
+				key_type := pb.KeyType_AES_GCM_128
+				k.Type = &key_type
+				clientConf.ConjurePubkey = &k
+			}
+			clientConf.ConjurePubkey.Key = parsePubkey(*cjPubkey)
 		}
 	}
 
