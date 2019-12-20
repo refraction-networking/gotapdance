@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -178,7 +180,7 @@ func (tdRaw *tdRawConn) tryDialOnce(ctx context.Context, expectedTransition pb.S
 		return errors.New("Closed")
 	}
 
-	tdRequest, err := tdRaw.prepareTDRequest()
+	tdRequest, err := tdRaw.prepareTDRequest(tdRaw.tagType)
 	if err != nil {
 		Logger().Errorf(tdRaw.idStr() +
 			" Preparation of initial TD request failed with " + err.Error())
@@ -192,7 +194,7 @@ func (tdRaw *tdRawConn) tryDialOnce(ctx context.Context, expectedTransition pb.S
 		tdRaw.tagType.Str())
 
 	rttToStationStartTs := time.Now()
-	_, err = tdRaw.tlsConn.Write(tdRequest)
+	_, err = tdRaw.tlsConn.Write([]byte(tdRequest))
 	if err != nil {
 		Logger().Errorf(tdRaw.idStr() +
 			" Could not send initial TD request, error: " + err.Error())
@@ -333,6 +335,21 @@ func (tdRaw *tdRawConn) closeWrite() error {
 	return tdRaw.tcpConn.CloseWrite()
 }
 
+// func (tdRaw *tdRawConn) generateFSP(espSize uint16) []byte {
+// 	buf := make([]byte, 6)
+// 	binary.BigEndian.PutUint16(buf[0:2], espSize)
+// 	flags := default_flags
+// 	if tdRaw.tagType == tagHttpPostIncomplete {
+// 		flags |= tdFlagUploadOnly
+// 	}
+// 	if tdRaw.useProxyHeader {
+// 		flags |= tdFlagProxyHeader
+// 	}
+// 	buf[2] = flags
+
+// 	return buf
+// }
+
 func (tdRaw *tdRawConn) generateVSP() ([]byte, error) {
 	// Generate and marshal protobuf
 	transition := pb.C2S_Transition_C2S_SESSION_INIT
@@ -347,12 +364,7 @@ func (tdRaw *tdRawConn) generateVSP() ([]byte, error) {
 		StateTransition:     &transition,
 		DecoyListGeneration: &currGen,
 	}
-	if tdRaw.darkDecoyUsed {
-		if len(tdRaw.darkDecoySNI) > 0 {
-			initProto.MaskedDecoyServerName = &tdRaw.darkDecoySNI
-		}
-		initProto.V6Support = &tdRaw.darkDecoyV6Support
-	}
+
 	Logger().Debugln(tdRaw.idStr()+" Initial protobuf", initProto)
 	const AES_GCM_TAG_SIZE = 16
 	for (proto.Size(initProto)+AES_GCM_TAG_SIZE)%3 != 0 {
@@ -361,9 +373,13 @@ func (tdRaw *tdRawConn) generateVSP() ([]byte, error) {
 	return proto.Marshal(initProto)
 }
 
-func (tdRaw *tdRawConn) generateFSP(espSize uint16) []byte {
-	buf := make([]byte, 6)
-	binary.BigEndian.PutUint16(buf[0:2], espSize)
+func (tdRaw *tdRawConn) prepareTDRequest(handshakeType tdTagType) (string, error) {
+	// Generate tag for the initial TapDance request
+	buf := new(bytes.Buffer) // What we have to encrypt with the shared secret using AES
+
+	masterKey := tdRaw.tlsConn.HandshakeState.MasterSecret
+
+	// write flags
 	flags := default_flags
 	if tdRaw.tagType == tagHttpPostIncomplete {
 		flags |= tdFlagUploadOnly
@@ -371,66 +387,58 @@ func (tdRaw *tdRawConn) generateFSP(espSize uint16) []byte {
 	if tdRaw.useProxyHeader {
 		flags |= tdFlagProxyHeader
 	}
-	buf[2] = flags
+	if err := binary.Write(buf, binary.BigEndian, flags); err != nil {
+		return "", err
+	}
+	buf.Write([]byte{0}) // Unassigned byte
+	negotiatedCipher := tdRaw.tlsConn.HandshakeState.State12.Suite.Id
+	if tdRaw.tlsConn.HandshakeState.ServerHello.Vers == tls.VersionTLS13 {
+		negotiatedCipher = tdRaw.tlsConn.HandshakeState.State13.Suite.Id
+	}
+	buf.Write([]byte{byte(negotiatedCipher >> 8),
+		byte(negotiatedCipher & 0xff)})
+	buf.Write(masterKey[:])
+	buf.Write(tdRaw.tlsConn.HandshakeState.ServerHello.Random)
+	buf.Write(tdRaw.tlsConn.HandshakeState.Hello.Random)
+	buf.Write(tdRaw.remoteConnId[:]) // connection id for persistence
 
-	return buf
-}
-
-func (tdRaw *tdRawConn) prepareTDRequest() ([]byte, error) {
-
-	sharedSecret, representative, err := generateEligatorTransformedKey(tdRaw.stationPubkey)
+	err := WriteTlsLog(tdRaw.tlsConn.HandshakeState.Hello.Random,
+		tdRaw.tlsConn.HandshakeState.MasterSecret)
 	if err != nil {
-		return nil, err
+		Logger().Warningf("Failed to write TLS secret log: %s", err)
 	}
 
-	tdKeys, err := genSharedKeys(sharedSecret)
+	// Generate and marshal protobuf
+	transition := pb.C2S_Transition_C2S_SESSION_INIT
+	var covert *string
+	if len(tdRaw.covert) > 0 {
+		transition = pb.C2S_Transition_C2S_SESSION_COVERT_INIT
+		covert = &tdRaw.covert
+	}
+	currGen := Assets().GetGeneration()
+	initProto := &pb.ClientToStation{
+		CovertAddress:       covert,
+		StateTransition:     &transition,
+		DecoyListGeneration: &currGen,
+	}
+	initProtoBytes, err := proto.Marshal(initProto)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	tdRaw.tdKeys = tdKeys
+	Logger().Debugln(tdRaw.idStr()+" Initial protobuf", initProto)
 
-	// generate and encrypt variable size payload
-	vsp, err := tdRaw.generateVSP()
+	// Choose the station pubkey
+	pubkey := tdRaw.stationPubkey
+	if perDecoyKey := tdRaw.decoySpec.GetPubkey().GetKey(); perDecoyKey != nil {
+		pubkey = perDecoyKey // per-decoy key takes preference over default global pubkey
+	}
+
+	// Obfuscate/encrypt tag and protobuf
+	tag, encryptedProtoMsg, err := obfuscateTagAndProtobuf(buf.Bytes(), initProtoBytes, pubkey)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	if len(vsp) > int(^uint16(0)) {
-		return nil, fmt.Errorf("Variable-Size Payload exceeds %v", ^uint16(0))
-	}
-	encryptedVsp, err := aesGcmEncrypt(vsp, tdKeys.VspKey, tdKeys.VspIv)
-	if err != nil {
-		return nil, err
-	}
-
-	// generate and encrypt fixed size payload
-	fsp := tdRaw.generateFSP(uint16(len(encryptedVsp)))
-	encryptedFsp, err := aesGcmEncrypt(fsp, tdKeys.FspKey, tdKeys.FspIv)
-	if err != nil {
-		return nil, err
-	}
-
-	var tag []byte // tag will be base-64 style encoded
-	tag = append(encryptedVsp, representative...)
-	tag = append(tag, encryptedFsp...)
-	httpRequest := generateHTTPRequestBeginning(tdRaw.decoySpec.GetHostname())
-
-	// get current TLS keystream to write payload into the ciphertext of http request
-	keystreamOffset := len(httpRequest)
-	keystreamSize := (len(tag)/3+1)*4 + keystreamOffset // we can't use first 2 bits of every byte
-	wholeKeystream, err := tdRaw.tlsConn.GetOutKeystream(keystreamSize)
-	if err != nil {
-		return nil, err
-	}
-	keystreamAtTag := wholeKeystream[keystreamOffset:]
-	httpRequest = append(httpRequest, reverseEncrypt(tag, keystreamAtTag)...)
-
-	if tdRaw.tagType == tagHttpGetComplete {
-		httpRequest = append(httpRequest, []byte("\r\n\r\n")...)
-	} else {
-		httpRequest = append(httpRequest, []byte("what")...)
-		tdRaw.UploadLimit = int(tdRaw.decoySpec.GetTcpwin()) - getRandInt(1, 1045)
-	}
-	return httpRequest, nil
+	return tdRaw.genHTTP1Tag(tag, encryptedProtoMsg)
 }
 
 func (tdRaw *tdRawConn) idStr() string {
@@ -537,6 +545,55 @@ func (tdRaw *tdRawConn) writeTransition(transition pb.C2S_Transition) (n int, er
 	b := getMsgWithHeader(msgProtobuf, msgBytes)
 	n, err = tdRaw.tlsConn.Write(b)
 	return
+}
+
+// mutates tdRaw: sets tdRaw.UploadLimit
+func (tdRaw *tdRawConn) genHTTP1Tag(tag, encryptedProtoMsg []byte) (string, error) {
+	sharedHeaders := `Host: ` + tdRaw.decoySpec.GetHostname() +
+		"\nUser-Agent: TapDance/1.2 (+https://refraction.network/info)"
+	if len(encryptedProtoMsg) > 0 {
+		sharedHeaders += "\nX-Proto: " + base64.StdEncoding.EncodeToString(encryptedProtoMsg)
+	}
+	var httpTag string
+	switch tdRaw.tagType {
+	// for complete copy http generator of golang
+	case tagHttpGetComplete:
+		fallthrough
+	case tagHttpGetIncomplete:
+		tdRaw.UploadLimit = int(tdRaw.decoySpec.GetTcpwin()) - getRandInt(1, 1045)
+		httpTag = fmt.Sprintf(`GET / HTTP/1.1
+%s
+X-Ignore: %s`, sharedHeaders, getRandPadding(7, maxInt(612-len(sharedHeaders), 7), 10))
+		httpTag = strings.Replace(httpTag, "\n", "\r\n", -1)
+	case tagHttpPostIncomplete:
+		ContentLength := getRandInt(900000, 1045000)
+		tdRaw.UploadLimit = ContentLength - 1
+		httpTag = fmt.Sprintf(`POST / HTTP/1.1
+%s
+Accept-Encoding: None
+X-Padding: %s
+Content-Type: application/zip; boundary=----WebKitFormBoundaryaym16ehT29q60rUx
+Content-Length: %s
+----WebKitFormBoundaryaym16ehT29q60rUx
+Content-Disposition: form-data; name=\"td.zip\"
+`, sharedHeaders, getRandPadding(1, maxInt(461-len(sharedHeaders), 1), 10), strconv.Itoa(ContentLength))
+		httpTag = strings.Replace(httpTag, "\n", "\r\n", -1)
+	}
+
+	keystreamOffset := len(httpTag)
+	keystreamSize := (len(tag)/3+1)*4 + keystreamOffset // we can't use first 2 bits of every byte
+	wholeKeystream, err := tdRaw.tlsConn.GetOutKeystream(keystreamSize)
+	if err != nil {
+		return httpTag, err
+	}
+	keystreamAtTag := wholeKeystream[keystreamOffset:]
+
+	httpTag += string(reverseEncrypt(tag, keystreamAtTag))
+	if tdRaw.tagType == tagHttpGetComplete {
+		httpTag += "\r\n\r\n"
+	}
+	Logger().Debugf("Generated HTTP TAG:\n%s\n", httpTag)
+	return httpTag, nil
 }
 
 func (tdRaw *tdRawConn) IsClosed() bool {

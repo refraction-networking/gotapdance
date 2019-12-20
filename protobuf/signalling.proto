@@ -84,6 +84,7 @@ message ClientConf {
     optional uint32 generation = 2;
     optional PubKey default_pubkey = 3;
     optional DarkDecoyBlocks dark_decoy_blocks = 4;
+    optional PubKey conjure_pubkey = 5;
 }
 
 message DecoyList {

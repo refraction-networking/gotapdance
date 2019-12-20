@@ -262,6 +262,15 @@ func (a *assets) GetPubkey() *[32]byte {
 	return &pKey
 }
 
+func (a *assets) GetConjurePubkey() *[32]byte {
+	a.RLock()
+	defer a.RUnlock()
+
+	var pKey [32]byte
+	copy(pKey[:], a.config.GetConjurePubkey().GetKey()[:])
+	return &pKey
+}
+
 func (a *assets) GetGeneration() uint32 {
 	a.RLock()
 	defer a.RUnlock()
