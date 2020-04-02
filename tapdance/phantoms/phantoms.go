@@ -105,6 +105,11 @@ func parseSubnets(phantomSubnets []string) ([]*net.IPNet, error) {
 	// return nil, fmt.Errorf("parseSubnets not implemented yet")
 }
 
+// SelectAddrFromSubnet - given a seed and a CIDR block choose an address.
+// 		This is done by generating a seeded random bytes up to teh length of the
+//		full address then using the net mask to zero out any bytes that are
+//		already specified by the CIDR block. Tde masked random value is then
+//		added to the cidr block base giving the final randomly selected address.
 func SelectAddrFromSubnet(seed []byte, net1 *net.IPNet) (net.IP, error) {
 	bits, addrLen := net1.Mask.Size()
 
@@ -182,7 +187,7 @@ func selectIPAddr(seed []byte, subnets []*net.IPNet) (*net.IP, error) {
 
 	id := &big.Int{}
 	id.SetBytes(seed)
-	if id.Cmp(addresses_total) >= 0 {
+	if id.Cmp(addresses_total) > 0 {
 		id.Mod(id, addresses_total)
 	}
 
@@ -194,21 +199,6 @@ func selectIPAddr(seed []byte, subnets []*net.IPNet) (*net.IP, error) {
 			if err != nil {
 				return nil, fmt.Errorf("Failed to chose IP address: %v", err)
 			}
-			// if ipv4net := _idNet.net.IP.To4(); ipv4net != nil {
-			// 	ipBigInt := &big.Int{}
-			// 	ipBigInt.SetBytes(ipv4net)
-			// 	ipNetDiff := _idNet.max.Sub(id, &_idNet.min)
-			// 	ipBigInt.Add(ipBigInt, ipNetDiff)
-			// 	result = net.IP(ipBigInt.Bytes()).To4() // implicit check that it fits
-			// } else if ipv6net := _idNet.net.IP.To16(); ipv6net != nil {
-			// 	ipBigInt := &big.Int{}
-			// 	ipBigInt.SetBytes(ipv6net)
-			// 	ipNetDiff := _idNet.max.Sub(id, &_idNet.min)
-			// 	ipBigInt.Add(ipBigInt, ipNetDiff)
-			// 	result = net.IP(ipBigInt.Bytes()).To16()
-			// } else {
-			// 	return nil, fmt.Errorf("failed to parse %v", _idNet.net.IP)
-			// }
 		}
 	}
 	if result == nil {

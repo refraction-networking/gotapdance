@@ -46,8 +46,8 @@ func TestSelectWeightedMany(t *testing.T) {
 
 	var ps = SubnetConfig{
 		WeightedSubnets: []ConjurePhantomSubnet{
-			{Weight: 9, Subnets: []string{"192.122.190.0/24"}}, //curveball, ?
-			{Weight: 1, Subnets: []string{"141.219.0.0/16"}},   // windy-egret
+			{Weight: 9, Subnets: []string{"192.122.190.0/24"}},
+			{Weight: 1, Subnets: []string{"141.219.0.0/16"}},
 		},
 	}
 
@@ -82,8 +82,8 @@ func TestWeightedSelection(t *testing.T) {
 
 	var ps = SubnetConfig{
 		WeightedSubnets: []ConjurePhantomSubnet{
-			{Weight: 9, Subnets: []string{"1"}}, //curveball, ?
-			{Weight: 1, Subnets: []string{"2"}}, // windy-egret
+			{Weight: 9, Subnets: []string{"1"}},
+			{Weight: 1, Subnets: []string{"2"}},
 		},
 	}
 
@@ -116,7 +116,7 @@ var phantomSubnets = SubnetConfig{
 }
 
 func TestSelectFilter(t *testing.T) {
-	seed, err := hex.DecodeString("5a87133b68da3468988a21659a12ed2ece07345c8c1a5b08459ffdea4218d12f")
+	seed, err := hex.DecodeString("5a87133b68ea3468988a21659a12ed2ece07345c8c1a5b08459ffdea4218d12f")
 	if err != nil {
 		t.Fatalf("Issue decoding seedStr")
 	}
