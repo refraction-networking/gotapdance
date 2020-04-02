@@ -8,7 +8,6 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
-	"math/big"
 	mrand "math/rand"
 	"net"
 	"strconv"
@@ -227,98 +226,6 @@ func errIsTimeout(err error) bool {
 		}
 	}
 	return false
-}
-
-type ddIpSelector struct {
-	nets []net.IPNet
-}
-
-func newDDIpSelector(netsStr []string, v6Support bool) (*ddIpSelector, error) {
-	dd := ddIpSelector{}
-	for _, _netStr := range netsStr {
-		_, _net, err := net.ParseCIDR(_netStr)
-		if err != nil {
-			return nil, err
-		}
-		if _net == nil {
-			return nil, fmt.Errorf("failed to parse %v as subnet", _netStr)
-		}
-
-		// Split out IPv4 and IPv6 for clients that do not support IPv6
-		if ipv4net := _net.IP.To4(); ipv4net != nil {
-			dd.nets = append(dd.nets, *_net)
-		} else if ipv6net := _net.IP.To16(); ipv6net != nil {
-			if v6Support {
-				dd.nets = append(dd.nets, *_net)
-			}
-		} else {
-			return nil, fmt.Errorf("failed to parse %v", _net)
-		}
-	}
-	return &dd, nil
-}
-
-func (d *ddIpSelector) selectIpAddr(seed []byte) (*net.IP, error) {
-	addresses_total := big.NewInt(0)
-
-	type idNet struct {
-		min, max big.Int
-		net      net.IPNet
-	}
-	var idNets []idNet
-
-	for _, _net := range d.nets {
-		netMaskOnes, _ := _net.Mask.Size()
-		if ipv4net := _net.IP.To4(); ipv4net != nil {
-			_idNet := idNet{}
-			_idNet.min.Set(addresses_total)
-			addresses_total.Add(addresses_total, big.NewInt(2).Exp(big.NewInt(2), big.NewInt(int64(32-netMaskOnes)), nil))
-			addresses_total.Sub(addresses_total, big.NewInt(1))
-			_idNet.max.Set(addresses_total)
-			_idNet.net = _net
-			idNets = append(idNets, _idNet)
-		} else if ipv6net := _net.IP.To16(); ipv6net != nil {
-			_idNet := idNet{}
-			_idNet.min.Set(addresses_total)
-			addresses_total.Add(addresses_total, big.NewInt(2).Exp(big.NewInt(2), big.NewInt(int64(128-netMaskOnes)), nil))
-			addresses_total.Sub(addresses_total, big.NewInt(1))
-			_idNet.max.Set(addresses_total)
-			_idNet.net = _net
-			idNets = append(idNets, _idNet)
-		} else {
-			return nil, fmt.Errorf("failed to parse %v", _net)
-		}
-	}
-	id := &big.Int{}
-	id.SetBytes(seed)
-	if id.Cmp(addresses_total) >= 0 {
-		id.Mod(id, addresses_total)
-	}
-
-	var result net.IP
-	for _, _idNet := range idNets {
-		if _idNet.max.Cmp(id) >= 0 && _idNet.min.Cmp(id) == -1 {
-			if ipv4net := _idNet.net.IP.To4(); ipv4net != nil {
-				ipBigInt := &big.Int{}
-				ipBigInt.SetBytes(ipv4net)
-				ipNetDiff := _idNet.max.Sub(id, &_idNet.min)
-				ipBigInt.Add(ipBigInt, ipNetDiff)
-				result = net.IP(ipBigInt.Bytes()).To4() // implicit check that it fits
-			} else if ipv6net := _idNet.net.IP.To16(); ipv6net != nil {
-				ipBigInt := &big.Int{}
-				ipBigInt.SetBytes(ipv6net)
-				ipNetDiff := _idNet.max.Sub(id, &_idNet.min)
-				ipBigInt.Add(ipBigInt, ipNetDiff)
-				result = net.IP(ipBigInt.Bytes()).To16()
-			} else {
-				return nil, fmt.Errorf("failed to parse %v", _idNet.net.IP)
-			}
-		}
-	}
-	if result == nil {
-		return nil, errors.New("let's rewrite dark decoy selector")
-	}
-	return &result, nil
 }
 
 // obfuscateTagAndProtobuf() generates key-pair and combines it /w stationPubkey to generate

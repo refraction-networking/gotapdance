@@ -15,6 +15,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
+	ps "github.com/refraction-networking/gotapdance/tapdance/phantoms"
 	tls "github.com/refraction-networking/utls"
 	"golang.org/x/crypto/hkdf"
 )
@@ -741,44 +742,41 @@ func SelectDecoys(sharedSecret []byte, version uint, width uint) []*pb.TLSDecoyS
 	return decoys
 }
 
-var phantomSubnets = []string{
-	"192.122.190.0/24",
-	"2001:48a8:687f:1::/64",
-	"141.219.0.0/16",
-	"35.8.0.0/16",
+// var phantomSubnets = []conjurePhantomSubnet{
+// 	{subnet: "192.122.190.0/24", weight: 90.0},
+// 	{subnet: "2001:48a8:687f:1::/64", weight: 90.0},
+// 	{subnet: "141.219.0.0/16", weight: 10.0},
+// 	{subnet: "35.8.0.0/16", weight: 10.0},
+// }
+
+var phantomSubnets = ps.SubnetConfig{
+	WeightedSubnets: []ps.ConjurePhantomSubnet{
+		{Weight: 9, Subnets: []string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}},
+		{Weight: 1, Subnets: []string{"141.219.0.0/16", "35.8.0.0/16"}},
+	},
 }
 
 // SelectPhantom - select one phantom IP address based on shared secret
 func SelectPhantom(seed []byte, support uint) (*net.IP, *net.IP, error) {
-	ddIPSelector4, err4 := newDDIpSelector(phantomSubnets, false)
-	ddIPSelector6, err6 := newDDIpSelector(phantomSubnets, true)
-
-	// If we got an error that effects the addresses we will be choosing from return error, else go on.
-	if err4 != nil && support != v6 {
-		return nil, nil, err4
-	} else if err6 != nil && support != v4 {
-		return nil, nil, err6
-	}
-
 	switch support {
 	case v4:
-		phantomIPv4, err := ddIPSelector4.selectIpAddr(seed)
+		phantomIPv4, err := ps.SelectPhantom(seed, phantomSubnets, ps.V4Only, true)
 		if err != nil {
 			return nil, nil, err
 		}
 		return phantomIPv4, nil, nil
 	case v6:
-		phantomIPv6, err := ddIPSelector6.selectIpAddr(seed)
+		phantomIPv6, err := ps.SelectPhantom(seed, phantomSubnets, ps.V6Only, true)
 		if err != nil {
 			return nil, nil, err
 		}
 		return nil, phantomIPv6, nil
 	case both:
-		phantomIPv4, err := ddIPSelector4.selectIpAddr(seed)
+		phantomIPv4, err := ps.SelectPhantom(seed, phantomSubnets, ps.V4Only, true)
 		if err != nil {
 			return nil, nil, err
 		}
-		phantomIPv6, err := ddIPSelector6.selectIpAddr(seed)
+		phantomIPv6, err := ps.SelectPhantom(seed, phantomSubnets, ps.V6Only, true)
 		if err != nil {
 			return nil, nil, err
 		}

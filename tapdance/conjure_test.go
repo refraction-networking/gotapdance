@@ -2,93 +2,11 @@ package tapdance
 
 import (
 	"crypto/hmac"
-	"crypto/rand"
 	"encoding/hex"
 	"testing"
 
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 )
-
-func TestSelectIpv4(t *testing.T) {
-
-	_ddIPSelector, err := newDDIpSelector([]string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}, false)
-	if err != nil {
-		t.Fatal("Failed IP selector initialization ", err)
-	}
-
-	for _, _net := range _ddIPSelector.nets {
-		if _net.IP.To4() == nil {
-			t.Fatal("Encountered Non IPv4 Network block")
-		}
-	}
-
-	seed := make([]byte, 16)
-	_, err = rand.Read(seed)
-	if err != nil {
-		t.Fatalf("Crypto/Rand error -- %s\n", err)
-	}
-
-	darDecoyIPAddr, err := _ddIPSelector.selectIpAddr(seed)
-	if err != nil {
-		t.Fatalf("Error selecting decoy address -- %s\n", err)
-	}
-	if darDecoyIPAddr.To4() == nil {
-		t.Fatal("No IPv4 address Selected")
-	}
-
-	seed = []byte{
-		0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7,
-		0x8, 0x9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF,
-	}
-
-	phantomIPAddr4, phantomIPAddr6, err := SelectPhantom(seed, v4)
-	if err != nil || phantomIPAddr4 == nil {
-		t.Fatalf("Failed to select IP address (support: v4): %v", err)
-	} else if phantomIPAddr6 != nil {
-		t.Fatalf("Chose v6 address when v4 specified")
-	} else if phantomIPAddr4.String() != "141.219.19.101" {
-		t.Fatalf("Incorrect Address chosen: %v", phantomIPAddr4.String())
-	}
-}
-
-func TestSelectIpv6(t *testing.T) {
-
-	_ddIPSelector, err := newDDIpSelector([]string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}, true)
-	if err != nil {
-		t.Fatal("Failed IP selector initialization ", err)
-	}
-
-	for _, _net := range _ddIPSelector.nets {
-		if _net.IP.To16() == nil && _net.IP.To4() == nil {
-			t.Fatal("Encountered Unknown Network block")
-		}
-	}
-
-	seed := make([]byte, 16)
-	_, err = rand.Read(seed)
-	if err != nil {
-		t.Fatalf("Crypto/Rand error -- %s\n", err)
-	}
-
-	_, err = _ddIPSelector.selectIpAddr(seed)
-	if err != nil {
-		t.Fatalf("Error selecting decoy address -- %s\n", err)
-	}
-
-	seed = []byte{
-		0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7,
-		0x8, 0x9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF,
-	}
-
-	phantomIPAddr4, phantomIPAddr6, err := SelectPhantom(seed, v6)
-	if err != nil || phantomIPAddr6 == nil || phantomIPAddr4 != nil {
-		t.Fatalf("Failed to select IP address (support: v6): %v", err)
-	} else if phantomIPAddr4 != nil {
-		t.Fatalf("Chose v4 address when v6 specified")
-	} else if phantomIPAddr6.String() != "2001:48a8:687f:1:305:709:b11:2024" {
-		t.Fatalf("Incorrect Address chosen: %s", phantomIPAddr6.String())
-	}
-}
 
 func TestSelectBoth(t *testing.T) {
 	seed := []byte{
@@ -103,9 +21,9 @@ func TestSelectBoth(t *testing.T) {
 		t.Fatalf("Failed to select IPv4 address (support: both): %v", err)
 	} else if phantomIPAddr6 == nil {
 		t.Fatalf("Failed to select IPv6 address (support: both): %v", err)
-	} else if phantomIPAddr6.String() != "2001:48a8:687f:1:305:709:b11:2024" {
+	} else if phantomIPAddr6.String() != "2001:48a8:687f:1:41d3:ff12:45b:73c8" {
 		t.Fatalf("Incorrect Address chosen: %s", phantomIPAddr6.String())
-	} else if phantomIPAddr4.String() != "141.219.19.101" {
+	} else if phantomIPAddr4.String() != "192.122.190.194" {
 		t.Fatalf("Incorrect Address chosen: %v", phantomIPAddr4.String())
 	}
 }
