@@ -83,8 +83,7 @@ func TestReverseEncrypt(t *testing.T) {
 }
 
 func TestObfuscationRandomness(t *testing.T) {
-	testKey := []byte{180, 112, 102, 188, 57, 13, 38, 5, 204, 19, 88, 28, 73, 110, 169, 149, 203,
-		140, 250, 223, 0, 166, 73, 5, 37, 9, 239, 74, 200, 165, 26, 7}
+	testKey, _ := hex.DecodeString("b47066bc390d2605cc13581c496ea995cb8cfadf00a649052509ef4ac8a51a07")
 
 	tag := make([]byte, 177)
 
