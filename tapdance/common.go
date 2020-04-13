@@ -206,6 +206,6 @@ func generateEligatorTransformedKey(stationPubkey []byte) ([]byte, []byte, error
 	if err != nil {
 		return nil, nil, err
 	}
-	representative[31] |= (0x80 & randByte[0])
+	representative[31] |= (0xC0 & randByte[0])
 	return sharedSecret[:], representative[:], nil
 }
