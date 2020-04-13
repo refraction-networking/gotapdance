@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/agl/ed25519/extra25519"
+	"github.com/refraction-networking/gotapdance/ed25519/extra25519"
 	"golang.org/x/crypto/curve25519"
 )
 

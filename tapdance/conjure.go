@@ -250,8 +250,8 @@ func (cjSession *ConjureSession) register(ctx context.Context) (*ConjureReg, err
 	//[reference] Dial errors happen immediately so block until all N dials complete
 	var unreachableCount uint = 0
 	for err := range dialErrors {
-		// Logger().Debugf("%v %v", cjSession.IDString(), err)
 		if err != nil {
+			Logger().Debugf("%v %v", cjSession.IDString(), err)
 			if dialErr, ok := err.(RegError); ok && dialErr.code == Unreachable {
 				// If we failed because ipv6 network was unreachable try v4 only.
 				unreachableCount++
@@ -451,7 +451,8 @@ func (reg *ConjureReg) send(ctx context.Context, decoy *pb.TLSDecoySpec, dialErr
 	tlsConn, err := reg.createTLSConn(dialConn, decoy.GetIpAddrStr(), decoy.GetHostname(), TLSDeadline)
 	if err != nil {
 		dialConn.Close()
-		dialError <- err
+		msg := fmt.Sprintf("%v - %v createConn: %v", decoy.GetHostname(), decoy.GetIpAddrStr(), err.Error())
+		dialError <- RegError{msg: msg, code: TLSError}
 		return
 	}
 	reg.setTLSToDecoy(durationToU32ptrMs(time.Since(tlsToDecoyStartTs)))
@@ -459,17 +460,19 @@ func (reg *ConjureReg) send(ctx context.Context, decoy *pb.TLSDecoySpec, dialErr
 	//[reference] Create the HTTP request for the registration
 	httpRequest, err := reg.createRequest(tlsConn, decoy)
 	if err != nil {
-		dialError <- err
+		msg := fmt.Sprintf("%v - %v createReq: %v", decoy.GetHostname(), decoy.GetIpAddrStr(), err.Error())
+		dialError <- RegError{msg: msg, code: TLSError}
 		return
 	}
 
 	//[reference] Write reg into conn
 	_, err = tlsConn.Write(httpRequest)
 	if err != nil {
-		Logger().Errorf(reg.sessionIDStr+
-			"%v Could not send Conjure registration request, error: %v", reg.sessionIDStr, err.Error())
+		// // This will not get printed because it is executed in a goroutine.
+		// Logger().Errorf("%v - %v Could not send Conjure registration request, error: %v", decoy.GetHostname(), decoy.GetIpAddrStr(), err.Error())
 		tlsConn.Close()
-		dialError <- err
+		msg := fmt.Sprintf("%v - %v Write: %v", decoy.GetHostname(), decoy.GetIpAddrStr(), err.Error())
+		dialError <- RegError{msg: msg, code: TLSError}
 		return
 	}
 
@@ -490,7 +493,7 @@ func (reg *ConjureReg) createTLSConn(dialConn net.Conn, address string, hostname
 		}
 		Logger().Debugf("%v SNI was nil. Setting it to %v ", reg.sessionIDStr, config.ServerName)
 	}
-	//[TODO]{priority:winter-break} parroting Chrome 62 ClientHello -- parrot newer.
+	//[TODO]{priority:medium} parroting Chrome 62 ClientHello -- parrot newer.
 	tlsConn := tls.UClient(dialConn, &config, tls.HelloChrome_62)
 
 	err = tlsConn.BuildHandshakeState()
@@ -538,7 +541,7 @@ func (reg *ConjureReg) getPbTransport() pb.TransportType {
 func (reg *ConjureReg) generateVSP() ([]byte, error) {
 	var covert *string
 	if len(reg.covertAddress) > 0 {
-		//[TODO]{priority:winter-break} this isn't the correct place to deal with signaling to the station
+		//[TODO]{priority:medium} this isn't the correct place to deal with signaling to the station
 		//transition = pb.C2S_Transition_C2S_SESSION_COVERT_INIT
 		covert = &reg.covertAddress
 	}
@@ -555,7 +558,7 @@ func (reg *ConjureReg) generateVSP() ([]byte, error) {
 		Transport:           &transport,
 		// StateTransition:     &transition,
 
-		//[TODO]{priority:winter-break} specify width in C2S because different width might
+		//[TODO]{priority:medium} specify width in C2S because different width might
 		// 		be useful in different regions (constant for now.)
 	}
 
@@ -860,6 +863,8 @@ func (err RegError) CodeStr() string {
 		return "DIAL_FAILURE"
 	case NotImplemented:
 		return "NOT_IMPLEMENTED"
+	case TLSError:
+		return "TLS_ERROR"
 	default:
 		return "UNKNOWN"
 	}
@@ -874,6 +879,9 @@ const (
 
 	// NotImplemented - Related Function Not Implemented
 	NotImplemented
+
+	// TLS Error (Expired, Wrong-Host, Untrusted-Root, ...)
+	TLSError
 
 	// Unknown - Error occurred without obvious explanation
 	Unknown
