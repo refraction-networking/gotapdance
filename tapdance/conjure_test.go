@@ -3,10 +3,49 @@ package tapdance
 import (
 	"crypto/hmac"
 	"encoding/hex"
+	"fmt"
+	"net"
 	"testing"
 
 	pb "github.com/refraction-networking/gotapdance/protobuf"
+	tls "github.com/refraction-networking/utls"
 )
+
+func TestTLSFailure(t *testing.T) {
+
+	testUrls := map[string]string{
+		"expiredTlsUrl":       "expired.badssl.com", // x509: certificate has expired or is not yet valid
+		"wrongHostTlsUrl":     "wrong.host.badssl.com",
+		"untrustedRootTlsUrl": "untrusted-root.badssl.com",
+		"revokedTlsUrl":       "revoked.badssl.com",
+		"pinningTlsUrl":       "pinning-test.badssl.com",
+	}
+
+	simpleRequest := "GET / HTTP/1.1\r\nHOST:%s\r\n\r\n"
+
+	for issue, url := range testUrls {
+
+		dialConn, err := net.Dial("tcp", url+":443")
+		if err != nil {
+			t.Fatalf("Failed when we shouldn't have: %v", err)
+		}
+		defer dialConn.Close()
+
+		config := tls.Config{ServerName: url}
+		tlsConn := tls.UClient(dialConn, &config, tls.HelloChrome_62)
+		defer tlsConn.Close()
+
+		request := fmt.Sprintf(simpleRequest, url)
+
+		_, err = tlsConn.Write([]byte(request))
+		if err != nil {
+			t.Logf("%v - %v: [%v]", issue, url, err)
+		} else {
+			t.Logf("%v - %v: <no issue>", issue, url)
+		}
+	}
+
+}
 
 func TestSelectBoth(t *testing.T) {
 	seed := []byte{
