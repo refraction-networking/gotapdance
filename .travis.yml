@@ -129,7 +129,7 @@ jobs:
         - (cd $GOPATH/src/github.com/refraction-networking/utls && go get ./...)
       script:
         # Build Psiphon Android Library ca.psiphon.aar
-        - docker run --rm -v $GOPATH/src:/go/src -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance refraction/psiandroid /bin/bash -c 'cd /go/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE"'; cd -
+        - docker run --rm -v $GOPATH/src/github.com:/go/src/github.com -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance refraction/psiandroid:latest /bin/bash -c 'cd /go/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE"'; cd -
 
         #1 - docker run -v $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core:/go/src/github.com/Psiphon-Labs/psiphon-tunnel-core -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src:/go/src refraction/psiandroid /bin/bash -c 'go get golang.org/x/mobile/bind && cd /go/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE"'
         #2 - docker run -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src:/go/src refraction/psiandroid /bin/bash -c 'go get golang.org/x/mobile/bind && cd /go/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE"'
@@ -161,7 +161,7 @@ jobs:
         - (cd $GOPATH/src/github.com/refraction-networking/utls && go get ./...)
       script:
         # Build Psiphon Android Library ca.psiphon.aar
-        - docker run --rm -v $GOPATH/src:/go/src -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance refraction/psiandroid /bin/bash -c 'cd /go/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE"'; cd -
+        - docker run --rm -v $GOPATH/src/github.com:/go/src/github.com -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance refraction/psiandroid:latest /bin/bash -c 'cd /go/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE"'; cd -
 
         #1 - docker run -v $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core:/go/src/github.com/Psiphon-Labs/psiphon-tunnel-core -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src:/go/src refraction/psiandroid /bin/bash -c 'go get golang.org/x/mobile/bind && cd /go/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE"'
         #2 - docker run -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src:/go/src refraction/psiandroid /bin/bash -c 'go get golang.org/x/mobile/bind && cd /go/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE"'
