@@ -109,35 +109,34 @@ jobs:
     #     - patch $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go build/conjure.golang.patch
     #     - go build -a -v -race -o build/ConsoleClient-cj-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
 
-    - <<: *_job_template 
-      name: "Build Psiphon Android Library and App for Tapdance"
-      before_script:
-        # Get Android build environment
-        - docker pull refraction/psiandroid:latest
-        - mkdir -p $GOPATH/src/bitbucket.org/psiphon
-        - hg clone https://bitbucket.org/psiphon/psiphon-circumvention-system $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system
-        - (cd $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system && hg checkout $PSIPHON_SYSTEM_VERSION)
-        # Use modified EmbeddedValues.java for TapDance
-        - openssl enc -nosalt -aes-256-cbc -md sha512 -pbkdf2 -iter 1000 -pass pass:$aes_cbc_passwd  -d -in build/EmbeddedValues.java.enc -out $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/src/main/java/com/psiphon3/psiphonlibrary/EmbeddedValues.java
-        # Patched tunneling protocol for TapDance
-        - patch $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/src/main/java/com/psiphon3/psiphonlibrary/TunnelManager.java build/TunnelManager.java.patch
-        # Patch the Psiphon app's gradle build for java 1.8 compatibility [TODO]{priority:later} remove this when psiphon merges it themselves
-        - patch $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/build.gradle build/PsiphonCoreGradle.patch
-        # Digest this branch's ClientConf into Psiphon's embedded_config
-        - ./test_scripts/psiphon_digest_cc.sh ./assets/ClientConf $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/embedded_config.go
-        - go get ./...
-        - (cd $GOPATH/src/github.com/refraction-networking/utls && go get ./...)
-      script:
-        # Build Psiphon Android Library ca.psiphon.aar
-        - docker run --rm -v $GOPATH/src/github.com:/go/src/github.com -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance refraction/psiandroid:latest /bin/bash -c 'cd /go/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE"'; cd -
+    # - <<: *_job_template 
+    #   name: "Build Psiphon Android Library and App for Tapdance"
+    #   before_script:
+    #     # Get Android build environment
+    #     - docker pull refraction/psiandroid:latest
+    #     - mkdir -p $GOPATH/src/bitbucket.org/psiphon
+    #     - hg clone https://bitbucket.org/psiphon/psiphon-circumvention-system $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system
+    #     - (cd $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system && hg checkout $PSIPHON_SYSTEM_VERSION)
+    #     # Use modified EmbeddedValues.java for TapDance
+    #     - openssl enc -nosalt -aes-256-cbc -md sha512 -pbkdf2 -iter 1000 -pass pass:$aes_cbc_passwd  -d -in build/EmbeddedValues.java.enc -out $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/src/main/java/com/psiphon3/psiphonlibrary/EmbeddedValues.java
+    #     # Patched tunneling protocol for TapDance
+    #     - patch $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/src/main/java/com/psiphon3/psiphonlibrary/TunnelManager.java build/TunnelManager.java.patch
+    #     # Patch the Psiphon app's gradle build for java 1.8 compatibility [TODO]{priority:later} remove this when psiphon merges it themselves
+    #     - patch $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/build.gradle build/PsiphonCoreGradle.patch
+    #     # Digest this branch's ClientConf into Psiphon's embedded_config
+    #     - ./test_scripts/psiphon_digest_cc.sh ./assets/ClientConf $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/embedded_config.go
+    #     - go get ./...
+    #   script:
+    #     # Build Psiphon Android Library ca.psiphon.aar
+    #     - docker run --rm -v $GOPATH/src/github.com:/go/src/github.com -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance refraction/psiandroid:latest /bin/bash -c 'cd $GOPATH/src/github.com/refraction-networking/utls && go get ./...; cd /go/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE"'; cd -
 
-        #1 - docker run -v $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core:/go/src/github.com/Psiphon-Labs/psiphon-tunnel-core -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src:/go/src refraction/psiandroid /bin/bash -c 'go get golang.org/x/mobile/bind && cd /go/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE"'
-        #2 - docker run -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src:/go/src refraction/psiandroid /bin/bash -c 'go get golang.org/x/mobile/bind && cd /go/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE"'
-        - mv $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android/ca.psiphon.aar build/
-        # Build Psiphon Android App PsiphonAndroid-debug.apk
-        - cp build/ca.psiphon.aar $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/libs/
-        - docker run -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android:/go/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android refraction/psiandroid /bin/bash -c 'yes | /android-sdk-linux/tools/bin/sdkmanager --update && cd /go/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android && ./gradlew assembleDebug'
-        - sudo mv $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/build/outputs/apk/debug/PsiphonAndroid-debug.apk build/PsiphonAndroid-TD-debug.apk
+    #     #1 - docker run -v $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core:/go/src/github.com/Psiphon-Labs/psiphon-tunnel-core -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src:/go/src refraction/psiandroid /bin/bash -c 'go get golang.org/x/mobile/bind && cd /go/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE"'
+    #     #2 - docker run -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src:/go/src refraction/psiandroid /bin/bash -c 'go get golang.org/x/mobile/bind && cd /go/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE"'
+    #     - mv $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android/ca.psiphon.aar build/
+    #     # Build Psiphon Android App PsiphonAndroid-debug.apk
+    #     - cp build/ca.psiphon.aar $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/libs/
+    #     - docker run -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android:/go/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android refraction/psiandroid /bin/bash -c 'yes | /android-sdk-linux/tools/bin/sdkmanager --update && cd /go/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android && ./gradlew assembleDebug'
+    #     - sudo mv $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/build/outputs/apk/debug/PsiphonAndroid-debug.apk build/PsiphonAndroid-TD-debug.apk
 
     - <<: *_job_template 
       name: "Build Psiphon Android Library and App for Conjure"
@@ -161,7 +160,7 @@ jobs:
         - (cd $GOPATH/src/github.com/refraction-networking/utls && go get ./...)
       script:
         # Build Psiphon Android Library ca.psiphon.aar
-        - docker run --rm -v $GOPATH/src/github.com:/go/src/github.com -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance refraction/psiandroid:latest /bin/bash -c 'cd /go/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE"'; cd -
+        - docker run --rm -v $GOPATH/src/github.com:/go/src/github.com -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance refraction/psiandroid:latest /bin/bash -c 'cd $GOPATH/src/github.com/refraction-networking/utls && go get ./...; cd /go/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE"'; cd -
 
         #1 - docker run -v $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core:/go/src/github.com/Psiphon-Labs/psiphon-tunnel-core -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src:/go/src refraction/psiandroid /bin/bash -c 'go get golang.org/x/mobile/bind && cd /go/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE"'
         #2 - docker run -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src:/go/src refraction/psiandroid /bin/bash -c 'go get golang.org/x/mobile/bind && cd /go/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE"'
