@@ -141,7 +141,7 @@ jobs:
         #   interface. So because the android build system in the psiandroid image has not accepted licensing for a few libraries we have to do that 
         #   ourselves in this run command. This also cannot use the `yes` program because that sends the y character too quickly and actually declines
         #   the license. 
-        - docker run -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android:/go/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android refraction/psiandroid /bin/bash -c 'yes | /android-sdk-linux/tools/bin/sdkmanager --update && cd /go/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android && ./gradlew assembleDebug'
+        - docker run -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android:/go/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android refraction/psiandroid /bin/bash -c '(while true; do echo 'y'; sleep 2; done) | /android-sdk-linux/tools/android update sdk --no-ui --all --filter build-tools-27.0.3; cd /go/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android && ./gradlew assembleDebug'
         - sudo mv $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/build/outputs/apk/debug/PsiphonAndroid-debug.apk build/PsiphonAndroid-TD-debug.apk
 
     - <<: *_job_template 
