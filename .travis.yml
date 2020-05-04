@@ -13,11 +13,11 @@ services:
 addons:
   artifacts: true
 
-# # Uncomment To override defaults set in travis ci online interface 
-# #     (these will take precedence).
-# env:
-#   - PSIPHON_CORE_VERSION="tags/v2.0.9"
-#   - PSIPHON_SYSTEM_VERSION="9265a85"
+# Uncomment To override defaults set in travis ci online interface 
+#     (these will take precedence).
+env:
+  - PSIPHON_CORE_VERSION="tags/v2.0.11"
+  - PSIPHON_SYSTEM_VERSION="default"
 
 notifications:
   slack:
