@@ -360,3 +360,7 @@ func (a *assets) saveClientConf() error {
 func (a *assets) SetStatsSocksAddr(addr string) {
 	a.socksAddr = addr
 }
+
+func (a *assets) GetStatsSocksAddr() string {
+	return a.socksAddr
+}
