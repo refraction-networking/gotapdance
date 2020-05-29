@@ -27,13 +27,12 @@ notifications:
 install:
   - go get -t ./...
   - go get golang.org/x/lint/golint
-  - go get github.com/alecthomas/gometalinter
+  - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.27.0
 
 script:
   - go test -race -v ./tapdance
   - go test -race -v ./tdproxy
-  - gometalinter --install
-  - gometalinter --disable-all -E vet -E gofmt -E misspell -E ineffassign -E deadcode --tests ./tapdance
+  - golangci-lint run --disable-all -E vet -E gofmt -E misspell -E ineffassign -E deadcode --tests ./tapdance
 
 ## Build job for Psiphon ConsoleClient and Android App
 # Go versions: first value in array
