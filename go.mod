@@ -5,6 +5,7 @@ go 1.13
 replace (
 	github.com/Psiphon-Labs/chacha20 => github.com/Psiphon-Labs/chacha20 v0.2.1-0.20200128191310-899a4be52863
 	github.com/Psiphon-Labs/quic-go => github.com/Psiphon-Labs/quic-go v0.14.1-0.20200306193310-474e74c89fab
+	github.com/bifurcation/mint => github.com/bifurcation/mint v0.0.0-20180306135233-198357931e61
 	github.com/cognusion/go-cache-lru => github.com/cognusion/go-cache-lru v0.0.0-20170419142635-f73e2280ecea
 )
 
