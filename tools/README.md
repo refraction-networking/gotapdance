@@ -30,3 +30,9 @@ Perform a AAAA lookup for each domain name as part of clientConfig supplement fo
 `elligator-test`
 
 Tests to ensure that the elligator functionality implemented here in golang will match that of the station implementation.
+
+## uTLS test
+
+`utls-test`
+
+Test various utls fingerprints against decoys in the ClientConf.

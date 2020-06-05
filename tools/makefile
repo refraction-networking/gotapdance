@@ -3,7 +3,7 @@ GOCMD=go
 GOBUILD=$(GOCMD) build
 GOCLEAN=$(GOCMD) clean
 GOTEST=$(GOCMD) test
-BINARY_NAMES=clientconf v6lookup elligator-test
+BINARY_NAMES=clientconf v6lookup elligator-test utls-test
 
 
 all: test build
@@ -12,7 +12,7 @@ build:
 	for binary in $(BINARY_NAMES) ; do \
 		echo "building $$binary"; \
 		cd $$binary && $(GOBUILD) -o ../bin/$$binary ; \
-		cd ../; \
+		cd -; \
 	done
 
 clientconf:
@@ -29,6 +29,11 @@ elligator-test:
 	echo "building elligator-test"; \
 	cd elligator-test && $(GOBUILD) -o ../bin/elligator-test ; \
 	cd ../; \
+
+utls-test:
+	echo "building utls-test"; \
+	cd utls-test && $(GOBUILD) -o ../bin/utls ; \
+	cd -; \
 
 test: 
 		$(GOTEST) ./...
