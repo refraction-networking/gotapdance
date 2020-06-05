@@ -23,11 +23,8 @@ import (
 )
 
 var (
-	fingerprints  = []utls.ClientHelloID{utls.HelloChrome_62, utls.HelloChrome_72, utls.HelloChrome_83}
-	dialTimeout   = time.Duration(5) * time.Second
-	sessionTicket = []uint8(`Here goes phony session ticket: phony enough to get into ASCII range
-Ticket could be of any length, but for camouflage purposes it's better to use uniformly random contents
-and common length. See https://tlsfingerprint.io/session-tickets`)
+	fingerprints = []utls.ClientHelloID{utls.HelloChrome_62, utls.HelloChrome_72, utls.HelloChrome_83}
+	dialTimeout  = time.Duration(5) * time.Second
 )
 
 func HttpGetByHelloID(hostname string, addr string, helloID utls.ClientHelloID) (*http.Response, error) {
@@ -37,6 +34,12 @@ func HttpGetByHelloID(hostname string, addr string, helloID utls.ClientHelloID) 
 		return nil, fmt.Errorf("net.DialTimeout error: %+v", err)
 	}
 	uTlsConn := utls.UClient(dialConn, &config, helloID)
+
+	err = uTlsConn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	if err != nil {
+		return nil, err
+	}
+
 	defer uTlsConn.Close()
 
 	err = uTlsConn.Handshake()
@@ -45,10 +48,11 @@ func HttpGetByHelloID(hostname string, addr string, helloID utls.ClientHelloID) 
 	}
 
 	response, err := httpGetOverConn(uTlsConn, uTlsConn.HandshakeState.ServerHello.AlpnProtocol, hostname)
-	response.TLS = &tls.ConnectionState{
-		Version:     uTlsConn.ConnectionState().Version,
-		CipherSuite: uTlsConn.ConnectionState().CipherSuite}
-
+	if err == nil {
+		response.TLS = &tls.ConnectionState{
+			Version:     uTlsConn.ConnectionState().Version,
+			CipherSuite: uTlsConn.ConnectionState().CipherSuite}
+	}
 	return response, err
 }
 
@@ -87,7 +91,7 @@ func httpGetOverConn(conn net.Conn, alpn string, requestHostname string) (*http.
 	}
 }
 
-func worker(id int, decoys <-chan *pb.TLSDecoySpec, results chan<- string, wg sync.WaitGroup) {
+func worker(id int, decoys <-chan *pb.TLSDecoySpec, results chan<- string, wg *sync.WaitGroup) {
 	var rsp *http.Response
 	var err error
 	var workerTotal int = 0
@@ -113,6 +117,7 @@ func worker(id int, decoys <-chan *pb.TLSDecoySpec, results chan<- string, wg sy
 			}
 		}
 	}
+	fmt.Printf("worker %v shutting down\n", id)
 }
 
 func dumpResponseNoBody(response *http.Response) string {
@@ -174,7 +179,7 @@ func main() {
 
 	for i := 0; i < *workers; i++ {
 		wg.Add(1)
-		go worker(i, decoys, results, wg)
+		go worker(i, decoys, results, &wg)
 	}
 
 	for _, decoy := range allDecoys {
@@ -183,7 +188,8 @@ func main() {
 	close(decoys)
 
 	var printTotal int = 0
-	for r := range results {
+	for j := 0; j < len(allDecoys)*len(fingerprints); j++ {
+		r := <-results
 		printTotal++
 		fmt.Fprintf(out, "(%v) %s", printTotal, r)
 	}
