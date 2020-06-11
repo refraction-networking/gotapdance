@@ -1,6 +1,7 @@
 package tapdance
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -9,6 +10,7 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"net/http"
 	"strconv"
 	"sync"
 	"time"
@@ -26,177 +28,19 @@ type V6 struct {
 	include uint
 }
 
-const (
-	v4 uint = iota
-	v6
-	both
-)
-
-//[TODO]{priority:winter-break} make this not constant
-const defaultRegWidth = 5
-
-// DialConjureAddr - Perform Registration and Dial after creating  a Conjure session from scratch
-func DialConjureAddr(ctx context.Context, address string) (net.Conn, error) {
-	cjSession := makeConjureSession(address)
-	return DialConjure(ctx, cjSession)
+// Registrar defines the interface for a service executing
+// decoy registrations.
+type Registrar interface {
+	Register(*ConjureSession, context.Context) (*ConjureReg, error)
 }
 
-// DialConjure - Perform Registration and Dial on an existing Conjure session
-func DialConjure(ctx context.Context, cjSession *ConjureSession) (net.Conn, error) {
+type DecoyRegistrar struct{}
 
-	if cjSession == nil {
-		return nil, fmt.Errorf("No Session Provided")
-	}
-
-	// Choose Phantom Address in Register depending on v6 support.
-	registration, err := Register(ctx, cjSession)
-	if err != nil {
-		Logger().Debugf("%v Failed to register: %v", cjSession.IDString(), err)
-		return nil, err
-	}
-
-	// randomized sleeping here to break the intraflow signal
-	toSleep := registration.getRandomDuration(3000, 212, 3449)
-	Logger().Debugf("%v Successfully sent registrations, sleeping for: %v ms", cjSession.IDString(), toSleep)
-	time.Sleep(toSleep)
-
-	Logger().Debugf("%v Woke from sleep, attempting to Connect ...", cjSession.IDString())
-	return registration.Connect(ctx)
-	// return Connect(cjSession)
-}
-
-// Register - Send registrations equal to the width specified in the Conjure Session
-func Register(ctx context.Context, cjSession *ConjureSession) (*ConjureReg, error) {
+func (DecoyRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (*ConjureReg, error) {
 	var err error
-	var reg *ConjureReg
 
-	Logger().Debugf("%v Registering V4 and V6", cjSession.IDString())
+	Logger().Debugf("%v Registering V4 and V6 via DecoyRegistrar", cjSession.IDString())
 	cjSession.setV6Support(both)
-	reg, err = cjSession.register(ctx)
-
-	return reg, err
-}
-
-// // testV6 -- This is over simple and incomplete (currently unused)
-// // checking for unreachable alone does not account for local ipv6 addresses
-// // [TODO]{priority:winter-break} use getifaddr reverse bindings
-// func testV6() bool {
-// 	dialError := make(chan error, 1)
-// 	d := Assets().GetV6Decoy()
-// 	go func() {
-// 		conn, err := net.Dial("tcp", d.GetIpAddrStr())
-// 		if err != nil {
-// 			dialError <- err
-// 			return
-// 		}
-// 		conn.Close()
-// 		dialError <- nil
-// 	}()
-
-// 	time.Sleep(500 * time.Microsecond)
-// 	// The only error that would return before this is a network unreachable error
-// 	select {
-// 	case err := <-dialError:
-// 		Logger().Debugf("v6 unreachable received: %v", err)
-// 		return false
-// 	default:
-// 		return true
-// 	}
-// }
-
-// Connect - Dial the Phantom IP address after registration
-func Connect(ctx context.Context, reg *ConjureReg) (net.Conn, error) {
-	return reg.Connect(ctx)
-}
-
-// ConjureSession - Create a session with details for registration and connection
-type ConjureSession struct {
-	Keys           *sharedKeys
-	Width          uint
-	V6Support      *V6
-	UseProxyHeader bool
-	SessionID      uint64
-	RegDecoys      []*pb.TLSDecoySpec // pb.DecoyList
-	Phantom        *net.IP
-	Transport      uint
-	CovertAddress  string
-	// rtt			   uint // tracked in stats
-
-	// THIS IS REQUIRED TO INTERFACE WITH PSIPHON ANDROID
-	//		we use their dialer to prevent connection loopback into our own proxy
-	//		connection when tunneling the whole device.
-	TcpDialer func(context.Context, string, string) (net.Conn, error)
-
-	// performance tracking
-	stats *pb.SessionStats
-}
-
-// Define transports here=p0
-//[TODO]{priority:winter-break} make this it's own type / interface
-const (
-	// NullTransport - Used for debugging. No association of phantom IP to session/registration
-	NullTransport uint = iota
-
-	// MinTransport - Minimal transport used to connect  station (default)
-	MinTransport
-
-	// Obfs4Transport - Use Obfs4 to provide probe resistant connection to station (not yet implemented)
-	Obfs4Transport
-)
-
-func makeConjureSession(covert string) *ConjureSession {
-
-	keys, err := generateSharedKeys(getStationKey())
-	if err != nil {
-		return nil
-	}
-	//[TODO]{priority:NOW} move v6support initialization to assets so it can be tracked across dials
-	cjSession := &ConjureSession{
-		Keys:           keys,
-		Width:          defaultRegWidth,
-		V6Support:      &V6{support: true, include: both},
-		UseProxyHeader: false,
-		Transport:      MinTransport,
-		// Transport:     NullTransport,
-		CovertAddress: covert,
-		SessionID:     sessionsTotal.GetAndInc(),
-	}
-
-	sharedSecretStr := make([]byte, hex.EncodedLen(len(keys.SharedSecret)))
-	hex.Encode(sharedSecretStr, keys.SharedSecret)
-	Logger().Debugf("%v Shared Secret  - %s", cjSession.IDString(), sharedSecretStr)
-
-	Logger().Debugf("%v covert %s", cjSession.IDString(), covert)
-
-	reprStr := make([]byte, hex.EncodedLen(len(keys.Representative)))
-	hex.Encode(reprStr, keys.Representative)
-	Logger().Debugf("%v Representative - %s", cjSession.IDString(), reprStr)
-
-	return cjSession
-}
-
-// IDString - Get the ID string for the session
-func (cjSession *ConjureSession) IDString() string {
-	if cjSession.Keys == nil || cjSession.Keys.SharedSecret == nil {
-		return fmt.Sprintf("[%v-000000]", strconv.FormatUint(cjSession.SessionID, 10))
-	}
-
-	secret := make([]byte, hex.EncodedLen(len(cjSession.Keys.SharedSecret)))
-	n := hex.Encode(secret, cjSession.Keys.SharedSecret)
-	if n < 6 {
-		return fmt.Sprintf("[%v-000000]", strconv.FormatUint(cjSession.SessionID, 10))
-	}
-	return fmt.Sprintf("[%v-%s]", strconv.FormatUint(cjSession.SessionID, 10), secret[:6])
-}
-
-// String - Print the string for debug and/or logging
-func (cjSession *ConjureSession) String() string {
-	return cjSession.IDString()
-	// expand for debug??
-}
-
-func (cjSession *ConjureSession) register(ctx context.Context) (*ConjureReg, error) {
-	var err error
 
 	// Choose N (width) decoys from decoylist
 	cjSession.RegDecoys = SelectDecoys(cjSession.Keys.SharedSecret, cjSession.V6Support.include, cjSession.Width)
@@ -273,6 +117,224 @@ func (cjSession *ConjureSession) register(ctx context.Context) (*ConjureReg, err
 	}
 
 	return reg, nil
+}
+
+type APIRegistrar struct {
+	// Endpoint to use in registration request
+	Endpoint string
+
+	// HTTP client to use in request
+	Client http.Client
+}
+
+func (r APIRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (*ConjureReg, error) {
+	Logger().Debugf("%v registering via APIRegistrar", cjSession.IDString())
+	cjSession.setV6Support(both)
+	// TODO: this section is duplicated from DecoyRegistrar; consider consolidating
+	phantom4, phantom6, err := SelectPhantom(cjSession.Keys.ConjureSeed, cjSession.V6Support.include)
+	if err != nil {
+		Logger().Warnf("%v failed to select Phantom: %v\n", cjSession.IDString(), err)
+		return nil, err
+	}
+
+	// [reference] Prepare registration
+	reg := &ConjureReg{
+		sessionIDStr:  cjSession.IDString(),
+		keys:          cjSession.Keys,
+		stats:         &pb.SessionStats{},
+		phantom4:      phantom4,
+		phantom6:      phantom6,
+		v6Support:     cjSession.V6Support.include,
+		covertAddress: cjSession.CovertAddress,
+		transport:     cjSession.Transport,
+		TcpDialer:     cjSession.TcpDialer,
+	}
+
+	protoReg, err := reg.generateVSP()
+	if err != nil {
+		Logger().Warnf("%v failed to generate registration protobuf: %v\n", cjSession.IDString(), err)
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", r.Endpoint, bytes.NewReader(protoReg))
+	if err != nil {
+		Logger().Warnf("%v failed to create HTTP request to registration endpoint %s: %v\n", cjSession.IDString(), r.Endpoint, err)
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", "application/x-protobuf")
+
+	resp, err := r.Client.Do(req)
+	if err != nil {
+		Logger().Warnf("%v failed to do HTTP request to registration endpoint %s: %v\n", cjSession.IDString(), r.Endpoint, err)
+		return nil, err
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		Logger().Warnf("%v got non-success response code %d from registration endpoint %v\n", cjSession.IDString(), resp.StatusCode, r.Endpoint)
+		return nil, fmt.Errorf("non-success response code %d on %s", resp.StatusCode, r.Endpoint)
+	}
+
+	return reg, nil
+}
+
+const (
+	v4 uint = iota
+	v6
+	both
+)
+
+//[TODO]{priority:winter-break} make this not constant
+const defaultRegWidth = 5
+
+// DialConjureAddr - Perform Registration and Dial after creating  a Conjure session from scratch
+func DialConjureAddr(ctx context.Context, address string, registrationMethod Registrar) (net.Conn, error) {
+	cjSession := makeConjureSession(address)
+	return DialConjure(ctx, cjSession, registrationMethod)
+}
+
+// DialConjure - Perform Registration and Dial on an existing Conjure session
+func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMethod Registrar) (net.Conn, error) {
+
+	if cjSession == nil {
+		return nil, fmt.Errorf("No Session Provided")
+	}
+
+	// Choose Phantom Address in Register depending on v6 support.
+	registration, err := registrationMethod.Register(cjSession, ctx)
+	if err != nil {
+		Logger().Debugf("%v Failed to register: %v", cjSession.IDString(), err)
+		return nil, err
+	}
+
+	// randomized sleeping here to break the intraflow signal
+	toSleep := registration.getRandomDuration(3000, 212, 3449)
+	Logger().Debugf("%v Successfully sent registrations, sleeping for: %v ms", cjSession.IDString(), toSleep)
+	time.Sleep(toSleep)
+
+	Logger().Debugf("%v Woke from sleep, attempting to Connect ...", cjSession.IDString())
+	return registration.Connect(ctx)
+	// return Connect(cjSession)
+}
+
+// // testV6 -- This is over simple and incomplete (currently unused)
+// // checking for unreachable alone does not account for local ipv6 addresses
+// // [TODO]{priority:winter-break} use getifaddr reverse bindings
+// func testV6() bool {
+// 	dialError := make(chan error, 1)
+// 	d := Assets().GetV6Decoy()
+// 	go func() {
+// 		conn, err := net.Dial("tcp", d.GetIpAddrStr())
+// 		if err != nil {
+// 			dialError <- err
+// 			return
+// 		}
+// 		conn.Close()
+// 		dialError <- nil
+// 	}()
+
+// 	time.Sleep(500 * time.Microsecond)
+// 	// The only error that would return before this is a network unreachable error
+// 	select {
+// 	case err := <-dialError:
+// 		Logger().Debugf("v6 unreachable received: %v", err)
+// 		return false
+// 	default:
+// 		return true
+// 	}
+// }
+
+// Connect - Dial the Phantom IP address after registration
+func Connect(ctx context.Context, reg *ConjureReg) (net.Conn, error) {
+	return reg.Connect(ctx)
+}
+
+// ConjureSession - Create a session with details for registration and connection
+type ConjureSession struct {
+	Keys           *sharedKeys
+	Width          uint
+	V6Support      *V6
+	UseProxyHeader bool
+	SessionID      uint64
+	RegDecoys      []*pb.TLSDecoySpec // pb.DecoyList
+	Phantom        *net.IP
+	Transport      TransportType
+	CovertAddress  string
+	// rtt			   uint // tracked in stats
+
+	// THIS IS REQUIRED TO INTERFACE WITH PSIPHON ANDROID
+	//		we use their dialer to prevent connection loopback into our own proxy
+	//		connection when tunneling the whole device.
+	TcpDialer func(context.Context, string, string) (net.Conn, error)
+
+	// performance tracking
+	stats *pb.SessionStats
+}
+
+// TransportType describes valid transports for
+// use in connection to the phantom proxy.
+type TransportType uint
+
+const (
+	// NullTransport - Used for debugging. No association of phantom IP to session/registration
+	NullTransport TransportType = iota
+
+	// MinTransport - Minimal transport used to connect  station (default)
+	MinTransport
+
+	// Obfs4Transport - Use Obfs4 to provide probe resistant connection to station (not yet implemented)
+	Obfs4Transport
+)
+
+func makeConjureSession(covert string) *ConjureSession {
+
+	keys, err := generateSharedKeys(getStationKey())
+	if err != nil {
+		return nil
+	}
+	//[TODO]{priority:NOW} move v6support initialization to assets so it can be tracked across dials
+	cjSession := &ConjureSession{
+		Keys:           keys,
+		Width:          defaultRegWidth,
+		V6Support:      &V6{support: true, include: both},
+		UseProxyHeader: false,
+		Transport:      MinTransport,
+		// Transport:     NullTransport,
+		CovertAddress: covert,
+		SessionID:     sessionsTotal.GetAndInc(),
+	}
+
+	sharedSecretStr := make([]byte, hex.EncodedLen(len(keys.SharedSecret)))
+	hex.Encode(sharedSecretStr, keys.SharedSecret)
+	Logger().Debugf("%v Shared Secret  - %s", cjSession.IDString(), sharedSecretStr)
+
+	Logger().Debugf("%v covert %s", cjSession.IDString(), covert)
+
+	reprStr := make([]byte, hex.EncodedLen(len(keys.Representative)))
+	hex.Encode(reprStr, keys.Representative)
+	Logger().Debugf("%v Representative - %s", cjSession.IDString(), reprStr)
+
+	return cjSession
+}
+
+// IDString - Get the ID string for the session
+func (cjSession *ConjureSession) IDString() string {
+	if cjSession.Keys == nil || cjSession.Keys.SharedSecret == nil {
+		return fmt.Sprintf("[%v-000000]", strconv.FormatUint(cjSession.SessionID, 10))
+	}
+
+	secret := make([]byte, hex.EncodedLen(len(cjSession.Keys.SharedSecret)))
+	n := hex.Encode(secret, cjSession.Keys.SharedSecret)
+	if n < 6 {
+		return fmt.Sprintf("[%v-000000]", strconv.FormatUint(cjSession.SessionID, 10))
+	}
+	return fmt.Sprintf("[%v-%s]", strconv.FormatUint(cjSession.SessionID, 10), secret[:6])
+}
+
+// String - Print the string for debug and/or logging
+func (cjSession *ConjureSession) String() string {
+	return cjSession.IDString()
+	// expand for debug??
 }
 
 type resultTuple struct {
@@ -366,7 +428,7 @@ type ConjureReg struct {
 	covertAddress  string
 	phantomSNI     string
 	v6Support      uint
-	transport      uint
+	transport      TransportType
 
 	// THIS IS REQUIRED TO INTERFACE WITH PSIPHON ANDROID
 	//		we use their dialer to prevent connection loopback into our own proxy

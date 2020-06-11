@@ -17,7 +17,11 @@ type Dialer struct {
 	//		connection when tunneling the whole device.
 	TcpDialer func(context.Context, string, string) (net.Conn, error)
 
-	DarkDecoy      bool
+	DarkDecoy bool
+
+	// The type of registrar to use when performing Conjure registrations.
+	DarkDecoyRegistrar Registrar
+
 	UseProxyHeader bool
 	V6Support      bool // *bool so that it is a nullable type. that can be overridden
 	Width          int
@@ -95,7 +99,7 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 			if len(address) == 0 {
 				return nil, errors.New("Dark Decoys require target address to be set")
 			}
-			return DialConjure(ctx, cjSession)
+			return DialConjure(ctx, cjSession, d.DarkDecoyRegistrar)
 		}
 	}
 	return nil, errors.New("SplitFlows are not supported")
