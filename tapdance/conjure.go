@@ -150,19 +150,33 @@ func (r APIRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (
 		TcpDialer:     cjSession.TcpDialer,
 	}
 
-	protoReg, err := reg.generateVSP()
+	vsp, err := reg.generateVSP()
 	if err != nil {
 		Logger().Warnf("%v failed to generate registration protobuf: %v\n", cjSession.IDString(), err)
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", r.Endpoint, bytes.NewReader(protoReg))
+	// Encrypt the VSP to get its encrypted length. We don't need the actual
+	// encrypted VSP here, but the application makes the assumption that there
+	// is an FSP present in all registrations, and that it represents the length
+	// of the encrypted VSP.
+	encryptedVsp, err := aesGcmEncrypt(vsp, reg.keys.VspKey, reg.keys.VspIv)
+	if err != nil {
+		return nil, err
+	}
+
+	// Generate plaintext FSP referring to encrypted VSP length.
+	fsp := reg.generateFSP(uint16(len(encryptedVsp)))
+
+	// payload = shared_secret || plaintext FSP || plaintext VSP
+	payload := append(reg.keys.SharedSecret, fsp...)
+	payload = append(payload, vsp...)
+
+	req, err := http.NewRequest("POST", r.Endpoint, bytes.NewReader(payload))
 	if err != nil {
 		Logger().Warnf("%v failed to create HTTP request to registration endpoint %s: %v\n", cjSession.IDString(), r.Endpoint, err)
 		return nil, err
 	}
-
-	req.Header.Add("Content-Type", "application/x-protobuf")
 
 	resp, err := r.Client.Do(req)
 	if err != nil {
