@@ -150,27 +150,18 @@ func (r APIRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (
 		TcpDialer:     cjSession.TcpDialer,
 	}
 
-	vsp, err := reg.generateVSP()
-	if err != nil {
-		Logger().Warnf("%v failed to generate registration protobuf: %v\n", cjSession.IDString(), err)
-		return nil, err
+	c2s := reg.generateClientToStation()
+
+	protoPayload := pb.ClientToAPI{
+		Secret:              cjSession.Keys.SharedSecret,
+		RegistrationPayload: c2s,
 	}
 
-	// Encrypt the VSP to get its encrypted length. We don't need the actual
-	// encrypted VSP here, but the application makes the assumption that there
-	// is an FSP present in all registrations, and that it represents the length
-	// of the encrypted VSP.
-	encryptedVsp, err := aesGcmEncrypt(vsp, reg.keys.VspKey, reg.keys.VspIv)
+	payload, err := proto.Marshal(&protoPayload)
 	if err != nil {
+		Logger().Warnf("%v failed to marshal ClientToStation payload: %v\n", cjSession.IDString(), err)
 		return nil, err
 	}
-
-	// Generate plaintext FSP referring to encrypted VSP length.
-	fsp := reg.generateFSP(uint16(len(encryptedVsp)))
-
-	// payload = shared_secret || plaintext FSP || plaintext VSP
-	payload := append(reg.keys.SharedSecret, fsp...)
-	payload = append(payload, vsp...)
 
 	req, err := http.NewRequest("POST", r.Endpoint, bytes.NewReader(payload))
 	if err != nil {
@@ -614,7 +605,7 @@ func (reg *ConjureReg) getPbTransport() pb.TransportType {
 	return pb.TransportType(reg.transport)
 }
 
-func (reg *ConjureReg) generateVSP() ([]byte, error) {
+func (reg *ConjureReg) generateClientToStation() *pb.ClientToStation {
 	var covert *string
 	if len(reg.covertAddress) > 0 {
 		//[TODO]{priority:medium} this isn't the correct place to deal with signaling to the station
@@ -646,8 +637,12 @@ func (reg *ConjureReg) generateVSP() ([]byte, error) {
 		initProto.Padding = append(initProto.Padding, byte(0))
 	}
 
+	return initProto
+}
+
+func (reg *ConjureReg) generateVSP() ([]byte, error) {
 	//[reference] Marshal ClientToStation protobuf
-	return proto.Marshal(initProto)
+	return proto.Marshal(reg.generateClientToStation())
 }
 
 func (reg *ConjureReg) generateFSP(espSize uint16) []byte {

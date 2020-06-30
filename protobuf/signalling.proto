@@ -206,6 +206,16 @@ message ClientToStation {
     optional bytes padding = 100;
 }
 
+// Message type used as the request body when registering via the HTTP API.
+// This message is assumed to be sent via TLS, meaning that sending the secret outright is acceptable.
+message ClientToAPI {
+    // The secret that will be used when forming phantom connections.
+    optional bytes secret = 1;
+
+    // The ClientToStation payload; the same as used in decoy registrations.
+    optional ClientToStation registration_payload = 2;
+}
+
 message SessionStats {
     optional uint32 failed_decoys_amount = 20; // how many decoys were tried before success
 
