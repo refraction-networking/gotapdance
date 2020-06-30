@@ -20,7 +20,7 @@ type assets struct {
 	sync.RWMutex
 	path string
 
-	config pb.ClientConf
+	config *pb.ClientConf
 
 	roots *x509.CertPool
 
@@ -88,7 +88,7 @@ func initAssets(path string) {
 
 	assetsInstance = &assets{
 		path:               path,
-		config:             defaultClientConf,
+		config:             &defaultClientConf,
 		filenameRoots:      "roots",
 		filenameClientConf: "ClientConf",
 		socksAddr:          "",
@@ -122,8 +122,8 @@ func (a *assets) readConfigs() {
 		if err != nil {
 			return err
 		}
-		clientConf := pb.ClientConf{}
-		err = proto.Unmarshal(buf, &clientConf)
+		clientConf := &pb.ClientConf{}
+		err = proto.Unmarshal(buf, clientConf)
 		if err != nil {
 			return err
 		}
@@ -203,17 +203,17 @@ func (a *assets) GetV4Decoys() []*pb.TLSDecoySpec {
 }
 
 // GetDecoy - Gets random DecoySpec
-func (a *assets) GetDecoy() pb.TLSDecoySpec {
+func (a *assets) GetDecoy() *pb.TLSDecoySpec {
 	a.RLock()
 	defer a.RUnlock()
 
 	decoys := a.config.GetDecoyList().GetTlsDecoys()
-	chosenDecoy := pb.TLSDecoySpec{}
+	chosenDecoy := &pb.TLSDecoySpec{}
 	if len(decoys) == 0 {
 		return chosenDecoy
 	}
 	decoyIndex := getRandInt(0, len(decoys)-1)
-	chosenDecoy = *decoys[decoyIndex]
+	chosenDecoy = decoys[decoyIndex]
 
 	//[TODO]{priority:soon} stop enforcing values >= defaults.
 	// Fix ackhole instead
@@ -230,17 +230,17 @@ func (a *assets) GetDecoy() pb.TLSDecoySpec {
 }
 
 // GetDecoy - Gets random IPv6 DecoySpec
-func (a *assets) GetV6Decoy() pb.TLSDecoySpec {
+func (a *assets) GetV6Decoy() *pb.TLSDecoySpec {
 	a.RLock()
 	defer a.RUnlock()
 
 	decoys := a.GetV6Decoys()
-	chosenDecoy := pb.TLSDecoySpec{}
+	chosenDecoy := &pb.TLSDecoySpec{}
 	if len(decoys) == 0 {
 		return chosenDecoy
 	}
 	decoyIndex := getRandInt(0, len(decoys)-1)
-	chosenDecoy = *decoys[decoyIndex]
+	chosenDecoy = decoys[decoyIndex]
 
 	// No enforcing TCPWIN etc. values because this is conjure only
 	return chosenDecoy
@@ -290,12 +290,11 @@ func (a *assets) SetGeneration(gen uint32) (err error) {
 }
 
 // Set Public key and store config to disk
-func (a *assets) SetPubkey(pubkey pb.PubKey) (err error) {
+func (a *assets) SetPubkey(pubkey *pb.PubKey) (err error) {
 	a.Lock()
 	defer a.Unlock()
 
-	copyPubkey := pubkey
-	a.config.DefaultPubkey = &copyPubkey
+	a.config.DefaultPubkey = pubkey
 	err = a.saveClientConf()
 	return
 }
@@ -305,14 +304,14 @@ func (a *assets) SetClientConf(conf *pb.ClientConf) (err error) {
 	a.Lock()
 	defer a.Unlock()
 
-	a.config = *conf
+	a.config = conf
 	err = a.saveClientConf()
 	return
 }
 
 // Not goroutine-safe, use at your own risk
 func (a *assets) GetClientConfPtr() *pb.ClientConf {
-	return &a.config
+	return a.config
 }
 
 // Overwrite currently used decoys and store config to disk
@@ -329,7 +328,7 @@ func (a *assets) SetDecoys(decoys []*pb.TLSDecoySpec) (err error) {
 }
 
 // Checks if decoy is in currently used ClientConf decoys list
-func (a *assets) IsDecoyInList(decoy pb.TLSDecoySpec) bool {
+func (a *assets) IsDecoyInList(decoy *pb.TLSDecoySpec) bool {
 	ipv4str := decoy.GetIpAddrStr()
 	hostname := decoy.GetHostname()
 	for _, d := range a.config.GetDecoyList().GetTlsDecoys() {
@@ -342,7 +341,7 @@ func (a *assets) IsDecoyInList(decoy pb.TLSDecoySpec) bool {
 }
 
 func (a *assets) saveClientConf() error {
-	buf, err := proto.Marshal(&a.config)
+	buf, err := proto.Marshal(a.config)
 	if err != nil {
 		return err
 	}

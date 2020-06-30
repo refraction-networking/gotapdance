@@ -32,9 +32,9 @@ type tdRawConn struct {
 
 	TcpDialer func(context.Context, string, string) (net.Conn, error)
 
-	decoySpec     pb.TLSDecoySpec
+	decoySpec     *pb.TLSDecoySpec
 	pinDecoySpec  bool // don't ever change decoy (still changeable from outside)
-	initialMsg    pb.StationToClient
+	initialMsg    *pb.StationToClient
 	stationPubkey []byte
 	tagType       tdTagType
 
@@ -449,7 +449,7 @@ func (tdRaw *tdRawConn) idStr() string {
 // Simply reads and returns protobuf
 // Returns error if it's not a protobuf
 // TODO: redesign it pb, data, err
-func (tdRaw *tdRawConn) readProto() (msg pb.StationToClient, err error) {
+func (tdRaw *tdRawConn) readProto() (msg *pb.StationToClient, err error) {
 	var readBuffer bytes.Buffer
 
 	var outerProtoMsgType msgType
@@ -489,7 +489,8 @@ func (tdRaw *tdRawConn) readProto() (msg pb.StationToClient, err error) {
 		return
 	}
 
-	err = proto.Unmarshal(readBuffer.Bytes(), &msg)
+	msg = &pb.StationToClient{}
+	err = proto.Unmarshal(readBuffer.Bytes(), msg)
 	if err != nil {
 		return
 	}

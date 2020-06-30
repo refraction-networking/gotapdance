@@ -13,7 +13,7 @@ import (
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 )
 
-func printClientConf(clientConf pb.ClientConf) {
+func printClientConf(clientConf *pb.ClientConf) {
 	fmt.Printf("Generation: %d\n", clientConf.GetGeneration())
 	if clientConf.GetDefaultPubkey() != nil {
 		fmt.Printf("Default Pubkey: %s\n", hex.EncodeToString(clientConf.GetDefaultPubkey().Key[:]))
@@ -44,14 +44,14 @@ func printClientConf(clientConf pb.ClientConf) {
 
 }
 
-func parseClientConf(fname string) pb.ClientConf {
+func parseClientConf(fname string) *pb.ClientConf {
 
-	clientConf := pb.ClientConf{}
+	clientConf := &pb.ClientConf{}
 	buf, err := ioutil.ReadFile(fname)
 	if err != nil {
 		log.Fatal("Error reading file:", err)
 	}
-	err = proto.Unmarshal(buf, &clientConf)
+	err = proto.Unmarshal(buf, clientConf)
 	if err != nil {
 		log.Fatal("Error parsing ClientConf", err)
 	}
@@ -124,7 +124,7 @@ func main() {
 	var noout = flag.Bool("noout", false, "Don't print ClientConf")
 	flag.Parse()
 
-	clientConf := pb.ClientConf{}
+	clientConf := &pb.ClientConf{}
 
 	// Parse ClientConf
 	if *fname != "" {
@@ -215,7 +215,7 @@ func main() {
 	}
 
 	if *out_fname != "" {
-		buf, err := proto.Marshal(&clientConf)
+		buf, err := proto.Marshal(clientConf)
 		if err != nil {
 			log.Fatal("Error writing output:", err)
 		}

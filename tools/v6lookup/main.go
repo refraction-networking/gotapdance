@@ -31,7 +31,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	clientConf := pb.ClientConf{}
+	clientConf := &pb.ClientConf{}
 
 	// Parse ClientConf
 	clientConf = parseClientConf(*assets_file)
@@ -74,7 +74,7 @@ func main() {
 	}
 
 	if *out_fname != "" {
-		buf, err := proto.Marshal(&clientConf)
+		buf, err := proto.Marshal(clientConf)
 		if err != nil {
 			log.Fatal("Error writing output:", err)
 		}
@@ -121,14 +121,14 @@ func lookupHosts(decoyList []*pb.TLSDecoySpec) map[string][]byte {
 	return v6Decoys
 }
 
-func parseClientConf(fname string) pb.ClientConf {
+func parseClientConf(fname string) *pb.ClientConf {
 
-	clientConf := pb.ClientConf{}
+	clientConf := &pb.ClientConf{}
 	buf, err := ioutil.ReadFile(fname)
 	if err != nil {
 		log.Fatal("Error reading file:", err)
 	}
-	err = proto.Unmarshal(buf, &clientConf)
+	err = proto.Unmarshal(buf, clientConf)
 	if err != nil {
 		log.Fatal("Error parsing ClientConf", err)
 	}
@@ -227,7 +227,7 @@ func closeConn(conn net.Conn, addr string) {
 	conn.Close()
 }
 
-func printClientConf(clientConf pb.ClientConf) {
+func printClientConf(clientConf *pb.ClientConf) {
 	fmt.Printf("Generation: %d\n", clientConf.GetGeneration())
 	if clientConf.GetDefaultPubkey() != nil {
 		fmt.Printf("\nDefault Pubkey: %s\n", hex.EncodeToString(clientConf.GetDefaultPubkey().Key[:]))

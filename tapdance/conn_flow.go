@@ -294,7 +294,7 @@ func (flowConn *TapdanceFlowConn) readRawData(msgLen int) ([]byte, error) {
 	return flowConn.recvbuf[:readBytesTotal], err
 }
 
-func (flowConn *TapdanceFlowConn) readProtobuf(msgLen int) (msg pb.StationToClient, err error) {
+func (flowConn *TapdanceFlowConn) readProtobuf(msgLen int) (msg *pb.StationToClient, err error) {
 	rbuf := make([]byte, msgLen)
 	var readBytes int
 	var readBytesTotal int // both header and body
@@ -309,7 +309,8 @@ func (flowConn *TapdanceFlowConn) readProtobuf(msgLen int) (msg pb.StationToClie
 			}
 		}
 	}
-	err = proto.Unmarshal(rbuf[:], &msg)
+	msg = &pb.StationToClient{}
+	err = proto.Unmarshal(rbuf[:], msg)
 	return
 }
 
@@ -530,7 +531,7 @@ func (flowConn *TapdanceFlowConn) idStr() string {
 	return flowConn.tdRaw.idStr()
 }
 
-func (flowConn *TapdanceFlowConn) processProto(msg pb.StationToClient) error {
+func (flowConn *TapdanceFlowConn) processProto(msg *pb.StationToClient) error {
 	// //[TODO]{priority:after-placement-updates} uncomment to re-enable automatic clientconf downloads
 	//handleConfigInfo := func(conf *pb.ClientConf) {
 	_ = func(conf *pb.ClientConf) {
