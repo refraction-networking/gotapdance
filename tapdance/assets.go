@@ -49,12 +49,12 @@ func AssetsSetDir(dir string) *assets {
 	_initAssets := func() { initAssets(dir) }
 	if assetsInstance != nil {
 		assetsInstance.Lock()
+		defer assetsInstance.Unlock()
 		if dir != assetsInstance.path {
 			Logger().Warnf("Assets path changed %s->%s. (Re)initializing.\n",
 				assetsInstance.path, dir)
 			assetsInstance.path = dir
 			assetsInstance.readConfigs()
-			assetsInstance.Unlock()
 			return assetsInstance
 		}
 	}
