@@ -130,7 +130,7 @@ type APIRegistrar struct {
 	Endpoint string
 
 	// HTTP client to use in request
-	Client http.Client
+	Client *http.Client
 
 	// Length of time to delay after confirming successful
 	// registration before attempting a connection,
@@ -221,6 +221,9 @@ func (r APIRegistrar) executeHTTPRequest(cjSession *ConjureSession, payload []by
 		return err
 	}
 
+	if r.Client == nil {
+		r.Client = http.DefaultClient
+	}
 	resp, err := r.Client.Do(req)
 	if err != nil {
 		Logger().Warnf("%v failed to do HTTP request to registration endpoint %s: %v", cjSession.IDString(), r.Endpoint, err)
