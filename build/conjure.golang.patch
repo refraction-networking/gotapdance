@@ -1,5 +1,5 @@
 diff --git a/psiphon/common/tapdance/tapdance.go b/psiphon/common/tapdance/tapdance.go
-index de08e792..0b857300 100644
+index de08e792..39365065 100644
 --- a/psiphon/common/tapdance/tapdance.go
 +++ b/psiphon/common/tapdance/tapdance.go
 @@ -327,8 +327,19 @@ func Dial(
@@ -8,7 +8,7 @@ index de08e792..0b857300 100644
  
 +	registrar := refraction_networking_tapdance.APIRegistrar{
 +		Endpoint:           "https://registration.refraction.network",
-+		ConnectionDelay:    250 * time.Millisecond,
++		ConnectionDelay:    750 * time.Millisecond,
 +		MaxRetries:         3,
 +		SecondaryRegistrar: refraction_networking_tapdance.DecoyRegistrar{},
 +	}
