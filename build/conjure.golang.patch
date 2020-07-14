@@ -1,5 +1,5 @@
 diff --git a/psiphon/common/tapdance/tapdance.go b/psiphon/common/tapdance/tapdance.go
-index de08e792..c9aeb835 100644
+index de08e792..0b857300 100644
 --- a/psiphon/common/tapdance/tapdance.go
 +++ b/psiphon/common/tapdance/tapdance.go
 @@ -327,8 +327,19 @@ func Dial(
@@ -15,11 +15,11 @@ index de08e792..c9aeb835 100644
 +
  	tapdanceDialer := &refraction_networking_tapdance.Dialer{
 -		TcpDialer: manager.dial,
-+		TcpDialer:           manager.dial,
-+		DarkDecoy:           true,
-+		UseProxyHeader:      true,
-+		Width:               5,
-+		DarkDecoryRegistrar: registrar,
++		TcpDialer:          manager.dial,
++		DarkDecoy:          true,
++		UseProxyHeader:     true,
++		Width:              5,
++		DarkDecoyRegistrar: registrar,
  	}
  
  	// If the dial context is cancelled, use dialManager to interrupt
