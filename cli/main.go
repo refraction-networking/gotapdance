@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pkg/profile"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
@@ -104,7 +105,6 @@ func connectDirect(td bool, apiEndpoint string, connect_target string, localPort
 	if _, _, err := net.SplitHostPort(connect_target); err != nil {
 		return fmt.Errorf("failed to parse host and port from connect_target %s: %v",
 			connect_target, err)
-		os.Exit(1)
 	}
 
 	l, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: localPort})
@@ -115,7 +115,12 @@ func connectDirect(td bool, apiEndpoint string, connect_target string, localPort
 	tdDialer := tapdance.Dialer{DarkDecoy: !td, DarkDecoyRegistrar: tapdance.DecoyRegistrar{}, UseProxyHeader: proxyHeader, V6Support: v6Support, Width: width}
 
 	if apiEndpoint != "" {
-		tdDialer.DarkDecoyRegistrar = tapdance.APIRegistrar{Endpoint: apiEndpoint}
+		tdDialer.DarkDecoyRegistrar = tapdance.APIRegistrar{
+			Endpoint:           apiEndpoint,
+			ConnectionDelay:    250 * time.Millisecond,
+			MaxRetries:         3,
+			SecondaryRegistrar: tapdance.DecoyRegistrar{},
+		}
 	}
 
 	for {

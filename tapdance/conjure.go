@@ -37,16 +37,13 @@ type Registrar interface {
 type DecoyRegistrar struct{}
 
 func (DecoyRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (*ConjureReg, error) {
-	var err error
-
 	Logger().Debugf("%v Registering V4 and V6 via DecoyRegistrar", cjSession.IDString())
-	cjSession.setV6Support(both)
 
 	// Choose N (width) decoys from decoylist
 	cjSession.RegDecoys = SelectDecoys(cjSession.Keys.SharedSecret, cjSession.V6Support.include, cjSession.Width)
 	phantom4, phantom6, err := SelectPhantom(cjSession.Keys.ConjureSeed, cjSession.V6Support.include)
 	if err != nil {
-		Logger().Warnf("%v failed to select Phantom: %v\n", cjSession.IDString(), err)
+		Logger().Warnf("%v failed to select Phantom: %v", cjSession.IDString(), err)
 		return nil, err
 	}
 
@@ -116,24 +113,52 @@ func (DecoyRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (
 		return nil, &RegError{code: Unreachable, msg: "All decoys failed to register -- Dial Unreachable"}
 	}
 
+	// randomized sleeping here to break the intraflow signal
+	toSleep := reg.getRandomDuration(3000, 212, 3449)
+	Logger().Debugf("%v Successfully sent registrations, sleeping for: %v", cjSession.IDString(), toSleep)
+	time.Sleep(toSleep)
+
 	return reg, nil
 }
 
+// Registration strategy using a centralized REST API to
+// create registrations. Only the Endpoint need be specified;
+// the remaining fields are valid with their zero values and
+// provide the opportunity for additional control over the process.
 type APIRegistrar struct {
 	// Endpoint to use in registration request
 	Endpoint string
 
 	// HTTP client to use in request
 	Client http.Client
+
+	// Length of time to delay after confirming successful
+	// registration before attempting a connection,
+	// allowing for propagation throughout the stations.
+	ConnectionDelay time.Duration
+
+	// Maximum number of retries before giving up
+	MaxRetries int
+
+	// A secondary registration method to use on failure.
+	// Because the API registration can give us definite
+	// indication of a failure to register, this can be
+	// used as a "backup" in the case of the API being
+	// down or being blocked.
+	//
+	// If this field is nil, no secondary registration will
+	// be attempted. If it is non-nil, after failing to register
+	// (retrying MaxRetries times) we will fall back to
+	// the Register method on this field.
+	SecondaryRegistrar Registrar
 }
 
 func (r APIRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (*ConjureReg, error) {
 	Logger().Debugf("%v registering via APIRegistrar", cjSession.IDString())
-	cjSession.setV6Support(both)
 	// TODO: this section is duplicated from DecoyRegistrar; consider consolidating
 	phantom4, phantom6, err := SelectPhantom(cjSession.Keys.ConjureSeed, cjSession.V6Support.include)
 	if err != nil {
-		Logger().Warnf("%v failed to select Phantom: %v\n", cjSession.IDString(), err)
+		Logger().Warnf("%v failed to select Phantom: %v", cjSession.IDString(), err)
 		return nil, err
 	}
 
@@ -159,28 +184,55 @@ func (r APIRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (
 
 	payload, err := proto.Marshal(&protoPayload)
 	if err != nil {
-		Logger().Warnf("%v failed to marshal ClientToStation payload: %v\n", cjSession.IDString(), err)
+		Logger().Warnf("%v failed to marshal ClientToStation payload: %v", cjSession.IDString(), err)
 		return nil, err
 	}
 
+	tries := 0
+	for tries < r.MaxRetries+1 {
+		tries++
+		err = r.executeHTTPRequest(cjSession, payload)
+		if err == nil {
+			Logger().Debugf("%v API registration succeeded", cjSession.IDString())
+			if r.ConnectionDelay != 0 {
+				Logger().Debugf("%v sleeping for %v", cjSession.IDString(), r.ConnectionDelay)
+				time.Sleep(r.ConnectionDelay)
+			}
+			return reg, nil
+		}
+		Logger().Warnf("%v failed API registration, attempt %d/%d", cjSession.IDString(), tries, r.MaxRetries+1)
+	}
+
+	// If we make it here, we failed API registration
+	Logger().Warnf("%v giving up on API registration", cjSession.IDString())
+
+	if r.SecondaryRegistrar != nil {
+		Logger().Debugf("%v trying secondary registration method", cjSession.IDString())
+		return r.SecondaryRegistrar.Register(cjSession, ctx)
+	}
+
+	return nil, err
+}
+
+func (r APIRegistrar) executeHTTPRequest(cjSession *ConjureSession, payload []byte) error {
 	req, err := http.NewRequest("POST", r.Endpoint, bytes.NewReader(payload))
 	if err != nil {
-		Logger().Warnf("%v failed to create HTTP request to registration endpoint %s: %v\n", cjSession.IDString(), r.Endpoint, err)
-		return nil, err
+		Logger().Warnf("%v failed to create HTTP request to registration endpoint %s: %v", cjSession.IDString(), r.Endpoint, err)
+		return err
 	}
 
 	resp, err := r.Client.Do(req)
 	if err != nil {
-		Logger().Warnf("%v failed to do HTTP request to registration endpoint %s: %v\n", cjSession.IDString(), r.Endpoint, err)
-		return nil, err
+		Logger().Warnf("%v failed to do HTTP request to registration endpoint %s: %v", cjSession.IDString(), r.Endpoint, err)
+		return err
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		Logger().Warnf("%v got non-success response code %d from registration endpoint %v\n", cjSession.IDString(), resp.StatusCode, r.Endpoint)
-		return nil, fmt.Errorf("non-success response code %d on %s", resp.StatusCode, r.Endpoint)
+		Logger().Warnf("%v got non-success response code %d from registration endpoint %v", cjSession.IDString(), resp.StatusCode, r.Endpoint)
+		return fmt.Errorf("non-success response code %d on %s", resp.StatusCode, r.Endpoint)
 	}
 
-	return reg, nil
+	return nil
 }
 
 const (
@@ -205,6 +257,8 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 		return nil, fmt.Errorf("No Session Provided")
 	}
 
+	cjSession.setV6Support(both)
+
 	// Choose Phantom Address in Register depending on v6 support.
 	registration, err := registrationMethod.Register(cjSession, ctx)
 	if err != nil {
@@ -212,12 +266,8 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 		return nil, err
 	}
 
-	// randomized sleeping here to break the intraflow signal
-	toSleep := registration.getRandomDuration(3000, 212, 3449)
-	Logger().Debugf("%v Successfully sent registrations, sleeping for: %v ms", cjSession.IDString(), toSleep)
-	time.Sleep(toSleep)
+	Logger().Debugf("%v Attempting to Connect ...", cjSession.IDString())
 
-	Logger().Debugf("%v Woke from sleep, attempting to Connect ...", cjSession.IDString())
 	return registration.Connect(ctx)
 	// return Connect(cjSession)
 }
