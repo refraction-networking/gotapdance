@@ -117,7 +117,7 @@ func connectDirect(td bool, apiEndpoint string, connect_target string, localPort
 	if apiEndpoint != "" {
 		tdDialer.DarkDecoyRegistrar = tapdance.APIRegistrar{
 			Endpoint:           apiEndpoint,
-			ConnectionDelay:    250 * time.Millisecond,
+			ConnectionDelay:    750 * time.Millisecond,
 			MaxRetries:         3,
 			SecondaryRegistrar: tapdance.DecoyRegistrar{},
 		}
