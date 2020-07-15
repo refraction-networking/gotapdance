@@ -229,6 +229,7 @@ func (r APIRegistrar) executeHTTPRequest(cjSession *ConjureSession, payload []by
 		Logger().Warnf("%v failed to do HTTP request to registration endpoint %s: %v", cjSession.IDString(), r.Endpoint, err)
 		return err
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		Logger().Warnf("%v got non-success response code %d from registration endpoint %v", cjSession.IDString(), resp.StatusCode, r.Endpoint)
