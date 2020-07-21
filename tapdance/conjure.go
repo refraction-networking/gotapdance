@@ -188,6 +188,11 @@ func (r APIRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (
 		return nil, err
 	}
 
+	if r.Client == nil {
+		r.Client = http.DefaultClient
+		r.Client.Transport = &http.Transport{DialContext: reg.TcpDialer}
+	}
+
 	tries := 0
 	for tries < r.MaxRetries+1 {
 		tries++
@@ -221,9 +226,6 @@ func (r APIRegistrar) executeHTTPRequest(cjSession *ConjureSession, payload []by
 		return err
 	}
 
-	if r.Client == nil {
-		r.Client = http.DefaultClient
-	}
 	resp, err := r.Client.Do(req)
 	if err != nil {
 		Logger().Warnf("%v failed to do HTTP request to registration endpoint %s: %v", cjSession.IDString(), r.Endpoint, err)
