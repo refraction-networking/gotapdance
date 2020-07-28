@@ -163,6 +163,13 @@ message StationToClient {
     optional bytes padding = 100;
 }
 
+message RegistrationFlags {
+	optional bool upload_only = 1;
+	optional bool dark_decoy = 2;
+	optional bool proxy_header = 3;
+	optional bool use_TIL = 4;
+}
+
 message ClientToStation {
     optional uint32 protocol_version = 1;
 
@@ -202,6 +209,9 @@ message ClientToStation {
     optional bool v6_support = 22;
     optional bool v4_support = 23;
 
+	// A collection of optional flags for the registration.
+	optional RegistrationFlags flags = 24;
+
     // Random-sized junk to defeat packet size fingerprinting.
     optional bytes padding = 100;
 }
@@ -214,6 +224,11 @@ message ClientToAPI {
 
     // The ClientToStation payload; the same as used in decoy registrations.
     optional ClientToStation registration_payload = 2;
+}
+
+message ZMQPayload {
+	optional bytes shared_secret = 1;
+	optional ClientToStation registration_payload = 3;
 }
 
 message SessionStats {
