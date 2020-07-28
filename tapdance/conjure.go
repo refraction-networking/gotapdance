@@ -54,15 +54,16 @@ func (DecoyRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (
 
 	//[reference] Prepare registration
 	reg := &ConjureReg{
-		sessionIDStr:  cjSession.IDString(),
-		keys:          cjSession.Keys,
-		stats:         &pb.SessionStats{},
-		phantom4:      phantom4,
-		phantom6:      phantom6,
-		v6Support:     cjSession.V6Support.include,
-		covertAddress: cjSession.CovertAddress,
-		transport:     cjSession.Transport,
-		TcpDialer:     cjSession.TcpDialer,
+		sessionIDStr:   cjSession.IDString(),
+		keys:           cjSession.Keys,
+		stats:          &pb.SessionStats{},
+		phantom4:       phantom4,
+		phantom6:       phantom6,
+		v6Support:      cjSession.V6Support.include,
+		covertAddress:  cjSession.CovertAddress,
+		transport:      cjSession.Transport,
+		TcpDialer:      cjSession.TcpDialer,
+		useProxyHeader: cjSession.UseProxyHeader,
 	}
 
 	// //[TODO]{priority:later} How to pass context to multiple registration goroutines?
@@ -169,15 +170,16 @@ func (r APIRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (
 
 	// [reference] Prepare registration
 	reg := &ConjureReg{
-		sessionIDStr:  cjSession.IDString(),
-		keys:          cjSession.Keys,
-		stats:         &pb.SessionStats{},
-		phantom4:      phantom4,
-		phantom6:      phantom6,
-		v6Support:     cjSession.V6Support.include,
-		covertAddress: cjSession.CovertAddress,
-		transport:     cjSession.Transport,
-		TcpDialer:     cjSession.TcpDialer,
+		sessionIDStr:   cjSession.IDString(),
+		keys:           cjSession.Keys,
+		stats:          &pb.SessionStats{},
+		phantom4:       phantom4,
+		phantom6:       phantom6,
+		v6Support:      cjSession.V6Support.include,
+		covertAddress:  cjSession.CovertAddress,
+		transport:      cjSession.Transport,
+		TcpDialer:      cjSession.TcpDialer,
+		useProxyHeader: cjSession.UseProxyHeader,
 	}
 
 	c2s := reg.generateClientToStation()
@@ -701,6 +703,24 @@ func (reg *ConjureReg) getPbTransport() pb.TransportType {
 	return pb.TransportType(reg.transport)
 }
 
+func (reg *ConjureReg) generateFlags() *pb.RegistrationFlags {
+	flags := &pb.RegistrationFlags{}
+	mask := default_flags
+	if reg.useProxyHeader {
+		mask |= tdFlagProxyHeader
+	}
+
+	uploadOnly := mask&tdFlagUploadOnly == tdFlagUploadOnly
+	proxy := mask&tdFlagProxyHeader == tdFlagProxyHeader
+	til := mask&tdFlagUseTIL == tdFlagUseTIL
+
+	flags.UploadOnly = &uploadOnly
+	flags.ProxyHeader = &proxy
+	flags.Use_TIL = &til
+
+	return flags
+}
+
 func (reg *ConjureReg) generateClientToStation() *pb.ClientToStation {
 	var covert *string
 	if len(reg.covertAddress) > 0 {
@@ -719,6 +739,7 @@ func (reg *ConjureReg) generateClientToStation() *pb.ClientToStation {
 		V6Support:           reg.getV6Support(),
 		V4Support:           reg.getV4Support(),
 		Transport:           &transport,
+		Flags:               reg.generateFlags(),
 		// StateTransition:     &transition,
 
 		//[TODO]{priority:medium} specify width in C2S because different width might
@@ -744,12 +765,6 @@ func (reg *ConjureReg) generateVSP() ([]byte, error) {
 func (reg *ConjureReg) generateFSP(espSize uint16) []byte {
 	buf := make([]byte, 6)
 	binary.BigEndian.PutUint16(buf[0:2], espSize)
-	flags := default_flags
-
-	if reg.useProxyHeader {
-		flags |= tdFlagProxyHeader
-	}
-	buf[2] = flags
 
 	return buf
 }
