@@ -351,10 +351,9 @@ func makeConjureSession(covert string) *ConjureSession {
 		Width:          defaultRegWidth,
 		V6Support:      &V6{support: true, include: both},
 		UseProxyHeader: false,
-		Transport:      pb.TransportType_Obfs4Transport,
-		// Transport:     NullTransport,
-		CovertAddress: covert,
-		SessionID:     sessionsTotal.GetAndInc(),
+		Transport:      pb.TransportType_Obfs4,
+		CovertAddress:  covert,
+		SessionID:      sessionsTotal.GetAndInc(),
 	}
 
 	sharedSecretStr := make([]byte, hex.EncodedLen(len(keys.SharedSecret)))
@@ -465,7 +464,7 @@ func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
 	phantoms := []net.IP{*reg.phantom4, *reg.phantom6}
 	//[reference] Provide chosen transport to sent bytes (or connect) if necessary
 	switch reg.transport {
-	case pb.TransportType_MinTransport:
+	case pb.TransportType_Min:
 		conn, err := reg.getFirstConnection(ctx, reg.TcpDialer, phantoms)
 		if err != nil {
 			Logger().Infof("%v failed to form phantom connection: %v", reg.sessionIDStr, err)
@@ -477,7 +476,7 @@ func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
 		conn.Write(connectTag)
 		return conn, nil
 
-	case pb.TransportType_Obfs4Transport:
+	case pb.TransportType_Obfs4:
 		args := pt.Args{}
 		args.Add("node-id", reg.keys.Obfs4Keys.NodeID.Hex())
 		args.Add("public-key", reg.keys.Obfs4Keys.PublicKey.Hex())
@@ -510,7 +509,7 @@ func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
 		}
 
 		return conn, err
-	case pb.TransportType_NullTransport:
+	case pb.TransportType_Null:
 		// Do nothing to the connection before returning it to the user.
 		// fmt.Printf("Using Null Transport\n")
 		// return conn, nil
