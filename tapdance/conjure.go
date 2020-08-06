@@ -510,14 +510,12 @@ func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
 
 		return conn, err
 	case pb.TransportType_Null:
-		// Do nothing to the connection before returning it to the user.
-		// fmt.Printf("Using Null Transport\n")
-		// return conn, nil
+		// Dial and do nothing to the connection before returning it to the user.
+		return reg.getFirstConnection(ctx, reg.TcpDialer, phantoms)
 	default:
 		// If transport is unrecognized use min transport.
 		return nil, fmt.Errorf("Unknown Transport")
 	}
-	return nil, nil
 }
 
 // ConjureReg - Registration structure created for each individual registration within a session.
