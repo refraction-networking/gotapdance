@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pkg/profile"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
@@ -36,6 +37,7 @@ func main() {
 		"Default(unset): connects client to \nforwardproxy, to which CONNECT request is yet to be written.")
 
 	var td = flag.Bool("td", false, "Enable tapdance cli mode for compatibility")
+	var APIRegistration = flag.String("api-endpoint", "", "If set, API endpoint to use when performing API registration. If not set, uses decoy registration.")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Dark Decoy CLI\n$./cli -connect-addr=<decoy_address> [OPTIONS] \n\nOptions:\n")
@@ -85,7 +87,7 @@ func main() {
 		fmt.Printf("Using Station Pubkey: %s\n", hex.EncodeToString(tapdance.Assets().GetConjurePubkey()[:]))
 	}
 
-	err := connectDirect(*td, *connect_target, *port, *proxyHeader, v6Support, *width)
+	err := connectDirect(*td, *APIRegistration, *connect_target, *port, *proxyHeader, v6Support, *width)
 	if err != nil {
 		tapdance.Logger().Println(err)
 		os.Exit(1)
@@ -99,11 +101,10 @@ func main() {
 	}
 }
 
-func connectDirect(td bool, connect_target string, localPort int, proxyHeader bool, v6Support bool, width int) error {
+func connectDirect(td bool, apiEndpoint string, connect_target string, localPort int, proxyHeader bool, v6Support bool, width int) error {
 	if _, _, err := net.SplitHostPort(connect_target); err != nil {
 		return fmt.Errorf("failed to parse host and port from connect_target %s: %v",
 			connect_target, err)
-		os.Exit(1)
 	}
 
 	l, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: localPort})
@@ -111,7 +112,16 @@ func connectDirect(td bool, connect_target string, localPort int, proxyHeader bo
 		return fmt.Errorf("error listening on port %v: %v", localPort, err)
 	}
 
-	tdDialer := tapdance.Dialer{DarkDecoy: !td, UseProxyHeader: proxyHeader, V6Support: v6Support, Width: width}
+	tdDialer := tapdance.Dialer{DarkDecoy: !td, DarkDecoyRegistrar: tapdance.DecoyRegistrar{}, UseProxyHeader: proxyHeader, V6Support: v6Support, Width: width}
+
+	if apiEndpoint != "" {
+		tdDialer.DarkDecoyRegistrar = tapdance.APIRegistrar{
+			Endpoint:           apiEndpoint,
+			ConnectionDelay:    750 * time.Millisecond,
+			MaxRetries:         3,
+			SecondaryRegistrar: tapdance.DecoyRegistrar{},
+		}
+	}
 
 	for {
 		clientConn, err := l.AcceptTCP()

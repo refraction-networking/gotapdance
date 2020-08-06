@@ -1,6 +1,7 @@
 package tapdance
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -9,6 +10,7 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"net/http"
 	"strconv"
 	"sync"
 	"time"
@@ -26,6 +28,221 @@ type V6 struct {
 	include uint
 }
 
+// Registrar defines the interface for a service executing
+// decoy registrations.
+type Registrar interface {
+	Register(*ConjureSession, context.Context) (*ConjureReg, error)
+}
+
+type DecoyRegistrar struct{}
+
+func (DecoyRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (*ConjureReg, error) {
+	Logger().Debugf("%v Registering V4 and V6 via DecoyRegistrar", cjSession.IDString())
+
+	// Choose N (width) decoys from decoylist
+	cjSession.RegDecoys = SelectDecoys(cjSession.Keys.SharedSecret, cjSession.V6Support.include, cjSession.Width)
+	phantom4, phantom6, err := SelectPhantom(cjSession.Keys.ConjureSeed, cjSession.V6Support.include)
+	if err != nil {
+		Logger().Warnf("%v failed to select Phantom: %v", cjSession.IDString(), err)
+		return nil, err
+	}
+
+	//[reference] Prepare registration
+	reg := &ConjureReg{
+		sessionIDStr:   cjSession.IDString(),
+		keys:           cjSession.Keys,
+		stats:          &pb.SessionStats{},
+		phantom4:       phantom4,
+		phantom6:       phantom6,
+		v6Support:      cjSession.V6Support.include,
+		covertAddress:  cjSession.CovertAddress,
+		transport:      cjSession.Transport,
+		TcpDialer:      cjSession.TcpDialer,
+		useProxyHeader: cjSession.UseProxyHeader,
+	}
+
+	// //[TODO]{priority:later} How to pass context to multiple registration goroutines?
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	width := uint(len(cjSession.RegDecoys))
+	if width < cjSession.Width {
+		Logger().Warnf("%v Using width %v (default %v)", cjSession.IDString(), width, cjSession.Width)
+	}
+
+	Logger().Debugf("%v Registration - v6:%v, covert:%v, phantoms:%v,[%v], width:%v, transport:%v",
+		reg.sessionIDStr,
+		reg.v6SupportStr(),
+		reg.covertAddress,
+		reg.phantom4.String(),
+		reg.phantom6.String(),
+		cjSession.Width,
+		cjSession.Transport,
+	)
+
+	//[reference] Send registrations to each decoy
+	dialErrors := make(chan error, width)
+	for _, decoy := range cjSession.RegDecoys {
+		Logger().Debugf("%v Sending Reg: %v, %v", cjSession.IDString(), decoy.GetHostname(), decoy.GetIpAddrStr())
+		//decoyAddr := decoy.GetIpAddrStr()
+		go reg.send(ctx, decoy, dialErrors, cjSession.registrationCallback)
+	}
+
+	//[reference] Dial errors happen immediately so block until all N dials complete
+	var unreachableCount uint = 0
+	for err := range dialErrors {
+		if err != nil {
+			Logger().Debugf("%v %v", cjSession.IDString(), err)
+			if dialErr, ok := err.(RegError); ok && dialErr.code == Unreachable {
+				// If we failed because ipv6 network was unreachable try v4 only.
+				unreachableCount++
+				if unreachableCount < width {
+					continue
+				} else {
+					break
+				}
+			}
+		}
+		//[reference] if we succeed or fail for any other reason then the network is reachable and we can continue
+		break
+	}
+
+	//[reference] if ALL fail to dial return error (retry in parent if ipv6 unreachable)
+	if unreachableCount == width {
+		Logger().Debugf("%v NETWORK UNREACHABLE", cjSession.IDString())
+		return nil, &RegError{code: Unreachable, msg: "All decoys failed to register -- Dial Unreachable"}
+	}
+
+	// randomized sleeping here to break the intraflow signal
+	toSleep := reg.getRandomDuration(3000, 212, 3449)
+	Logger().Debugf("%v Successfully sent registrations, sleeping for: %v", cjSession.IDString(), toSleep)
+	time.Sleep(toSleep)
+
+	return reg, nil
+}
+
+// Registration strategy using a centralized REST API to
+// create registrations. Only the Endpoint need be specified;
+// the remaining fields are valid with their zero values and
+// provide the opportunity for additional control over the process.
+type APIRegistrar struct {
+	// Endpoint to use in registration request
+	Endpoint string
+
+	// HTTP client to use in request
+	Client *http.Client
+
+	// Length of time to delay after confirming successful
+	// registration before attempting a connection,
+	// allowing for propagation throughout the stations.
+	ConnectionDelay time.Duration
+
+	// Maximum number of retries before giving up
+	MaxRetries int
+
+	// A secondary registration method to use on failure.
+	// Because the API registration can give us definite
+	// indication of a failure to register, this can be
+	// used as a "backup" in the case of the API being
+	// down or being blocked.
+	//
+	// If this field is nil, no secondary registration will
+	// be attempted. If it is non-nil, after failing to register
+	// (retrying MaxRetries times) we will fall back to
+	// the Register method on this field.
+	SecondaryRegistrar Registrar
+}
+
+func (r APIRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (*ConjureReg, error) {
+	Logger().Debugf("%v registering via APIRegistrar", cjSession.IDString())
+	// TODO: this section is duplicated from DecoyRegistrar; consider consolidating
+	phantom4, phantom6, err := SelectPhantom(cjSession.Keys.ConjureSeed, cjSession.V6Support.include)
+	if err != nil {
+		Logger().Warnf("%v failed to select Phantom: %v", cjSession.IDString(), err)
+		return nil, err
+	}
+
+	// [reference] Prepare registration
+	reg := &ConjureReg{
+		sessionIDStr:   cjSession.IDString(),
+		keys:           cjSession.Keys,
+		stats:          &pb.SessionStats{},
+		phantom4:       phantom4,
+		phantom6:       phantom6,
+		v6Support:      cjSession.V6Support.include,
+		covertAddress:  cjSession.CovertAddress,
+		transport:      cjSession.Transport,
+		TcpDialer:      cjSession.TcpDialer,
+		useProxyHeader: cjSession.UseProxyHeader,
+	}
+
+	c2s := reg.generateClientToStation()
+
+	protoPayload := pb.ClientToAPI{
+		Secret:              cjSession.Keys.SharedSecret,
+		RegistrationPayload: c2s,
+	}
+
+	payload, err := proto.Marshal(&protoPayload)
+	if err != nil {
+		Logger().Warnf("%v failed to marshal ClientToStation payload: %v", cjSession.IDString(), err)
+		return nil, err
+	}
+
+	if r.Client == nil {
+		r.Client = http.DefaultClient
+		r.Client.Transport = &http.Transport{DialContext: reg.TcpDialer}
+	}
+
+	tries := 0
+	for tries < r.MaxRetries+1 {
+		tries++
+		err = r.executeHTTPRequest(cjSession, payload)
+		if err == nil {
+			Logger().Debugf("%v API registration succeeded", cjSession.IDString())
+			if r.ConnectionDelay != 0 {
+				Logger().Debugf("%v sleeping for %v", cjSession.IDString(), r.ConnectionDelay)
+				time.Sleep(r.ConnectionDelay)
+			}
+			return reg, nil
+		}
+		Logger().Warnf("%v failed API registration, attempt %d/%d", cjSession.IDString(), tries, r.MaxRetries+1)
+	}
+
+	// If we make it here, we failed API registration
+	Logger().Warnf("%v giving up on API registration", cjSession.IDString())
+
+	if r.SecondaryRegistrar != nil {
+		Logger().Debugf("%v trying secondary registration method", cjSession.IDString())
+		return r.SecondaryRegistrar.Register(cjSession, ctx)
+	}
+
+	return nil, err
+}
+
+func (r APIRegistrar) executeHTTPRequest(cjSession *ConjureSession, payload []byte) error {
+	req, err := http.NewRequest("POST", r.Endpoint, bytes.NewReader(payload))
+	if err != nil {
+		Logger().Warnf("%v failed to create HTTP request to registration endpoint %s: %v", cjSession.IDString(), r.Endpoint, err)
+		return err
+	}
+
+	resp, err := r.Client.Do(req)
+	if err != nil {
+		Logger().Warnf("%v failed to do HTTP request to registration endpoint %s: %v", cjSession.IDString(), r.Endpoint, err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		Logger().Warnf("%v got non-success response code %d from registration endpoint %v", cjSession.IDString(), resp.StatusCode, r.Endpoint)
+		return fmt.Errorf("non-success response code %d on %s", resp.StatusCode, r.Endpoint)
+	}
+
+	return nil
+}
+
 const (
 	v4 uint = iota
 	v6
@@ -36,45 +253,31 @@ const (
 const defaultRegWidth = 5
 
 // DialConjureAddr - Perform Registration and Dial after creating  a Conjure session from scratch
-func DialConjureAddr(ctx context.Context, address string) (net.Conn, error) {
+func DialConjureAddr(ctx context.Context, address string, registrationMethod Registrar) (net.Conn, error) {
 	cjSession := makeConjureSession(address)
-	return DialConjure(ctx, cjSession)
+	return DialConjure(ctx, cjSession, registrationMethod)
 }
 
 // DialConjure - Perform Registration and Dial on an existing Conjure session
-func DialConjure(ctx context.Context, cjSession *ConjureSession) (net.Conn, error) {
+func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMethod Registrar) (net.Conn, error) {
 
 	if cjSession == nil {
 		return nil, fmt.Errorf("No Session Provided")
 	}
 
+	cjSession.setV6Support(both)
+
 	// Choose Phantom Address in Register depending on v6 support.
-	registration, err := Register(ctx, cjSession)
+	registration, err := registrationMethod.Register(cjSession, ctx)
 	if err != nil {
 		Logger().Debugf("%v Failed to register: %v", cjSession.IDString(), err)
 		return nil, err
 	}
 
-	// randomized sleeping here to break the intraflow signal
-	toSleep := registration.getRandomDuration(3000, 212, 3449)
-	Logger().Debugf("%v Successfully sent registrations, sleeping for: %v ms", cjSession.IDString(), toSleep)
-	time.Sleep(toSleep)
+	Logger().Debugf("%v Attempting to Connect ...", cjSession.IDString())
 
-	Logger().Debugf("%v Woke from sleep, attempting to Connect ...", cjSession.IDString())
 	return registration.Connect(ctx)
 	// return Connect(cjSession)
-}
-
-// Register - Send registrations equal to the width specified in the Conjure Session
-func Register(ctx context.Context, cjSession *ConjureSession) (*ConjureReg, error) {
-	var err error
-	var reg *ConjureReg
-
-	Logger().Debugf("%v Registering V4 and V6", cjSession.IDString())
-	cjSession.setV6Support(both)
-	reg, err = cjSession.register(ctx)
-
-	return reg, err
 }
 
 // // testV6 -- This is over simple and incomplete (currently unused)
@@ -118,7 +321,7 @@ type ConjureSession struct {
 	SessionID      uint64
 	RegDecoys      []*pb.TLSDecoySpec // pb.DecoyList
 	Phantom        *net.IP
-	Transport      uint
+	Transport      TransportType
 	CovertAddress  string
 	// rtt			   uint // tracked in stats
 
@@ -131,11 +334,13 @@ type ConjureSession struct {
 	stats *pb.SessionStats
 }
 
-// Define transports here=p0
-//[TODO]{priority:winter-break} make this it's own type / interface
+// TransportType describes valid transports for
+// use in connection to the phantom proxy.
+type TransportType uint
+
 const (
 	// NullTransport - Used for debugging. No association of phantom IP to session/registration
-	NullTransport uint = iota
+	NullTransport TransportType = iota
 
 	// MinTransport - Minimal transport used to connect  station (default)
 	MinTransport
@@ -193,86 +398,6 @@ func (cjSession *ConjureSession) IDString() string {
 func (cjSession *ConjureSession) String() string {
 	return cjSession.IDString()
 	// expand for debug??
-}
-
-func (cjSession *ConjureSession) register(ctx context.Context) (*ConjureReg, error) {
-	var err error
-
-	// Choose N (width) decoys from decoylist
-	cjSession.RegDecoys = SelectDecoys(cjSession.Keys.SharedSecret, cjSession.V6Support.include, cjSession.Width)
-	phantom4, phantom6, err := SelectPhantom(cjSession.Keys.ConjureSeed, cjSession.V6Support.include)
-	if err != nil {
-		Logger().Warnf("%v failed to select Phantom: %v\n", cjSession.IDString(), err)
-		return nil, err
-	}
-
-	//[reference] Prepare registration
-	reg := &ConjureReg{
-		sessionIDStr:  cjSession.IDString(),
-		keys:          cjSession.Keys,
-		stats:         &pb.SessionStats{},
-		phantom4:      phantom4,
-		phantom6:      phantom6,
-		v6Support:     cjSession.V6Support.include,
-		covertAddress: cjSession.CovertAddress,
-		transport:     cjSession.Transport,
-		TcpDialer:     cjSession.TcpDialer,
-	}
-
-	// //[TODO]{priority:later} How to pass context to multiple registration goroutines?
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	width := uint(len(cjSession.RegDecoys))
-	if width < cjSession.Width {
-		Logger().Warnf("%v Using width %v (default %v)", cjSession.IDString(), width, cjSession.Width)
-	}
-
-	Logger().Debugf("%v Registration - v6:%v, covert:%v, phantoms:%v,[%v], width:%v, transport:%v",
-		reg.sessionIDStr,
-		reg.v6SupportStr(),
-		reg.covertAddress,
-		reg.phantom4.String(),
-		reg.phantom6.String(),
-		cjSession.Width,
-		cjSession.Transport,
-	)
-
-	//[reference] Send registrations to each decoy
-	dialErrors := make(chan error, width)
-	for _, decoy := range cjSession.RegDecoys {
-		Logger().Debugf("%v Sending Reg: %v, %v", cjSession.IDString(), decoy.GetHostname(), decoy.GetIpAddrStr())
-		//decoyAddr := decoy.GetIpAddrStr()
-		go reg.send(ctx, decoy, dialErrors, cjSession.registrationCallback)
-	}
-
-	//[reference] Dial errors happen immediately so block until all N dials complete
-	var unreachableCount uint = 0
-	for err := range dialErrors {
-		if err != nil {
-			Logger().Debugf("%v %v", cjSession.IDString(), err)
-			if dialErr, ok := err.(RegError); ok && dialErr.code == Unreachable {
-				// If we failed because ipv6 network was unreachable try v4 only.
-				unreachableCount++
-				if unreachableCount < width {
-					continue
-				} else {
-					break
-				}
-			}
-		}
-		//[reference] if we succeed or fail for any other reason then the network is reachable and we can continue
-		break
-	}
-
-	//[reference] if ALL fail to dial return error (retry in parent if ipv6 unreachable)
-	if unreachableCount == width {
-		Logger().Debugf("%v NETWORK UNREACHABLE", cjSession.IDString())
-		return nil, &RegError{code: Unreachable, msg: "All decoys failed to register -- Dial Unreachable"}
-	}
-
-	return reg, nil
 }
 
 type resultTuple struct {
@@ -366,7 +491,7 @@ type ConjureReg struct {
 	covertAddress  string
 	phantomSNI     string
 	v6Support      uint
-	transport      uint
+	transport      TransportType
 
 	// THIS IS REQUIRED TO INTERFACE WITH PSIPHON ANDROID
 	//		we use their dialer to prevent connection loopback into our own proxy
@@ -538,7 +663,25 @@ func (reg *ConjureReg) getPbTransport() pb.TransportType {
 	return pb.TransportType(reg.transport)
 }
 
-func (reg *ConjureReg) generateVSP() ([]byte, error) {
+func (reg *ConjureReg) generateFlags() *pb.RegistrationFlags {
+	flags := &pb.RegistrationFlags{}
+	mask := default_flags
+	if reg.useProxyHeader {
+		mask |= tdFlagProxyHeader
+	}
+
+	uploadOnly := mask&tdFlagUploadOnly == tdFlagUploadOnly
+	proxy := mask&tdFlagProxyHeader == tdFlagProxyHeader
+	til := mask&tdFlagUseTIL == tdFlagUseTIL
+
+	flags.UploadOnly = &uploadOnly
+	flags.ProxyHeader = &proxy
+	flags.Use_TIL = &til
+
+	return flags
+}
+
+func (reg *ConjureReg) generateClientToStation() *pb.ClientToStation {
 	var covert *string
 	if len(reg.covertAddress) > 0 {
 		//[TODO]{priority:medium} this isn't the correct place to deal with signaling to the station
@@ -556,6 +699,7 @@ func (reg *ConjureReg) generateVSP() ([]byte, error) {
 		V6Support:           reg.getV6Support(),
 		V4Support:           reg.getV4Support(),
 		Transport:           &transport,
+		Flags:               reg.generateFlags(),
 		// StateTransition:     &transition,
 
 		//[TODO]{priority:medium} specify width in C2S because different width might
@@ -570,19 +714,17 @@ func (reg *ConjureReg) generateVSP() ([]byte, error) {
 		initProto.Padding = append(initProto.Padding, byte(0))
 	}
 
+	return initProto
+}
+
+func (reg *ConjureReg) generateVSP() ([]byte, error) {
 	//[reference] Marshal ClientToStation protobuf
-	return proto.Marshal(initProto)
+	return proto.Marshal(reg.generateClientToStation())
 }
 
 func (reg *ConjureReg) generateFSP(espSize uint16) []byte {
 	buf := make([]byte, 6)
 	binary.BigEndian.PutUint16(buf[0:2], espSize)
-	flags := default_flags
-
-	if reg.useProxyHeader {
-		flags |= tdFlagProxyHeader
-	}
-	buf[2] = flags
 
 	return buf
 }

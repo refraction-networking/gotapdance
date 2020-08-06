@@ -34,7 +34,7 @@ func setupTestAssets() error {
 		return err
 	}
 
-	pubKey := pb.PubKey{
+	pubKey := &pb.PubKey{
 		Key:  stationTestPubkey,
 		Type: &keyType,
 	}

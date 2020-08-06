@@ -1,12 +1,18 @@
 package tapdance
 
 import (
+	"bytes"
+	"context"
 	"crypto/hmac"
 	"encoding/hex"
 	"fmt"
+	"io/ioutil"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/golang/protobuf/proto"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	tls "github.com/refraction-networking/utls"
 )
@@ -159,4 +165,43 @@ func TestSelectDecoys(t *testing.T) {
 	if len(decoys) < 5 {
 		t.Fatalf("Not enough decoys returned from selection.")
 	}
+}
+
+func TestAPIRegistrar(t *testing.T) {
+	AssetsSetDir("./assets")
+	session := makeConjureSession("1.2.3.4:1234")
+
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			t.Fatalf("incorrect request method: expected POST, got %v", r.Method)
+		}
+
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("failed to read request body: %v", err)
+		}
+
+		payload := pb.ClientToAPI{}
+		err = proto.Unmarshal(body, &payload)
+		if err != nil {
+			t.Fatalf("failed to decode request body: %v", err)
+		}
+
+		if payload.RegistrationPayload.GetCovertAddress() != "1.2.3.4:1234" {
+			t.Fatalf("incorrect covert address: expected 1.2.3.4:1234, got %s", payload.RegistrationPayload.GetCovertAddress())
+		}
+
+		if !bytes.Equal(payload.GetSecret(), session.Keys.SharedSecret) {
+			t.Fatalf("incorrect shared secret: expected %v, got %v", session.Keys.SharedSecret, payload.GetSecret())
+		}
+	}))
+
+	registrar := APIRegistrar{
+		Endpoint: server.URL,
+		Client:   server.Client(),
+	}
+
+	registrar.Register(session, context.TODO())
+
+	server.Close()
 }
