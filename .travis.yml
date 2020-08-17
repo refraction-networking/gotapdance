@@ -21,7 +21,7 @@ _job_template: &_job_template
   stage: build
   # When Uncommented this will override the defaults set in travis ci web interface.
   env:
-    - PSIPHON_CORE_VERSION="tags/v2.0.11"
+    - PSIPHON_CORE_VERSION="staging-client"
     - PSIPHON_SYSTEM_VERSION="default"
   install:
     - go get ./...
