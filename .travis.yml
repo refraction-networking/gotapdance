@@ -30,7 +30,7 @@ _job_template: &_job_template
     - mkdir -p $GOPATH/src/github.com/Psiphon-Labs
     # Get Specific Psiphon Core Library Release
     - git clone https://github.com/Psiphon-Labs/psiphon-tunnel-core.git $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core
-    - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && git checkout $PSIPHON_CORE_VERSION -b build-refraction-networking)
+    - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && git checkout $PSIPHON_CORE_VERSION)
     # Remove gotapdance from vendored packages (it will look in GOPATH if after vendor directory)
     - go get github.com/kardianos/govendor
     - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && govendor remove github.com/refraction-networking/gotapdance/...)
