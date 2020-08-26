@@ -15,6 +15,12 @@ addons:
 notifications:
   slack:
     secure: ZzIEqFE4XRdE9U2p3aeE32DMtoC8RgjoEavhEQ1oLrWFgUpLktqmp9UVY/U+W6iElilLpDbFpry51+Sv9MWpxJMxr+Q/JJuq/3Bj5KjF/wEtil7qvBYhQ1sM/qUQFG6wRkrMNjZGMiaTmnkWF0rZB8lf7+nbnGFaPW3AVVbD+8gVDWTHI4Hcvvgs0UbrJzoPfpvH0dprOchswc1BBKTgo5c44rvS2fquEMVcqMMiNJ5JQqphuRWLTfzLgOzImSf0/xJJyVp/YTkSnVSg8BcWmDCJ4iB9fJkVyZM9WxcgY/J4T5VzFxfMah9zv2j8UTfzHSMeCJDRL647hdnkmr/Qum/LN91Ey2DJw5KUH743CsAbyGhQML6wZ3NCeEP06hnMDphalU5+BYhtAPyc5CB84g6eLIUQ2EqptuPZpjFQohFnapCTnfB5XKTcW+PjxJsoJzk8x+85Xid+H1nnNxeyf10tLv6Pwy4ZGmEEbsa4SYWXibpIEu3fPJXEdtrht0vM40pDLeUYL6Axmh7hNjmDQOXJG41saF+Rk4AArRhKhMQTmlYCc0e1H2/hIDXUMPbqjHeCpEkaA5W8BFBKynhlJa0JX+rtHDFaK82Di8rXT0NO2ACyG8ZQqk87qePyBYPyfR8hRwhrkmQHlYYOZzV6LBz+ynJuWl9ktcC2irJlHZs=
+  email:
+    if: branch IN (master, conjure)
+    on_success: never
+    on_failure: always
+    recipients: 
+      - jack.wampler@colorao.edu
 
 # Reuse the steps from build for vendoring changes (any redefined key-values with be overwritten)
 _job_template: &_job_template
@@ -22,7 +28,7 @@ _job_template: &_job_template
   # When Uncommented this will override the defaults set in travis ci web interface.
   env:
     - PSIPHON_CORE_VERSION="tags/v2.0.11"
-    - PSIPHON_SYSTEM_VERSION="default"
+    - PSIPHON_ANDROID_VERSION="master"
   install:
     - go get ./...
     # Substitute build string
@@ -114,15 +120,15 @@ jobs:
       before_script:
         # Get Android build environment
         - docker pull refraction/psiandroid:latest
-        - mkdir -p $GOPATH/src/bitbucket.org/psiphon
-        - hg clone https://bitbucket.org/psiphon/psiphon-circumvention-system $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system
-        - (cd $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system && hg checkout $PSIPHON_SYSTEM_VERSION)
+        - mkdir -p $GOPATH/src/github.com/Psiphon-Inc/
+        - git clone https://github.com/Psiphon-Inc/psiphon-android $GOPATH/src/github.com/Psiphon-Inc/psiphon-android
+        - (cd $GOPATH/src/github.com/Psiphon-Inc/psiphon-android && git checkout $PSIPHON_ANDROID_VERSION)
         # Use modified EmbeddedValues.java for TapDance
-        - openssl enc -nosalt -aes-256-cbc -md sha512 -pbkdf2 -iter 1000 -pass pass:$aes_cbc_passwd  -d -in build/EmbeddedValues.java.enc -out $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/src/main/java/com/psiphon3/psiphonlibrary/EmbeddedValues.java
+        - openssl enc -nosalt -aes-256-cbc -md sha512 -pbkdf2 -iter 1000 -pass pass:$aes_cbc_passwd  -d -in build/EmbeddedValues.java.enc -out $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/src/main/java/com/psiphon3/psiphonlibrary/EmbeddedValues.java
         # Patched tunneling protocol for TapDance
-        - patch $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/src/main/java/com/psiphon3/psiphonlibrary/TunnelManager.java build/TunnelManager.java.patch
+        - patch $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/src/main/java/com/psiphon3/psiphonlibrary/TunnelManager.java build/TunnelManager.java.patch
         # Patch the Psiphon app's gradle build for java 1.8 compatibility [TODO]{priority:later} remove this when psiphon merges it themselves
-        - patch $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/build.gradle build/PsiphonCoreGradle.patch
+        - patch $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/build.gradle build/PsiphonCoreGradle.patch
         # Digest this branch's ClientConf into Psiphon's embedded_config
         - ./test_scripts/psiphon_digest_cc.sh ./assets/ClientConf $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/embedded_config.go
         - go get ./...
@@ -134,30 +140,30 @@ jobs:
         - docker run --rm -v $GOPATH//src/github.com/Psiphon-Labs/psiphon-tunnel-core:/go/src/github.com/Psiphon-Labs/psiphon-tunnel-core -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance refraction/psiandroid:latest /bin/bash -c 'cd $GOPATH/src/github.com/refraction-networking/gotapdance && go get ./...;cd $GOPATH/src/github.com/refraction-networking/utls && go get ./...; cd /go/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE"'; cd -
         
         - mv $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android/ca.psiphon.aar build/
-        - cp build/ca.psiphon.aar $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/libs/
+        - cp build/ca.psiphon.aar $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/libs/
 
         # Build the Psiphon android app with the core library that we just compiled. 
         #   This (at time of writing this comment) used android sdk 24.4.1 which has recently changed from using sdkmanager to using a purely android cli
         #   interface. So because the android build system in the psiandroid image has not accepted licensing for a few libraries we have to do that 
         #   ourselves in this run command. This also cannot use the `yes` program because that sends the y character too quickly and actually declines
         #   the license. 
-        - docker run -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android:/go/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android refraction/psiandroid /bin/bash -c '(while true; do echo 'y'; sleep 2; done) | /android-sdk-linux/tools/android update sdk --no-ui --all --filter build-tools-27.0.3; cd /go/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android && ./gradlew assembleDebug'
-        - sudo mv $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/build/outputs/apk/debug/PsiphonAndroid-debug.apk build/PsiphonAndroid-TD-debug.apk
+        - docker run -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src/github.com/Psiphon-Inc/psiphon-android:/go/src/github.com/Psiphon-Inc/psiphon-android refraction/psiandroid /bin/bash -c '(while true; do echo 'y'; sleep 2; done) | /android-sdk-linux/tools/android update sdk --no-ui --all --filter build-tools-27.0.3; cd /go/src/github.com/Psiphon-Inc/psiphon-android && ./gradlew assembleDebug'
+        - sudo mv $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/build/outputs/apk/debug/PsiphonAndroid-debug.apk build/PsiphonAndroid-TD-debug.apk
 
     - <<: *_job_template 
       name: "Build Psiphon Android Library and App for Conjure"
       before_script:
         # Get Android build environment
         - docker pull refraction/psiandroid:latest
-        - mkdir -p $GOPATH/src/bitbucket.org/psiphon
-        - hg clone https://bitbucket.org/psiphon/psiphon-circumvention-system $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system
-        - (cd $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system && hg checkout $PSIPHON_SYSTEM_VERSION)
+        - mkdir -p $GOPATH/src/github.com/Psiphon-Inc/
+        - git clone https://github.com/Psiphon-Inc/psiphon-android $GOPATH/src/github.com/Psiphon-Inc/psiphon-android
+        - (cd $GOPATH/src/github.com/Psiphon-Inc/psiphon-android && git checkout $PSIPHON_ANDROID_VERSION)
         # Use modified EmbeddedValues.java for TapDance
-        - openssl enc -nosalt -aes-256-cbc -md sha512 -pbkdf2 -iter 1000 -pass pass:$aes_cbc_passwd  -d -in build/EmbeddedValues.java.enc -out $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/src/main/java/com/psiphon3/psiphonlibrary/EmbeddedValues.java
+        - openssl enc -nosalt -aes-256-cbc -md sha512 -pbkdf2 -iter 1000 -pass pass:$aes_cbc_passwd  -d -in build/EmbeddedValues.java.enc -out $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/src/main/java/com/psiphon3/psiphonlibrary/EmbeddedValues.java
         # Patched tunneling protocol for TapDance
-        - patch $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/src/main/java/com/psiphon3/psiphonlibrary/TunnelManager.java build/TunnelManager.java.patch
+        - patch $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/src/main/java/com/psiphon3/psiphonlibrary/TunnelManager.java build/TunnelManager.java.patch
         # Patch the Psiphon app's gradle build for java 1.8 compatibility [TODO]{priority:later} remove this when psiphon merges it themselves
-        - patch $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/build.gradle build/PsiphonCoreGradle.patch
+        - patch $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/build.gradle build/PsiphonCoreGradle.patch
         # Add dialer options to enable Conjure 
         - patch $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go build/conjure.golang.patch
         # Digest this branch's ClientConf into Psiphon's embedded_config
@@ -170,12 +176,12 @@ jobs:
         - docker run --rm -v $GOPATH//src/github.com/Psiphon-Labs/psiphon-tunnel-core:/go/src/github.com/Psiphon-Labs/psiphon-tunnel-core -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance refraction/psiandroid:latest /bin/bash -c 'cd $GOPATH/src/github.com/refraction-networking/gotapdance && go get ./...;cd $GOPATH/src/github.com/refraction-networking/utls && go get ./...; cd /go/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE"'; cd -
 
         - mv $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android/ca.psiphon.aar build/
-        - cp build/ca.psiphon.aar $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/libs/
+        - cp build/ca.psiphon.aar $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/libs/
 
         # Build the Psiphon android app with the core library that we just compiled. 
         #   This (at time of writing this comment) used android sdk 24.4.1 which has recently changed from using sdkmanager to using a purely android cli
         #   interface. So because the android build system in the psiandroid image has not accepted licensing for a few libraries we have to do that 
         #   ourselves in this run command. This also cannot use the `yes` program because that sends the y character too quickly and actually declines
         #   the license. 
-        - docker run -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android:/go/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android refraction/psiandroid /bin/bash -c '(while true; do echo 'y'; sleep 2; done) | /android-sdk-linux/tools/android update sdk --no-ui --all --filter build-tools-27.0.3; cd /go/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android && ./gradlew assembleDebug'
-        - sudo mv $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/build/outputs/apk/debug/PsiphonAndroid-debug.apk build/PsiphonAndroid-CJ-debug.apk
+        - docker run -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src/github.com/Psiphon-Inc/psiphon-android:/go/src/github.com/Psiphon-Inc/psiphon-android refraction/psiandroid /bin/bash -c '(while true; do echo 'y'; sleep 2; done) | /android-sdk-linux/tools/android update sdk --no-ui --all --filter build-tools-27.0.3; cd /go/src/github.com/Psiphon-Inc/psiphon-android && ./gradlew assembleDebug'
+        - sudo mv $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/build/outputs/apk/debug/PsiphonAndroid-debug.apk build/PsiphonAndroid-CJ-debug.apk
