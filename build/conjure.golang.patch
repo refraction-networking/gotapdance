@@ -1,8 +1,16 @@
 diff --git a/psiphon/common/tapdance/tapdance.go b/psiphon/common/tapdance/tapdance.go
-index de08e792..d974934f 100644
+index de08e792..1df69252 100644
 --- a/psiphon/common/tapdance/tapdance.go
 +++ b/psiphon/common/tapdance/tapdance.go
-@@ -327,8 +327,19 @@ func Dial(
+@@ -40,6 +40,7 @@ import (
+ 	"github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common"
+ 	"github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/errors"
+ 	"github.com/armon/go-proxyproto"
++	refraction_networking_proto "github.com/refraction-networking/gotapdance/protobuf"
+ 	refraction_networking_tapdance "github.com/refraction-networking/gotapdance/tapdance"
+ )
+ 
+@@ -327,8 +328,20 @@ func Dial(
  
  	manager := newDialManager(netDialer.DialContext)
  
@@ -20,6 +28,7 @@ index de08e792..d974934f 100644
 +		UseProxyHeader:     true,
 +		Width:              5,
 +		DarkDecoyRegistrar: registrar,
++		Transport:          refraction_networking_proto.TransportType_Min,
  	}
  
  	// If the dial context is cancelled, use dialManager to interrupt

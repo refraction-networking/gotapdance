@@ -259,7 +259,7 @@ const defaultRegWidth = 5
 
 // DialConjureAddr - Perform Registration and Dial after creating  a Conjure session from scratch
 func DialConjureAddr(ctx context.Context, address string, registrationMethod Registrar) (net.Conn, error) {
-	cjSession := makeConjureSession(address)
+	cjSession := makeConjureSession(address, pb.TransportType_Min)
 	return DialConjure(ctx, cjSession, registrationMethod)
 }
 
@@ -339,7 +339,7 @@ type ConjureSession struct {
 	stats *pb.SessionStats
 }
 
-func makeConjureSession(covert string) *ConjureSession {
+func makeConjureSession(covert string, transport pb.TransportType) *ConjureSession {
 
 	keys, err := generateSharedKeys(getStationKey())
 	if err != nil {
@@ -351,7 +351,7 @@ func makeConjureSession(covert string) *ConjureSession {
 		Width:          defaultRegWidth,
 		V6Support:      &V6{support: true, include: both},
 		UseProxyHeader: false,
-		Transport:      pb.TransportType_Obfs4,
+		Transport:      transport,
 		CovertAddress:  covert,
 		SessionID:      sessionsTotal.GetAndInc(),
 	}
