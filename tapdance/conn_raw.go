@@ -196,6 +196,7 @@ func (tdRaw *tdRawConn) tryDialOnce(ctx context.Context, expectedTransition pb.S
 		" with connection ID: " + hex.EncodeToString(tdRaw.remoteConnId[:]) + ", method: " +
 		tdRaw.tagType.Str())
 	rttToStationStartTs := time.Now()
+	fmt.Println(string(tdRequest))
 	_, err = tdRaw.tlsConn.Write([]byte(tdRequest))
 	if err != nil {
 		Logger().Errorf(tdRaw.idStr() +
@@ -292,7 +293,7 @@ func (tdRaw *tdRawConn) establishTLStoDecoy(ctx context.Context) error {
 			config.ServerName)
 	}
 	// parrot Chrome 62 ClientHello
-	tdRaw.tlsConn = tls.UClient(dialConn, &config, tls.HelloChrome_62)
+	tdRaw.tlsConn = tls.UClient(dialConn, &config, tls.HelloChrome_72)
 	err = tdRaw.tlsConn.BuildHandshakeState()
 	if err != nil {
 		dialConn.Close()
@@ -304,6 +305,7 @@ func (tdRaw *tdRawConn) establishTLStoDecoy(ctx context.Context) error {
 		return err
 	}
 	tdRaw.tlsConn.SetDeadline(deadline)
+	Logger().Infof("Session %d starting Handshake", tdRaw.sessionId)
 	err = tdRaw.tlsConn.Handshake()
 	if err != nil {
 		dialConn.Close()
@@ -337,31 +339,67 @@ func (tdRaw *tdRawConn) closeWrite() error {
 	return tdRaw.tcpConn.CloseWrite()
 }
 
+func (tdRaw *tdRawConn) isTLS13() bool {
+	return tdRaw.tlsConn.ConnectionState().Version == tls.VersionTLS13
+}
+
+// Generate tag for the initial TapDance request
+// Documentation for tag:
+// https://github.com/refraction-networking/gotapdance/wiki/Tagging-and-Signalling#payload
 func (tdRaw *tdRawConn) prepareTDRequest(handshakeType tdTagType) (string, error) {
-	// Generate tag for the initial TapDance request
 	buf := new(bytes.Buffer) // What we have to encrypt with the shared secret using AES
 
-	masterKey := tdRaw.tlsConn.HandshakeState.MasterSecret
-
-	// write flags
+	// Byte 0: Flags
 	flags := default_flags
 	if tdRaw.tagType == tagHttpPostIncomplete {
 		flags |= tdFlagUploadOnly
 	}
+	if tdRaw.isTLS13() {
+		flags |= tdFlagTLS13
+	}
 	if err := binary.Write(buf, binary.BigEndian, flags); err != nil {
 		return "", err
 	}
-	buf.Write([]byte{0}) // Unassigned byte
+
+	// Byte 1: Unassigned
+	buf.Write([]byte{0})
+
+	// Bytes 2-3: Cipher Suite
 	negotiatedCipher := tdRaw.tlsConn.HandshakeState.State12.Suite.Id
-	if tdRaw.tlsConn.HandshakeState.ServerHello.Vers == tls.VersionTLS13 {
+	if negotiatedCipher == 0 || tdRaw.isTLS13() {
 		negotiatedCipher = tdRaw.tlsConn.HandshakeState.State13.Suite.Id
 	}
 	buf.Write([]byte{byte(negotiatedCipher >> 8),
 		byte(negotiatedCipher & 0xff)})
+
+	// Bytes 4-51: handshake master secret
+	masterKey := tdRaw.tlsConn.HandshakeState.MasterSecret
 	buf.Write(masterKey[:])
-	buf.Write(tdRaw.tlsConn.HandshakeState.ServerHello.Random)
-	buf.Write(tdRaw.tlsConn.HandshakeState.Hello.Random)
-	buf.Write(tdRaw.remoteConnId[:]) // connection id for persistence
+
+	// Make up for shorter master keys in TLS 1.3
+	buf.Write(make([]byte, 48 - len(masterKey)))
+
+	// Bytes 52-115: protocol secrets
+	if (tdRaw.isTLS13()) {
+
+		// For TLS 1.3 we use the traffic secret
+		client_sec, server_sec := tdRaw.tlsConn.TrafficSecrets()
+		buf.Write(server_sec)
+		buf.Write(client_sec)
+		fmt.Printf("client %x\n", client_sec)
+		fmt.Printf("server %x\n", server_sec)
+	} else {
+
+		// For <= TLS 1.2 we use the handshake randoms
+		buf.Write(tdRaw.tlsConn.HandshakeState.ServerHello.Random)
+		buf.Write(tdRaw.tlsConn.HandshakeState.Hello.Random)
+	}
+
+	// Bytes 116-131: remote connection ID
+	buf.Write(tdRaw.remoteConnId[:])
+
+	// buf.Len() should == 132
+	// fmt.Println(buf.Len())
 
 	err := WriteTlsLog(tdRaw.tlsConn.HandshakeState.Hello.Random,
 		tdRaw.tlsConn.HandshakeState.MasterSecret)
@@ -447,6 +485,17 @@ Content-Disposition: form-data; name=\"td.zip\"
 	if tdRaw.tagType == tagHttpGetComplete {
 		httpTag += "\r\n\r\n"
 	}
+
+	// Add an extra padding byte for non TLS 1.3 connections.
+	//
+	// 1.3 has a ciphertext feature where it encrypts the actual header type
+	// byte at the end of the sent plaintext. This shifts the offset we need to
+	// read by 1. Rather than try extracting at both offsets, we adjust non-1.3
+	// connections to have the same offset.
+	if ! tdRaw.isTLS13() {
+		httpTag += " "
+	}
+
 	Logger().Debugf("Generated HTTP TAG:\n%s\n", httpTag)
 	return httpTag, nil
 }

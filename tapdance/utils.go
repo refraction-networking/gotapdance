@@ -282,3 +282,34 @@ func errIsTimeout(err error) bool {
 	}
 	return false
 }
+
+func extractTelexTag(packet []byte) []byte {
+
+	// Strip TLS payload
+	payload := packet[5:]
+	out := make([]byte, 180)
+	in_offset := len(payload) - 257
+	out_offset := 0
+
+	// While there are packets left to read and bytes left to fill
+	for in_offset < len(payload) - 3 && out_offset < 180 {
+		in_range := payload[in_offset:(in_offset)+4]
+		out_range := out[out_offset:(out_offset)+3]
+
+		scaler := 64*64*64
+		store := 0
+		for i := 0; i < 4; i++ {
+			store += (int(in_range[i] & 0x3F) * scaler)
+			scaler /= 64
+		}
+
+		for i := 0; i < 3; i++ {
+			out_range[i] = byte((store >> (8 * (2-i))) & 0xFF)
+		}
+
+		in_offset += 4
+		out_offset += 3
+	}
+
+	return out
+}

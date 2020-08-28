@@ -95,12 +95,18 @@ func (m *tdTagType) Str() string {
 }
 
 // First byte of tag is for FLAGS
-// bit 0 (1 << 7) determines if flow is bidirectional(0) or upload-only(1)
-// bits 1-5 are unassigned
-// bit 6 determines whether PROXY-protocol-formatted string will be sent
-// bit 7 (1 << 0) signals to use TypeLen outer proto
+//
+//  bit    | meaning
+//  -------|---------
+//   0     | is the flow bidirectional (0) or upload-only (1) ?
+//   1     | is the connection TLS 1.3 (1) ?
+//   2-5   | unassigned
+//   6     | will PROXY-protocol-formatted string will be sent (1) ?
+//   7     | use TypeLen outer proto (1) ?
+//
 var (
 	tdFlagUploadOnly  = uint8(1 << 7)
+	tdFlagTLS13       = uint8(1 << 6)
 	tdFlagProxyHeader = uint8(1 << 1)
 	tdFlagUseTIL      = uint8(1 << 0)
 )
@@ -158,6 +164,11 @@ var tapDanceSupportedCiphers = []uint16{
 	tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
 	tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
 	tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+
+	// TLS 1.3
+	tls.TLS_AES_128_GCM_SHA256, // 4865  tls13.refraction.network
+	// tls.TLS_AES_256_GCM_SHA384, // 4866  www.checkintocash.com
+	// tls.TLS_CHACHA20_POLY1305_SHA256,
 }
 
 // How much time to sleep on trying to connect to decoys to prevent overwhelming them
