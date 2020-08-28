@@ -169,7 +169,7 @@ func TestSelectDecoys(t *testing.T) {
 
 func TestAPIRegistrar(t *testing.T) {
 	AssetsSetDir("./assets")
-	session := makeConjureSession("1.2.3.4:1234")
+	session := makeConjureSession("1.2.3.4:1234", pb.TransportType_Min)
 
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {

@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"math/big"
 	"net"
 	"net/http"
@@ -15,10 +16,14 @@ import (
 	"sync"
 	"time"
 
+	pt "git.torproject.org/pluggable-transports/goptlib.git"
 	"github.com/golang/protobuf/proto"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	ps "github.com/refraction-networking/gotapdance/tapdance/phantoms"
 	tls "github.com/refraction-networking/utls"
+	"gitlab.com/yawning/obfs4.git/common/ntor"
+	"gitlab.com/yawning/obfs4.git/transports/obfs4"
+	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/hkdf"
 )
 
@@ -254,7 +259,7 @@ const defaultRegWidth = 5
 
 // DialConjureAddr - Perform Registration and Dial after creating  a Conjure session from scratch
 func DialConjureAddr(ctx context.Context, address string, registrationMethod Registrar) (net.Conn, error) {
-	cjSession := makeConjureSession(address)
+	cjSession := makeConjureSession(address, pb.TransportType_Min)
 	return DialConjure(ctx, cjSession, registrationMethod)
 }
 
@@ -321,7 +326,7 @@ type ConjureSession struct {
 	SessionID      uint64
 	RegDecoys      []*pb.TLSDecoySpec // pb.DecoyList
 	Phantom        *net.IP
-	Transport      TransportType
+	Transport      pb.TransportType
 	CovertAddress  string
 	// rtt			   uint // tracked in stats
 
@@ -334,22 +339,7 @@ type ConjureSession struct {
 	stats *pb.SessionStats
 }
 
-// TransportType describes valid transports for
-// use in connection to the phantom proxy.
-type TransportType uint
-
-const (
-	// NullTransport - Used for debugging. No association of phantom IP to session/registration
-	NullTransport TransportType = iota
-
-	// MinTransport - Minimal transport used to connect  station (default)
-	MinTransport
-
-	// Obfs4Transport - Use Obfs4 to provide probe resistant connection to station (not yet implemented)
-	Obfs4Transport
-)
-
-func makeConjureSession(covert string) *ConjureSession {
+func makeConjureSession(covert string, transport pb.TransportType) *ConjureSession {
 
 	keys, err := generateSharedKeys(getStationKey())
 	if err != nil {
@@ -361,10 +351,9 @@ func makeConjureSession(covert string) *ConjureSession {
 		Width:          defaultRegWidth,
 		V6Support:      &V6{support: true, include: both},
 		UseProxyHeader: false,
-		Transport:      MinTransport,
-		// Transport:     NullTransport,
-		CovertAddress: covert,
-		SessionID:     sessionsTotal.GetAndInc(),
+		Transport:      transport,
+		CovertAddress:  covert,
+		SessionID:      sessionsTotal.GetAndInc(),
 	}
 
 	sharedSecretStr := make([]byte, hex.EncodedLen(len(keys.SharedSecret)))
@@ -405,76 +394,124 @@ type resultTuple struct {
 	err  error
 }
 
+// Simple type alias for brevity
+type dialFunc = func(ctx context.Context, network, addr string) (net.Conn, error)
+
+func (reg *ConjureReg) connect(ctx context.Context, addr string, dialer dialFunc) (net.Conn, error) {
+	//[reference] Create Context with deadline
+	deadline, deadlineAlreadySet := ctx.Deadline()
+	if !deadlineAlreadySet {
+		//[reference] randomized timeout to Dial dark decoy address
+		deadline = time.Now().Add(reg.getRandomDuration(0, 1061*2, 1953*3))
+		//[TODO]{priority:@sfrolov} explain these numbers and why they were chosen for the boundaries.
+	}
+	childCtx, childCancelFunc := context.WithDeadline(ctx, deadline)
+	defer childCancelFunc()
+
+	//[reference] Connect to Phantom Host
+	phantomAddr := net.JoinHostPort(addr, "443")
+
+	// conn, err := reg.TcpDialer(childCtx, "tcp", phantomAddr)
+	return dialer(childCtx, "tcp", phantomAddr)
+}
+
+func (reg *ConjureReg) getFirstConnection(ctx context.Context, dialer dialFunc, phantoms []net.IP) (net.Conn, error) {
+	connChannel := make(chan resultTuple, len(phantoms))
+	for _, p := range phantoms {
+		go func(phantom net.IP) {
+			conn, err := reg.connect(ctx, phantom.String(), dialer)
+			if err != nil {
+				Logger().Infof("%v failed to dial phantom %v: %v", reg.sessionIDStr, phantom.String(), err)
+				connChannel <- resultTuple{nil, err}
+				return
+			}
+			Logger().Infof("%v Connected to phantom %v using transport %d", reg.sessionIDStr, phantom.String(), reg.transport)
+			connChannel <- resultTuple{conn, nil}
+		}(p)
+	}
+
+	open := len(phantoms)
+	for open > 0 {
+		rt := <-connChannel
+		if rt.err != nil {
+			open--
+			continue
+		}
+
+		// If we made it here we're returning the connection, so
+		// set up a goroutine to close the others
+		go func() {
+			// Close all but one connection (the good one)
+			for open > 1 {
+				t := <-connChannel
+				if t.err == nil {
+					t.conn.Close()
+				}
+				open--
+			}
+		}()
+
+		return rt.conn, nil
+	}
+
+	return nil, fmt.Errorf("no open connections")
+}
+
 // Connect - Use a registration (result of calling Register) to connect to a phantom
 // Note: This is hacky but should work for v4, v6, or both as any nil phantom addr will
 // return a dial error and be ignored.
 func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
-
-	connChannel := make(chan resultTuple, 2)
-
-	connect := func(addr string) {
-		//[reference] Create Context with deadline
-		deadline, deadlineAlreadySet := ctx.Deadline()
-		if !deadlineAlreadySet {
-			//[reference] randomized timeout to Dial dark decoy address
-			deadline = time.Now().Add(reg.getRandomDuration(0, 1061*2, 1953*3))
-			//[TODO]{priority:@sfrolov} explain these numbers and why they were chosen for the boundaries.
-		}
-		childCtx, childCancelFunc := context.WithDeadline(ctx, deadline)
-		defer childCancelFunc()
-
-		//[reference] Connect to Phantom Host using TLS
-		phantomAddr := net.JoinHostPort(addr, "443")
-
-		conn, err := reg.TcpDialer(childCtx, "tcp", phantomAddr)
-		if err != nil {
-			Logger().Infof("%v failed to dial phantom %v: %v\n", reg.sessionIDStr, addr, err)
-			connChannel <- resultTuple{nil, err}
-			return
-		}
-		Logger().Infof("%v Connected to phantom %v using transport %d", reg.sessionIDStr, phantomAddr, reg.transport)
-		connChannel <- resultTuple{conn, nil}
-	}
-
-	//[reference] Connect to Both IPv4 and IPv6
-	go connect(reg.phantom4.String())
-	go connect(reg.phantom6.String())
-
-	//[reference] Use whichever comes back first and close the one that is slower
-	res := <-connChannel
-	if res.err != nil || res.conn == nil {
-		//[reference] first connection returned was an error, wait for the second
-		res = <-connChannel
-		if res.err != nil || res.conn == nil {
-			return res.conn, res.err
-		}
-	} else {
-		//[reference] first connection returned was good, wait for the second and close it.
-		go func() {
-			slowRes := <-connChannel
-			if slowRes.conn != nil {
-				slowRes.conn.Close()
-			}
-		}()
-	}
-
-	conn := res.conn
-
+	phantoms := []net.IP{*reg.phantom4, *reg.phantom6}
 	//[reference] Provide chosen transport to sent bytes (or connect) if necessary
 	switch reg.transport {
-	case MinTransport:
+	case pb.TransportType_Min:
+		conn, err := reg.getFirstConnection(ctx, reg.TcpDialer, phantoms)
+		if err != nil {
+			Logger().Infof("%v failed to form phantom connection: %v", reg.sessionIDStr, err)
+			return nil, err
+		}
+
 		// Send hmac(seed, str) bytes to indicate to station (min transport)
 		connectTag := conjureHMAC(reg.keys.SharedSecret, "MinTrasportHMACString")
 		conn.Write(connectTag)
 		return conn, nil
-	case Obfs4Transport:
-		//[TODO]{priority:winter-break} add Obfs4 Transport
-		return nil, fmt.Errorf("connect not yet implemented")
 
-	case NullTransport:
-		// Do nothing to the connection before returning it to the user.
-		fmt.Printf("Using Null Transport\n")
-		return conn, nil
+	case pb.TransportType_Obfs4:
+		args := pt.Args{}
+		args.Add("node-id", reg.keys.Obfs4Keys.NodeID.Hex())
+		args.Add("public-key", reg.keys.Obfs4Keys.PublicKey.Hex())
+		args.Add("iat-mode", "1")
+
+		Logger().Infof("%v node_id = %s; public key = %s", reg.sessionIDStr, reg.keys.Obfs4Keys.NodeID.Hex(), reg.keys.Obfs4Keys.PublicKey.Hex())
+
+		t := obfs4.Transport{}
+		c, err := t.ClientFactory("")
+		if err != nil {
+			Logger().Infof("%v failed to create client factory: %v", reg.sessionIDStr, err)
+			return nil, err
+		}
+
+		parsedArgs, err := c.ParseArgs(&args)
+		if err != nil {
+			Logger().Infof("%v failed to parse obfs4 args: %v", reg.sessionIDStr, err)
+			return nil, err
+		}
+
+		dialer := func(dialContext context.Context, network string, address string) (net.Conn, error) {
+			d := func(network, address string) (net.Conn, error) { return reg.TcpDialer(dialContext, network, address) }
+			return c.Dial("tcp", address, d, parsedArgs)
+		}
+
+		conn, err := reg.getFirstConnection(ctx, dialer, phantoms)
+		if err != nil {
+			Logger().Infof("%v failed to form obfs4 connection: %v", reg.sessionIDStr, err)
+			return nil, err
+		}
+
+		return conn, err
+	case pb.TransportType_Null:
+		// Dial and do nothing to the connection before returning it to the user.
+		return reg.getFirstConnection(ctx, reg.TcpDialer, phantoms)
 	default:
 		// If transport is unrecognized use min transport.
 		return nil, fmt.Errorf("Unknown Transport")
@@ -491,7 +528,7 @@ type ConjureReg struct {
 	covertAddress  string
 	phantomSNI     string
 	v6Support      uint
-	transport      TransportType
+	transport      pb.TransportType
 
 	// THIS IS REQUIRED TO INTERFACE WITH PSIPHON ANDROID
 	//		we use their dialer to prevent connection loopback into our own proxy
@@ -935,9 +972,42 @@ func getStationKey() [32]byte {
 	return *Assets().GetConjurePubkey()
 }
 
+type Obfs4Keys struct {
+	PrivateKey *ntor.PrivateKey
+	PublicKey  *ntor.PublicKey
+	NodeID     *ntor.NodeID
+}
+
+func generateObfs4Keys(rand io.Reader) (Obfs4Keys, error) {
+	keys := Obfs4Keys{
+		PrivateKey: new(ntor.PrivateKey),
+		PublicKey:  new(ntor.PublicKey),
+		NodeID:     new(ntor.NodeID),
+	}
+
+	_, err := rand.Read(keys.PrivateKey[:])
+	if err != nil {
+		return keys, err
+	}
+
+	keys.PrivateKey[0] &= 248
+	keys.PrivateKey[31] &= 127
+	keys.PrivateKey[31] |= 64
+
+	pub, err := curve25519.X25519(keys.PrivateKey[:], curve25519.Basepoint)
+	if err != nil {
+		return keys, err
+	}
+	copy(keys.PublicKey[:], pub)
+
+	_, err = rand.Read(keys.NodeID[:])
+	return keys, err
+}
+
 type sharedKeys struct {
 	SharedSecret, Representative                               []byte
 	FspKey, FspIv, VspKey, VspIv, NewMasterSecret, ConjureSeed []byte
+	Obfs4Keys                                                  Obfs4Keys
 }
 
 func generateSharedKeys(pubkey [32]byte) (*sharedKeys, error) {
@@ -976,7 +1046,8 @@ func generateSharedKeys(pubkey [32]byte) (*sharedKeys, error) {
 	if _, err := tdHkdf.Read(keys.ConjureSeed); err != nil {
 		return keys, err
 	}
-	return keys, nil
+	keys.Obfs4Keys, err = generateObfs4Keys(tdHkdf)
+	return keys, err
 }
 
 //
