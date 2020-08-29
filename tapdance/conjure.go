@@ -509,6 +509,34 @@ func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
 		}
 
 		return conn, err
+	case pb.TransportType_ReverseMin:
+		addr := &net.TCPAddr{
+			// Temporary value for port. We'll need to figure out NAT/firewall punching
+			// and use a port associated with that method here.
+			Port: 443,
+		}
+
+		l, err := net.ListenTCP("tcp", addr)
+		if err != nil {
+			Logger().Infof("%v failed to listen: %v", reg.sessionIDStr, err)
+			return nil, err
+		}
+
+		l.SetDeadline(time.Now().Add(5 * time.Second))
+		conn, err := l.AcceptTCP()
+		l.Close()
+		if err != nil {
+			Logger().Infof("%v got error while listening: %v", reg.sessionIDStr, err)
+			return nil, err
+		}
+
+		var hmac [32]byte
+		_, err = io.ReadFull(conn, hmac[:])
+		if err != nil {
+			Logger().Infof("%v failed to read HMAC ID: %v", reg.sessionIDStr, err)
+		}
+
+		return conn, nil
 	case pb.TransportType_Null:
 		// Dial and do nothing to the connection before returning it to the user.
 		return reg.getFirstConnection(ctx, reg.TcpDialer, phantoms)
