@@ -133,9 +133,9 @@ enum ErrorReasonS2C {
 }
 
 enum TransportType {
-    NullTransport = 0;
-    MinTransport = 1;   // Send a 32-byte HMAC id to let the station distinguish registrations to same host
-    Obfs4Transport = 2; // Not implemented yet?
+    Null = 0;
+    Min = 1;   // Send a 32-byte HMAC id to let the station distinguish registrations to same host
+    Obfs4 = 2; // Not implemented yet?
 }
 
 message StationToClient {

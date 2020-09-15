@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"net"
+
+	pb "github.com/refraction-networking/gotapdance/protobuf"
 )
 
 var sessionsTotal CounterUint64
@@ -21,6 +23,9 @@ type Dialer struct {
 
 	// The type of registrar to use when performing Conjure registrations.
 	DarkDecoyRegistrar Registrar
+
+	// The type of transport to use for Conjure connections.
+	Transport pb.TransportType
 
 	UseProxyHeader bool
 	V6Support      bool // *bool so that it is a nullable type. that can be overridden
@@ -86,7 +91,7 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 			// if err != nil {
 			// 	return nil, err
 			// }
-			cjSession := makeConjureSession(address)
+			cjSession := makeConjureSession(address, d.Transport)
 			cjSession.TcpDialer = d.TcpDialer
 			cjSession.UseProxyHeader = d.UseProxyHeader
 			cjSession.Width = uint(d.Width)

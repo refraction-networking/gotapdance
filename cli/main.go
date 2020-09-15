@@ -38,6 +38,7 @@ func main() {
 
 	var td = flag.Bool("td", false, "Enable tapdance cli mode for compatibility")
 	var APIRegistration = flag.String("api-endpoint", "", "If set, API endpoint to use when performing API registration. If not set, uses decoy registration.")
+	var transport = flag.String("transport", "min", `The transport to use for Conjure connections. Current values include "min" and "obfs4".`)
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Dark Decoy CLI\n$./cli -connect-addr=<decoy_address> [OPTIONS] \n\nOptions:\n")
@@ -87,7 +88,7 @@ func main() {
 		fmt.Printf("Using Station Pubkey: %s\n", hex.EncodeToString(tapdance.Assets().GetConjurePubkey()[:]))
 	}
 
-	err := connectDirect(*td, *APIRegistration, *connect_target, *port, *proxyHeader, v6Support, *width)
+	err := connectDirect(*td, *APIRegistration, *connect_target, *port, *proxyHeader, v6Support, *width, *transport)
 	if err != nil {
 		tapdance.Logger().Println(err)
 		os.Exit(1)
@@ -101,7 +102,7 @@ func main() {
 	}
 }
 
-func connectDirect(td bool, apiEndpoint string, connect_target string, localPort int, proxyHeader bool, v6Support bool, width int) error {
+func connectDirect(td bool, apiEndpoint string, connect_target string, localPort int, proxyHeader bool, v6Support bool, width int, transport string) error {
 	if _, _, err := net.SplitHostPort(connect_target); err != nil {
 		return fmt.Errorf("failed to parse host and port from connect_target %s: %v",
 			connect_target, err)
@@ -112,7 +113,14 @@ func connectDirect(td bool, apiEndpoint string, connect_target string, localPort
 		return fmt.Errorf("error listening on port %v: %v", localPort, err)
 	}
 
-	tdDialer := tapdance.Dialer{DarkDecoy: !td, DarkDecoyRegistrar: tapdance.DecoyRegistrar{}, UseProxyHeader: proxyHeader, V6Support: v6Support, Width: width}
+	tdDialer := tapdance.Dialer{
+		DarkDecoy:          !td,
+		DarkDecoyRegistrar: tapdance.DecoyRegistrar{},
+		UseProxyHeader:     proxyHeader,
+		V6Support:          v6Support,
+		Width:              width,
+		Transport:          getTransportFromName(transport),
+	}
 
 	if apiEndpoint != "" {
 		tdDialer.DarkDecoyRegistrar = tapdance.APIRegistrar{
@@ -193,4 +201,15 @@ func setSingleDecoyHost(decoy string) error {
 	tapdance.Assets().GetClientConfPtr().Generation = &maxUint32
 	tapdance.Logger().Infof("Single decoy parsed. SNI: %s, IP: %s", sni, ip)
 	return nil
+}
+
+func getTransportFromName(name string) pb.TransportType {
+	switch name {
+	case "min":
+		return pb.TransportType_Min
+	case "obfs4":
+		return pb.TransportType_Obfs4
+	default:
+		return pb.TransportType_Min
+	}
 }
