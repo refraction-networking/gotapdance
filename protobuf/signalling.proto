@@ -226,9 +226,15 @@ message ClientToAPI {
     optional ClientToStation registration_payload = 2;
 }
 
+enum RegistrationSource {
+	Detector = 0;
+	API = 1;
+}
+
 message ZMQPayload {
 	optional bytes shared_secret = 1;
 	optional ClientToStation registration_payload = 3;
+	optional RegistrationSource registration_source = 4;
 }
 
 message SessionStats {
