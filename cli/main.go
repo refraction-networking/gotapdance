@@ -26,15 +26,15 @@ func main() {
 	var excludeV6 = flag.Bool("disable-ipv6", false, "Explicitly disable IPv6 decoys. Default(false): enable IPv6 only if interface with global IPv6 address is available.")
 	var proxyHeader = flag.Bool("proxy", false, "Send the proxy header with all packets from station to covert host")
 	var decoy = flag.String("decoy", "", "Sets single decoy. ClientConf won't be requested. "+
-		"Accepts \"SNI,IP\" or simply \n\"SNI\" — IP will be resolved. "+
-		"\nExamples: \"site.io,1.2.3.4\", \"site.io\"")
+		"Accepts \"SNI,IP\" or simply \"SNI\" — IP will be resolved. "+
+		"Examples: \"site.io,1.2.3.4\", \"site.io\"")
 	var assets_location = flag.String("assetsdir", "./assets/", "Folder to read assets from.")
 	var width = flag.Int("w", 5, "Number of registrations sent for each connection initiated")
 	var debug = flag.Bool("debug", false, "Enable debug level logs")
 	var trace = flag.Bool("trace", false, "Enable trace level logs")
 	var tlsLog = flag.String("tlslog", "", "Filename to write SSL secrets to (allows Wireshark to decrypt TLS connections)")
-	var connect_target = flag.String("connect-addr", "", "If set, tapdance will transparently connect to provided address, which \nmust be either hostname:port or ip:port. "+
-		"Default(unset): connects client to \nforwardproxy, to which CONNECT request is yet to be written.")
+	var connect_target = flag.String("connect-addr", "", "If set, tapdance will transparently connect to provided address, which must be either hostname:port or ip:port. "+
+		"Default(unset): connects client to forwardproxy, to which CONNECT request is yet to be written.")
 
 	var td = flag.Bool("td", false, "Enable tapdance cli mode for compatibility")
 	var APIRegistration = flag.String("api-endpoint", "", "If set, API endpoint to use when performing API registration. If not set, uses decoy registration.")

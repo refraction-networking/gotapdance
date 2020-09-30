@@ -331,6 +331,8 @@ func (a *assets) SetDecoys(decoys []*pb.TLSDecoySpec) (err error) {
 func (a *assets) IsDecoyInList(decoy *pb.TLSDecoySpec) bool {
 	ipv4str := decoy.GetIpAddrStr()
 	hostname := decoy.GetHostname()
+	a.RLock()
+	defer a.RUnlock()
 	for _, d := range a.config.GetDecoyList().GetTlsDecoys() {
 		if strings.Compare(d.GetHostname(), hostname) == 0 &&
 			strings.Compare(d.GetIpAddrStr(), ipv4str) == 0 {

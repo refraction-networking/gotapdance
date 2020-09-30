@@ -67,9 +67,8 @@ type tdRawConn struct {
 
 func makeTdRaw(handshakeType tdTagType, stationPubkey []byte) *tdRawConn {
 	tdRaw := &tdRawConn{tagType: handshakeType,
-		stationPubkey: stationPubkey,
+		defaultStationPubkey: stationPubkey,
 	}
-	tdRaw.flowId = 0
 	tdRaw.closed = make(chan struct{})
 	return tdRaw
 }
@@ -79,7 +78,7 @@ func (tdRaw *tdRawConn) DialContext(ctx context.Context) error {
 }
 
 func (tdRaw *tdRawConn) RedialContext(ctx context.Context) error {
-	tdRaw.flowId += 1
+	tdRaw.flowId.Inc()
 	return tdRaw.dial(ctx, true)
 }
 
@@ -443,7 +442,7 @@ func (tdRaw *tdRawConn) prepareTDRequest(handshakeType tdTagType) (string, error
 
 func (tdRaw *tdRawConn) idStr() string {
 	return "[Session " + strconv.FormatUint(tdRaw.sessionId, 10) + ", " +
-		"Flow " + strconv.FormatUint(tdRaw.flowId, 10) + tdRaw.strIdSuffix + "]"
+		"Flow " + strconv.FormatUint(tdRaw.flowId.Get(), 10) + tdRaw.strIdSuffix + "]"
 }
 
 // Simply reads and returns protobuf
@@ -512,7 +511,7 @@ func (tdRaw *tdRawConn) writeTransition(transition pb.C2S_Transition) (n int, er
 		DecoyListGeneration: &currGen,
 		StateTransition:     &transition,
 		UploadSync:          new(uint64)} // TODO: remove
-	if tdRaw.flowId == 0 {
+	if tdRaw.flowId.Get() == 0 {
 		// we have stats for each reconnect, but only send stats for the initial connection
 		msg.Stats = &tdRaw.sessionStats
 	}

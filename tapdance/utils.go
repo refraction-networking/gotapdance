@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	mrand "math/rand"
 	"net"
@@ -14,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/refraction-networking/gotapdance/ed25519/extra25519"
 	"golang.org/x/crypto/curve25519"
 )
