@@ -147,7 +147,7 @@ jobs:
         #   interface. So because the android build system in the psiandroid image has not accepted licensing for a few libraries we have to do that 
         #   ourselves in this run command. This also cannot use the `yes` program because that sends the y character too quickly and actually declines
         #   the license. 
-        - docker run -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src/github.com/Psiphon-Inc/psiphon-android:/go/src/github.com/Psiphon-Inc/psiphon-android refraction/psiandroid /bin/bash -c '(while true; do echo 'y'; sleep 2; done) | /android-sdk-linux/tools/android update sdk --no-ui --all --filter build-tools-29.0.3; cd /go/src/github.com/Psiphon-Inc/psiphon-android && ./gradlew assembleDebug'
+        - docker run -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src/github.com/Psiphon-Inc/psiphon-android:/go/src/github.com/Psiphon-Inc/psiphon-android refraction/psiandroid /bin/bash -c '(yes | ~/Android/Sdk/tools/bin/sdkmanager --licenses) && (while true; do echo 'y'; sleep 2; done) | /android-sdk-linux/tools/android update sdk --no-ui --all --filter build-tools-27.0.3; cd /go/src/github.com/Psiphon-Inc/psiphon-android && ./gradlew assembleDebug'
         - sudo mv $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/build/outputs/apk/debug/PsiphonAndroid-debug.apk build/PsiphonAndroid-TD-debug.apk
 
     - <<: *_job_template 
@@ -182,5 +182,5 @@ jobs:
         #   interface. So because the android build system in the psiandroid image has not accepted licensing for a few libraries we have to do that 
         #   ourselves in this run command. This also cannot use the `yes` program because that sends the y character too quickly and actually declines
         #   the license. 
-        - docker run -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src/github.com/Psiphon-Inc/psiphon-android:/go/src/github.com/Psiphon-Inc/psiphon-android refraction/psiandroid /bin/bash -c '(while true; do echo 'y'; sleep 2; done) | /android-sdk-linux/tools/android update sdk --no-ui --all --filter build-tools-29.0.3; cd /go/src/github.com/Psiphon-Inc/psiphon-android && ./gradlew assembleDebug'
-        - sudo mv $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/build/outputs/apk/debug/PsiphonAndroid-debug.apk build/
+        - docker run -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src/github.com/Psiphon-Inc/psiphon-android:/go/src/github.com/Psiphon-Inc/psiphon-android refraction/psiandroid /bin/bash -c '(yes | ~/Android/Sdk/tools/bin/sdkmanager --licenses) && (while true; do echo 'y'; sleep 2; done) | /android-sdk-linux/tools/android update sdk --no-ui --all --filter build-tools-27.0.3; cd /go/src/github.com/Psiphon-Inc/psiphon-android && ./gradlew assembleDebug'
+        - sudo mv $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/build/outputs/apk/debug/PsiphonAndroid-debug.apk build/PsiphonAndroid-CJ-debug.apk
