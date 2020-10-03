@@ -60,7 +60,7 @@ func TestMain(m *testing.M) {
 	os.Exit(retCode)
 }
 
-tapDanceDialTest(t *testing.T, darkDecoys bool) {
+func tapDanceDialTest(t *testing.T, darkDecoys bool) {
 	urlParse := func(urlStr string) url.URL {
 		_url, err := url.Parse(urlStr)
 		if err != nil {
