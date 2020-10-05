@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pkg/profile"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
@@ -21,23 +23,40 @@ func main() {
 	defer profile.Start().Stop()
 
 	var port = flag.Int("port", 10500, "TapDance will listen for connections on this port.")
+	var excludeV6 = flag.Bool("disable-ipv6", false, "Explicitly disable IPv6 decoys. Default(false): enable IPv6 only if interface with global IPv6 address is available.")
+	var proxyHeader = flag.Bool("proxy", false, "Send the proxy header with all packets from station to covert host")
 	var decoy = flag.String("decoy", "", "Sets single decoy. ClientConf won't be requested. "+
 		"Accepts \"SNI,IP\" or simply \"SNI\" — IP will be resolved. "+
 		"Examples: \"site.io,1.2.3.4\", \"site.io\"")
 	var assets_location = flag.String("assetsdir", "./assets/", "Folder to read assets from.")
-	var proxyProtocol = flag.Bool("proxyproto", false, "Enable PROXY protocol, requesting TapDance station to send client's IP to destination.")
-	var debug = flag.Bool("debug", false, "Enable debug logs")
+	var width = flag.Int("w", 5, "Number of registrations sent for each connection initiated")
+	var debug = flag.Bool("debug", false, "Enable debug level logs")
+	var trace = flag.Bool("trace", false, "Enable trace level logs")
 	var tlsLog = flag.String("tlslog", "", "Filename to write SSL secrets to (allows Wireshark to decrypt TLS connections)")
 	var connect_target = flag.String("connect-addr", "", "If set, tapdance will transparently connect to provided address, which must be either hostname:port or ip:port. "+
 		"Default(unset): connects client to forwardproxy, to which CONNECT request is yet to be written.")
+
+	var td = flag.Bool("td", false, "Enable tapdance cli mode for compatibility")
+	var APIRegistration = flag.String("api-endpoint", "", "If set, API endpoint to use when performing API registration. If not set, uses decoy registration.")
+	var transport = flag.String("transport", "min", `The transport to use for Conjure connections. Current values include "min" and "obfs4".`)
+
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Dark Decoy CLI\n$./cli -connect-addr=<decoy_address> [OPTIONS] \n\nOptions:\n")
+		flag.PrintDefaults()
+	}
 	flag.Parse()
 
-	if *debug {
-		tapdance.Logger().Level = logrus.DebugLevel
+	if *connect_target == "" {
+		tdproxy.Logger.Errorf("dark decoys require -connect-addr to be set\n")
+		flag.Usage()
+
+		os.Exit(1)
 	}
-	tapdance.Logger().Debug("Debug logging enabled")
+
+	v6Support := !*excludeV6
 
 	tapdance.AssetsSetDir(*assets_location)
+
 	if *decoy != "" {
 		err := setSingleDecoyHost(*decoy)
 		if err != nil {
@@ -46,8 +65,14 @@ func main() {
 			os.Exit(255)
 		}
 	}
-	if *proxyProtocol {
-		tapdance.EnableProxyProtocol()
+
+	if *debug {
+		tapdance.Logger().Level = logrus.DebugLevel
+		tapdance.Logger().Debug("Debug logging enabled")
+	}
+	if *trace {
+		tapdance.Logger().Level = logrus.TraceLevel
+		tapdance.Logger().Trace("Trace logging enabled")
 	}
 
 	if *tlsLog != "" {
@@ -57,55 +82,90 @@ func main() {
 		}
 	}
 
-	if *connect_target != "" {
-		err := connectDirect(*connect_target, *port)
-		if err != nil {
-			tapdance.Logger().Println(err)
-			os.Exit(1)
-		}
-		return
+	if *td {
+		fmt.Printf("Using Station Pubkey: %s\n", hex.EncodeToString(tapdance.Assets().GetPubkey()[:]))
+	} else {
+		fmt.Printf("Using Station Pubkey: %s\n", hex.EncodeToString(tapdance.Assets().GetConjurePubkey()[:]))
+	}
+
+	err := connectDirect(*td, *APIRegistration, *connect_target, *port, *proxyHeader, v6Support, *width, *transport)
+	if err != nil {
+		tapdance.Logger().Println(err)
+		os.Exit(1)
 	}
 
 	tapdanceProxy := tdproxy.NewTapDanceProxy(*port)
-	err := tapdanceProxy.ListenAndServe()
+	err = tapdanceProxy.ListenAndServe()
 	if err != nil {
 		tdproxy.Logger.Errorf("Failed to ListenAndServe(): %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func connectDirect(connect_target string, localPort int) error {
+func connectDirect(td bool, apiEndpoint string, connect_target string, localPort int, proxyHeader bool, v6Support bool, width int, transport string) error {
 	if _, _, err := net.SplitHostPort(connect_target); err != nil {
-		return fmt.Errorf("Failed to parse host and port from connect_target %s: %v",
+		return fmt.Errorf("failed to parse host and port from connect_target %s: %v",
 			connect_target, err)
-		os.Exit(1)
 	}
-	tdConn, err := tapdance.Dial("tcp", connect_target)
-	if err != nil {
-		return fmt.Errorf("Failed to dial %s: %v", connect_target, err)
-	}
+
 	l, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: localPort})
 	if err != nil {
-		return fmt.Errorf("Error listening on port %s: %v", localPort, err)
+		return fmt.Errorf("error listening on port %v: %v", localPort, err)
 	}
-	clientConn, err := l.AcceptTCP()
-	if err != nil {
-		return fmt.Errorf("Error accepting client connection %v: ", err)
+
+	tdDialer := tapdance.Dialer{
+		DarkDecoy:          !td,
+		DarkDecoyRegistrar: tapdance.DecoyRegistrar{},
+		UseProxyHeader:     proxyHeader,
+		V6Support:          v6Support,
+		Width:              width,
+		Transport:          getTransportFromName(transport),
 	}
-	wg := sync.WaitGroup{}
+
+	if apiEndpoint != "" {
+		tdDialer.DarkDecoyRegistrar = tapdance.APIRegistrar{
+			Endpoint:           apiEndpoint,
+			ConnectionDelay:    750 * time.Millisecond,
+			MaxRetries:         3,
+			SecondaryRegistrar: tapdance.DecoyRegistrar{},
+		}
+	}
+
+	for {
+		clientConn, err := l.AcceptTCP()
+		if err != nil {
+			return fmt.Errorf("error accepting client connection %v: ", err)
+		}
+
+		go manageConn(tdDialer, connect_target, clientConn)
+	}
+}
+
+func manageConn(tdDialer tapdance.Dialer, connect_target string, clientConn *net.TCPConn) {
+	// TODO: go back to pre-dialing after measuring performance
+	tdConn, err := tdDialer.Dial("tcp", connect_target)
+	if err != nil || tdConn == nil {
+		fmt.Errorf("failed to dial %s: %v", connect_target, err)
+		return
+	}
+
+	// Copy data from the client application into the DarkDecoy connection.
+	// 		TODO: Make sure this works
+	// 		TODO: proper connection management with idle timeout
+	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
 		io.Copy(tdConn, clientConn)
-		tdConn.Close()
 		wg.Done()
+		tdConn.Close()
 	}()
 	go func() {
 		io.Copy(clientConn, tdConn)
-		clientConn.CloseWrite()
 		wg.Done()
+		clientConn.CloseWrite()
 	}()
 	wg.Wait()
-	return nil
+	tapdance.Logger().Debug("copy loop ended")
 }
 
 func setSingleDecoyHost(decoy string) error {
@@ -141,4 +201,15 @@ func setSingleDecoyHost(decoy string) error {
 	tapdance.Assets().GetClientConfPtr().Generation = &maxUint32
 	tapdance.Logger().Infof("Single decoy parsed. SNI: %s, IP: %s", sni, ip)
 	return nil
+}
+
+func getTransportFromName(name string) pb.TransportType {
+	switch name {
+	case "min":
+		return pb.TransportType_Min
+	case "obfs4":
+		return pb.TransportType_Obfs4
+	default:
+		return pb.TransportType_Min
+	}
 }

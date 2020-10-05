@@ -1,0 +1,34 @@
+diff --git a/psiphon/common/tapdance/tapdance.go b/psiphon/common/tapdance/tapdance.go
+index de08e792..1df69252 100644
+--- a/psiphon/common/tapdance/tapdance.go
++++ b/psiphon/common/tapdance/tapdance.go
+@@ -40,6 +40,7 @@ import (
+ 	"github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common"
+ 	"github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/errors"
+ 	"github.com/armon/go-proxyproto"
++	refraction_networking_proto "github.com/refraction-networking/gotapdance/protobuf"
+ 	refraction_networking_tapdance "github.com/refraction-networking/gotapdance/tapdance"
+ )
+ 
+@@ -327,8 +328,20 @@ func Dial(
+ 
+ 	manager := newDialManager(netDialer.DialContext)
+ 
++	registrar := refraction_networking_tapdance.APIRegistrar{
++		Endpoint:           "https://registration.refraction.network/api/register",
++		ConnectionDelay:    750 * time.Millisecond,
++		MaxRetries:         3,
++		SecondaryRegistrar: refraction_networking_tapdance.DecoyRegistrar{},
++	}
++
+ 	tapdanceDialer := &refraction_networking_tapdance.Dialer{
+-		TcpDialer: manager.dial,
++		TcpDialer:          manager.dial,
++		DarkDecoy:          true,
++		UseProxyHeader:     true,
++		Width:              5,
++		DarkDecoyRegistrar: registrar,
++		Transport:          refraction_networking_proto.TransportType_Min,
+ 	}
+ 
+ 	// If the dial context is cancelled, use dialManager to interrupt

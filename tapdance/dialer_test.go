@@ -33,7 +33,7 @@ func setupTestAssets() error {
 		return err
 	}
 
-	pubKey := pb.PubKey{
+	pubKey := &pb.PubKey{
 		Key:  stationTestPubkey,
 		Type: &keyType,
 	}
@@ -60,7 +60,7 @@ func TestMain(m *testing.M) {
 	os.Exit(retCode)
 }
 
-func DisabledTestTapDanceDial(t *testing.T) {
+func tapDanceDialTest(t *testing.T, darkDecoys bool) {
 	urlParse := func(urlStr string) url.URL {
 		_url, err := url.Parse(urlStr)
 		if err != nil {
@@ -74,47 +74,15 @@ func DisabledTestTapDanceDial(t *testing.T) {
 		urlParse("https://tapdance1.freeaeskey.xyz:443/"),
 	}
 
-	getResponseString := func(url url.URL,
-		dial func(network, address string) (net.Conn, error)) (string, error) {
-		conn, err := dial("tcp", url.Hostname()+":"+url.Port())
-		if err != nil {
-			return "", fmt.Errorf("dial failed: %v", err)
-		}
-		if url.Scheme == "https" {
-			conn = tls.Client(conn, &tls.Config{ServerName: url.Hostname()})
-		}
-		defer conn.Close()
-
-		req, err := http.NewRequest("GET", url.String(), nil)
-		req.Host = url.Hostname()
-		if err != nil {
-			return "", fmt.Errorf("http.NewRequest failed: %v", err)
-		}
-
-		err = req.Write(conn)
-		if err != nil {
-			return "", fmt.Errorf("Write failed: %v", err)
-		}
-
-		resp, err := http.ReadResponse(bufio.NewReader(conn), req)
-		if err != nil {
-			return "", fmt.Errorf("http.ReadResponse failed: %v", err)
-		}
-
-		responseBody, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return "", fmt.Errorf("ioutil.ReadAll failed: %v", err)
-		}
-		return string(responseBody), nil
-	}
-
+	tdDialer := Dialer{DarkDecoy: darkDecoys}
 	for _, testUrl := range testUrls {
 		referenceResponse, err := getResponseString(testUrl, net.Dial)
 		if err != nil {
 			t.Fatalf("Failed to get reference response from %v : %v. Check your connection",
 				testUrl, err)
 		}
-		tdResponse, err := getResponseString(testUrl, Dial)
+
+		tdResponse, err := getResponseString(testUrl, tdDialer.Dial)
 		if err != nil {
 			t.Fatalf("Failed to get response from %v via TapDance: %v.", testUrl.String(), err)
 		}
@@ -123,4 +91,46 @@ func DisabledTestTapDanceDial(t *testing.T) {
 				testUrl.String(), string(referenceResponse), string(tdResponse))
 		}
 	}
+}
+
+// These tests run forever
+func DisabledTestTapdanceDial(t *testing.T) {
+	tapDanceDialTest(t, false)
+}
+
+func DisabledTestDarkDecoyDial(t *testing.T) {
+	tapDanceDialTest(t, true)
+}
+
+func getResponseString(url url.URL, dial func(network, address string) (net.Conn, error)) (string, error) {
+	conn, err := dial("tcp", url.Hostname()+":"+url.Port())
+	if err != nil {
+		return "", fmt.Errorf("dial failed: %v", err)
+	}
+	if url.Scheme == "https" {
+		conn = tls.Client(conn, &tls.Config{ServerName: url.Hostname()})
+	}
+	defer conn.Close()
+
+	req, err := http.NewRequest("GET", url.String(), nil)
+	req.Host = url.Hostname()
+	if err != nil {
+		return "", fmt.Errorf("http.NewRequest failed: %v", err)
+	}
+
+	err = req.Write(conn)
+	if err != nil {
+		return "", fmt.Errorf("write failed: %v", err)
+	}
+
+	resp, err := http.ReadResponse(bufio.NewReader(conn), req)
+	if err != nil {
+		return "", fmt.Errorf("http.ReadResponse failed: %v", err)
+	}
+
+	responseBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("ioutil.ReadAll failed: %v", err)
+	}
+	return string(responseBody), nil
 }

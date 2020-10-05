@@ -5,17 +5,21 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
-	"github.com/golang/protobuf/proto"
-	pb "github.com/refraction-networking/gotapdance/protobuf"
 	"io/ioutil"
 	"log"
 	"net"
+
+	"github.com/golang/protobuf/proto"
+	pb "github.com/refraction-networking/gotapdance/protobuf"
 )
 
-func printClientConf(clientConf pb.ClientConf) {
+func printClientConf(clientConf *pb.ClientConf) {
 	fmt.Printf("Generation: %d\n", clientConf.GetGeneration())
 	if clientConf.GetDefaultPubkey() != nil {
 		fmt.Printf("Default Pubkey: %s\n", hex.EncodeToString(clientConf.GetDefaultPubkey().Key[:]))
+	}
+	if clientConf.GetConjurePubkey() != nil {
+		fmt.Printf("Conjure Pubkey: %s\n", hex.EncodeToString(clientConf.GetConjurePubkey().Key[:]))
 	}
 	if clientConf.DecoyList == nil {
 		return
@@ -25,7 +29,8 @@ func printClientConf(clientConf pb.ClientConf) {
 	for i, decoy := range decoys {
 		ip := make(net.IP, 4)
 		binary.BigEndian.PutUint32(ip, decoy.GetIpv4Addr())
-		fmt.Printf("%d:\n  %s (%s)\n", i, decoy.GetHostname(), ip.To4().String())
+		ip6 := net.IP(decoy.GetIpv6Addr())
+		fmt.Printf("%d:\n  %s (%s / [%s])\n", i, decoy.GetHostname(), ip.To4().String(), ip6.To16().String())
 		if decoy.GetPubkey() != nil {
 			fmt.Printf("  pubkey: %s\n", hex.EncodeToString(decoy.GetPubkey().Key[:]))
 		}
@@ -39,14 +44,14 @@ func printClientConf(clientConf pb.ClientConf) {
 
 }
 
-func parseClientConf(fname string) pb.ClientConf {
+func parseClientConf(fname string) *pb.ClientConf {
 
-	clientConf := pb.ClientConf{}
+	clientConf := &pb.ClientConf{}
 	buf, err := ioutil.ReadFile(fname)
 	if err != nil {
 		log.Fatal("Error reading file:", err)
 	}
-	err = proto.Unmarshal(buf, &clientConf)
+	err = proto.Unmarshal(buf, clientConf)
 	if err != nil {
 		log.Fatal("Error parsing ClientConf", err)
 	}
@@ -71,8 +76,15 @@ func updateDecoy(decoy *pb.TLSDecoySpec, host string, ip string, pubkey string, 
 		decoy.Hostname = &host
 	}
 	if ip != "" {
-		ip4 := binary.BigEndian.Uint32(net.ParseIP(ip).To4())
-		decoy.Ipv4Addr = &ip4
+		ip4 := net.ParseIP(ip).To4()
+		if ip4 != nil {
+			uintIp4 := binary.BigEndian.Uint32(ip4)
+			decoy.Ipv4Addr = &uintIp4
+		} else {
+			ip6 := net.ParseIP(ip).To16()
+			fmt.Printf("%v", ip6.String())
+			decoy.Ipv6Addr = []byte(ip6)
+		}
 	}
 	if pubkey != "" {
 		decoy.Pubkey.Key = parsePubkey(pubkey)
@@ -95,6 +107,7 @@ func main() {
 	var out_fname = flag.String("o", "", "`output` file name to write new/modified config")
 	var generation = flag.Int("generation", 0, "New/modified generation")
 	var pubkey = flag.String("pubkey", "", "New/modified (decoy) pubkey. If -add or -update, applies to specific decoy. If -all applies to all decoys. Otherwise, applies to default pubkey.")
+	var cjPubkey = flag.String("cjpubkey", "", "New/modified (decoy) conjure pubkey. If -add or -update, applies to specific decoy. If -all applies to all decoys. Otherwise, applies to default pubkey.")
 	var delpubkey = flag.Bool("delpubkey", false, "Delete pubkey from decoy with index specified in -update (or from all decoys if -all)")
 
 	var add = flag.Bool("add", false, "If set, modify fields of all decoys in list with provided pubkey/timeout/tcpwin/host/ip")
@@ -111,7 +124,7 @@ func main() {
 	var noout = flag.Bool("noout", false, "Don't print ClientConf")
 	flag.Parse()
 
-	clientConf := pb.ClientConf{}
+	clientConf := &pb.ClientConf{}
 
 	// Parse ClientConf
 	if *fname != "" {
@@ -138,6 +151,23 @@ func main() {
 				clientConf.DefaultPubkey = &k
 			}
 			clientConf.DefaultPubkey.Key = parsePubkey(*pubkey)
+		}
+	}
+
+	// Update Conjure Pubkey.
+	if *cjPubkey != "" {
+		if *add || *update != -1 {
+			// Skip. -add or -delete will use pubkey
+
+		} else {
+			// Update default public key
+			if clientConf.ConjurePubkey == nil {
+				k := pb.PubKey{}
+				key_type := pb.KeyType_AES_GCM_128
+				k.Type = &key_type
+				clientConf.ConjurePubkey = &k
+			}
+			clientConf.ConjurePubkey.Key = parsePubkey(*cjPubkey)
 		}
 	}
 
@@ -185,7 +215,7 @@ func main() {
 	}
 
 	if *out_fname != "" {
-		buf, err := proto.Marshal(&clientConf)
+		buf, err := proto.Marshal(clientConf)
 		if err != nil {
 			log.Fatal("Error writing output:", err)
 		}

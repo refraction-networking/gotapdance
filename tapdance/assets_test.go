@@ -4,13 +4,14 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/golang/protobuf/proto"
-	pb "github.com/refraction-networking/gotapdance/protobuf"
 	"io/ioutil"
 	"net"
 	"os"
 	"path"
 	"testing"
+
+	"github.com/golang/protobuf/proto"
+	pb "github.com/refraction-networking/gotapdance/protobuf"
 )
 
 func TestAssets_Decoys(t *testing.T) {
@@ -54,7 +55,7 @@ func TestAssets_Decoys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !Assets().IsDecoyInList(*pb.InitTLSDecoySpec("19.21.23.42", "blahblahbl.ah")) {
+	if !Assets().IsDecoyInList(pb.InitTLSDecoySpec("19.21.23.42", "blahblahbl.ah")) {
 		t.Fatal("Decoy 19.21.23.42(blahblahbl.ah) is NOT in Decoy List!")
 	}
 	AssetsSetDir(dir2)
@@ -62,10 +63,10 @@ func TestAssets_Decoys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if Assets().IsDecoyInList(*pb.InitTLSDecoySpec("19.21.23.42", "blahblahbl.ah")) {
+	if Assets().IsDecoyInList(pb.InitTLSDecoySpec("19.21.23.42", "blahblahbl.ah")) {
 		t.Fatal("Decoy 19.21.23.42(blahblahbl.ah) is in Decoy List!")
 	}
-	if !Assets().IsDecoyInList(*pb.InitTLSDecoySpec("11.22.33.44", "what.is.up")) {
+	if !Assets().IsDecoyInList(pb.InitTLSDecoySpec("11.22.33.44", "what.is.up")) {
 		t.Fatal("Decoy 11.22.33.44(what.is.up) is NOT in Decoy List!")
 	}
 
@@ -94,10 +95,10 @@ func TestAssets_Decoys(t *testing.T) {
 	}
 	AssetsSetDir(dir1)
 
-	if !Assets().IsDecoyInList(*pb.InitTLSDecoySpec("19.21.23.42", "blahblahbl.ah")) {
+	if !Assets().IsDecoyInList(pb.InitTLSDecoySpec("19.21.23.42", "blahblahbl.ah")) {
 		t.Fatal("Decoy 19.21.23.42(blahblahbl.ah) is NOT in Decoy List!")
 	}
-	if Assets().IsDecoyInList(*pb.InitTLSDecoySpec("11.22.33.44", "what.is.up")) {
+	if Assets().IsDecoyInList(pb.InitTLSDecoySpec("11.22.33.44", "what.is.up")) {
 		t.Fatal("Decoy 11.22.33.44(what.is.up) is in Decoy List!")
 	}
 	for i := 0; i < 10; i++ {
@@ -133,9 +134,9 @@ func TestAssets_Pubkey(t *testing.T) {
 			fmt.Printf("TapDance log was:\n%s\n", b.String())
 		}
 	}()
-	initPubKey := func(defaultKey []byte) pb.PubKey {
+	initPubKey := func(defaultKey []byte) *pb.PubKey {
 		defualtKeyType := pb.KeyType_AES_GCM_128
-		return pb.PubKey{Key: defaultKey, Type: &defualtKeyType}
+		return &pb.PubKey{Key: defaultKey, Type: &defualtKeyType}
 	}
 
 	oldpath := Assets().path
@@ -180,8 +181,8 @@ func TestAssets_Pubkey(t *testing.T) {
 		fmt.Println("pubkey1:", pubkey1)
 		t.Fail()
 	}
-	os.Remove(path.Join(dir1, Assets().filenameStationPubkey))
-	os.Remove(path.Join(dir2, Assets().filenameStationPubkey))
+	// os.Remove(path.Join(dir1, Assets().filenameStationPubkey))
+	// os.Remove(path.Join(dir2, Assets().filenameStationPubkey))
 	os.Remove(dir1)
 	os.Remove(dir2)
 	AssetsSetDir(oldpath)

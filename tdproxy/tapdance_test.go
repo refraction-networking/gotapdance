@@ -10,10 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/websocket"
-
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	"github.com/refraction-networking/gotapdance/tapdance"
+	"golang.org/x/net/websocket"
 )
 
 func setupTestAssets() error {
@@ -35,7 +34,7 @@ func setupTestAssets() error {
 		return err
 	}
 
-	pubKey := pb.PubKey{
+	pubKey := &pb.PubKey{
 		Key:  stationTestPubkey,
 		Type: &keyType,
 	}
@@ -62,7 +61,8 @@ func TestMain(m *testing.M) {
 	os.Exit(retCode)
 }
 
-func DisableTestSendSeq(t *testing.T) {
+// Fails in Conjure
+func DisabledTestSendSeq(t *testing.T) {
 	conn, err := tapdance.Dial("tcp", "sfrolov.io:443")
 	if err != nil {
 		t.Error(err)
