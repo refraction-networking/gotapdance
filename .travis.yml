@@ -27,7 +27,7 @@ _job_template: &_job_template
   stage: build
   # When Uncommented this will override the defaults set in travis ci web interface.
   env:
-    - PSIPHON_CORE_VERSION="tags/v2.0.11"
+    - PSIPHON_CORE_VERSION="tags/v2.0.12"
     - PSIPHON_ANDROID_VERSION="master"
   install:
     - go get ./...
@@ -119,7 +119,7 @@ jobs:
       name: "Build Psiphon Android Library and App for Tapdance"
       before_script:
         # Get Android build environment
-        - docker pull refraction/psiandroid:latest
+        - docker pull refraction/psiandroid:v2.0.12
         - mkdir -p $GOPATH/src/github.com/Psiphon-Inc/
         - git clone https://github.com/Psiphon-Inc/psiphon-android $GOPATH/src/github.com/Psiphon-Inc/psiphon-android
         - (cd $GOPATH/src/github.com/Psiphon-Inc/psiphon-android && git checkout $PSIPHON_ANDROID_VERSION)
@@ -137,7 +137,7 @@ jobs:
         #   The psiandroid image has a pined version of gomobile --> executing go get ./... will pull over that version of gomobile to the latest version
         #   this will break your build if not done carefully. At the same time we need to go get all of the dependencies for gotapdance and utls. 
         #   Since neither of those have dependencies on gomobile we can cd to their directories and pull them as necessary.
-        - docker run --rm -v $GOPATH//src/github.com/Psiphon-Labs/psiphon-tunnel-core:/go/src/github.com/Psiphon-Labs/psiphon-tunnel-core -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance refraction/psiandroid:latest /bin/bash -c 'cd $GOPATH/src/github.com/refraction-networking/gotapdance && go get ./...;cd $GOPATH/src/github.com/refraction-networking/utls && go get ./...; cd /go/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE"'; cd -
+        - docker run --rm -v $GOPATH//src/github.com/Psiphon-Labs/psiphon-tunnel-core:/go/src/github.com/Psiphon-Labs/psiphon-tunnel-core -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance refraction/psiandroid:v2.0.12 /bin/bash -c 'cd $GOPATH/src/github.com/refraction-networking/gotapdance && go get ./...;cd $GOPATH/src/github.com/refraction-networking/utls && go get ./...; cd /go/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE"'; cd -
         
         - mv $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android/ca.psiphon.aar build/
         - cp build/ca.psiphon.aar $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/libs/
@@ -147,14 +147,14 @@ jobs:
         #   interface. So because the android build system in the psiandroid image has not accepted licensing for a few libraries we have to do that 
         #   ourselves in this run command. This also cannot use the `yes` program because that sends the y character too quickly and actually declines
         #   the license. 
-        - docker run -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src/github.com/Psiphon-Inc/psiphon-android:/go/src/github.com/Psiphon-Inc/psiphon-android refraction/psiandroid /bin/bash -c '(while true; do echo 'y'; sleep 2; done) | /android-sdk-linux/tools/android update sdk --no-ui --all --filter build-tools-29.0.3; cd /go/src/github.com/Psiphon-Inc/psiphon-android && ./gradlew assembleDebug'
+        - docker run -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src/github.com/Psiphon-Inc/psiphon-android:/go/src/github.com/Psiphon-Inc/psiphon-android refraction/psiandroid:v2.0.12 /bin/bash -c '(while true; do echo 'y'; sleep 2; done) | /android-sdk-linux/tools/android update sdk --no-ui --all --filter build-tools-27.0.3,build-tools-28.0.3,build-tools-29.0.3; cd /go/src/github.com/Psiphon-Inc/psiphon-android && ./gradlew assembleDebug'
         - sudo mv $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/build/outputs/apk/debug/PsiphonAndroid-debug.apk build/PsiphonAndroid-TD-debug.apk
 
     - <<: *_job_template 
       name: "Build Psiphon Android Library and App for Conjure"
       before_script:
         # Get Android build environment
-        - docker pull refraction/psiandroid:latest
+        - docker pull refraction/psiandroid:v2.0.12
         - mkdir -p $GOPATH/src/github.com/Psiphon-Inc/
         - git clone https://github.com/Psiphon-Inc/psiphon-android $GOPATH/src/github.com/Psiphon-Inc/psiphon-android
         - (cd $GOPATH/src/github.com/Psiphon-Inc/psiphon-android && git checkout $PSIPHON_ANDROID_VERSION)
@@ -173,7 +173,7 @@ jobs:
         #   The psiandroid image has a pined version of gomobile --> executing go get ./... will pull over that version of gomobile to the latest version
         #   this will break your build if not done carefully. At the same time we need to go get all of the dependencies for gotapdance and utls. 
         #   Since neither of those have dependencies on gomobile we can cd to their directories and pull them as necessary.
-        - docker run --rm -v $GOPATH//src/github.com/Psiphon-Labs/psiphon-tunnel-core:/go/src/github.com/Psiphon-Labs/psiphon-tunnel-core -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance refraction/psiandroid:latest /bin/bash -c 'cd $GOPATH/src/github.com/refraction-networking/gotapdance && go get ./...;cd $GOPATH/src/github.com/refraction-networking/utls && go get ./...; cd /go/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE"'; cd -
+        - docker run --rm -v $GOPATH//src/github.com/Psiphon-Labs/psiphon-tunnel-core:/go/src/github.com/Psiphon-Labs/psiphon-tunnel-core -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance refraction/psiandroid:v2.0.12 /bin/bash -c 'cd $GOPATH/src/github.com/refraction-networking/gotapdance && go get ./...;cd $GOPATH/src/github.com/refraction-networking/utls && go get ./...; cd /go/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android && ./make.bash "TAPDANCE"'; cd -
         - mv $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/MobileLibrary/Android/ca.psiphon.aar build/
         - cp build/ca.psiphon.aar $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/libs/
 
@@ -182,5 +182,5 @@ jobs:
         #   interface. So because the android build system in the psiandroid image has not accepted licensing for a few libraries we have to do that 
         #   ourselves in this run command. This also cannot use the `yes` program because that sends the y character too quickly and actually declines
         #   the license. 
-        - docker run -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src/github.com/Psiphon-Inc/psiphon-android:/go/src/github.com/Psiphon-Inc/psiphon-android refraction/psiandroid /bin/bash -c '(while true; do echo 'y'; sleep 2; done) | /android-sdk-linux/tools/android update sdk --no-ui --all --filter build-tools-29.0.3; cd /go/src/github.com/Psiphon-Inc/psiphon-android && ./gradlew assembleDebug'
-        - sudo mv $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/build/outputs/apk/debug/PsiphonAndroid-debug.apk build/
+        - docker run -v $TRAVIS_BUILD_DIR:/go/src/github.com/refraction-networking/gotapdance -v $GOPATH/src/github.com/Psiphon-Inc/psiphon-android:/go/src/github.com/Psiphon-Inc/psiphon-android refraction/psiandroid:v2.0.12 /bin/bash -c '(while true; do echo 'y'; sleep 2; done) | /android-sdk-linux/tools/android update sdk --no-ui --all --filter build-tools-27.0.3,build-tools-28.0.3,build-tools-29.0.3; cd /go/src/github.com/Psiphon-Inc/psiphon-android && ./gradlew assembleDebug'
+        - sudo mv $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/build/outputs/apk/debug/PsiphonAndroid-debug.apk build//PsiphonAndroid-CJ-debug.apk
