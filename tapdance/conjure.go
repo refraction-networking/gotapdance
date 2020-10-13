@@ -875,15 +875,6 @@ func rttInt(millis uint32) int {
 	return int(millis)
 }
 
-//[TMP] hard coded decoy
-var hcDecoy = struct {
-	hostname string
-	ipv4Addr uint32
-}{
-	hostname: "decoy2.refraction.network",
-	ipv4Addr: 3229269609,
-}
-
 // SelectDecoys - Get an array of `width` decoys to be used for registration
 func SelectDecoys(sharedSecret []byte, version uint, width uint) []*pb.TLSDecoySpec {
 
@@ -900,19 +891,15 @@ func SelectDecoys(sharedSecret []byte, version uint, width uint) []*pb.TLSDecoyS
 		allDecoys = Assets().GetAllDecoys()
 	}
 
-	decoys := make([]*pb.TLSDecoySpec, width+1)
-	decoys[0] = &pb.TLSDecoySpec{
-		Hostname: &hcDecoy.hostname,
-		Ipv4Addr: &hcDecoy.ipv4Addr,
-	}
+	decoys := make([]*pb.TLSDecoySpec, width)
 	numDecoys := big.NewInt(int64(len(allDecoys)))
 	hmacInt := new(big.Int)
 	idx := new(big.Int)
 
-	fmt.Printf("%v\n", decoys[0].GetIpAddrStr())
+	Logger().Infof("%v\n", decoys[0].GetIpAddrStr())
 
 	//[reference] select decoys
-	for i := uint(1); i < width+1; i++ {
+	for i := uint(1); i < width; i++ {
 		macString := fmt.Sprintf("registrationdecoy%d", i)
 		hmac := conjureHMAC(sharedSecret, macString)
 		hmacInt = hmacInt.SetBytes(hmac[:8])
