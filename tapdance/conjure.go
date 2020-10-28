@@ -904,8 +904,6 @@ func SelectDecoys(sharedSecret []byte, version uint, width uint) []*pb.TLSDecoyS
 	hmacInt := new(big.Int)
 	idx := new(big.Int)
 
-	Logger().Infof("%v\n", decoys[0].GetIpAddrStr())
-
 	//[reference] select decoys
 	for i := uint(1); i < width; i++ {
 		macString := fmt.Sprintf("registrationdecoy%d", i)
