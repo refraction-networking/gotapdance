@@ -196,8 +196,13 @@ func (r APIRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (
 	}
 
 	if r.Client == nil {
-		r.Client = http.DefaultClient
-		r.Client.Transport = &http.Transport{DialContext: reg.TcpDialer}
+		// Transports should ideally be re-used for TCP connection pooling,
+		// but each registration is most likely making precisely one request,
+		// or if it's making more than one, is most likely due to an underlying
+		// connection issue rather than an application-level error anyways.
+		t := http.DefaultTransport.(*http.Transport).Clone()
+		t.DialContext = reg.TcpDialer
+		r.Client = &http.Client{Transport: t}
 	}
 
 	tries := 0
@@ -605,7 +610,7 @@ func (reg *ConjureReg) send(ctx context.Context, decoy *pb.TLSDecoySpec, dialErr
 	}
 
 	//[reference] connection stats tracking
-	rtt := rttInt(*reg.stats.TcpToDecoy)
+	rtt := rttInt(uint32(time.Since(tcpToDecoyStartTs).Milliseconds()))
 	delay := getRandomDuration(1061*rtt*2, 1953*rtt*3) //[TODO]{priority:@sfrolov} why these values??
 	TLSDeadline := time.Now().Add(delay)
 
@@ -801,6 +806,9 @@ func (reg *ConjureReg) digestStats() string {
 	if reg == nil || reg.stats == nil {
 		return fmt.Sprint("{result:\"no stats tracked\"}")
 	}
+
+	reg.m.Lock()
+	defer reg.m.Unlock()
 	return fmt.Sprintf("{result:\"success\", tcp_to_decoy:%v, tls_to_decoy:%v, total_time_to_connect:%v}",
 		reg.stats.GetTcpToDecoy(),
 		reg.stats.GetTlsToDecoy(),
