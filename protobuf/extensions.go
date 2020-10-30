@@ -30,6 +30,9 @@ func InitTLSDecoySpec(ip string, sni string) *TLSDecoySpec {
 
 // GetIpAddrStr returns IP address of TLSDecoySpec as a string.
 func (ds *TLSDecoySpec) GetIpAddrStr() string {
+	if ds == nil {
+		return ""
+	}
 	if ds.Ipv4Addr != nil {
 		_ip := make(net.IP, 4)
 		binary.BigEndian.PutUint32(_ip, ds.GetIpv4Addr())

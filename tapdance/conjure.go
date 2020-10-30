@@ -905,7 +905,7 @@ func SelectDecoys(sharedSecret []byte, version uint, width uint) []*pb.TLSDecoyS
 	idx := new(big.Int)
 
 	//[reference] select decoys
-	for i := uint(1); i < width; i++ {
+	for i := uint(0); i < width; i++ {
 		macString := fmt.Sprintf("registrationdecoy%d", i)
 		hmac := conjureHMAC(sharedSecret, macString)
 		hmacInt = hmacInt.SetBytes(hmac[:8])
