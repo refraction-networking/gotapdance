@@ -27,7 +27,7 @@ _job_template: &_job_template
   stage: build
   # When Uncommented this will override the defaults set in travis ci web interface.
   env:
-    - PSIPHON_CORE_VERSION="tags/v2.0.12"
+    - PSIPHON_CORE_VERSION="staging-client"
     - PSIPHON_ANDROID_VERSION="master"
   install:
     - go get ./...
@@ -36,7 +36,9 @@ _job_template: &_job_template
     - mkdir -p $GOPATH/src/github.com/Psiphon-Labs
     # Get Specific Psiphon Core Library Release
     - git clone https://github.com/Psiphon-Labs/psiphon-tunnel-core.git $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core
-    - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && git checkout $PSIPHON_CORE_VERSION -b build-refraction-networking)
+    - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && git checkout $PSIPHON_CORE_VERSION)
+    # - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && git checkout $PSIPHON_CORE_VERSION -b build-refraction-networking)
+    
     # Remove gotapdance from vendored packages (it will look in GOPATH if after vendor directory)
     - go get github.com/kardianos/govendor
     - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && govendor remove github.com/refraction-networking/gotapdance/...)
