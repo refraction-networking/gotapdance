@@ -229,6 +229,7 @@ message ClientToAPI {
 enum RegistrationSource {
 	Detector = 0;
 	API = 1;
+    DetectorPrescan = 2;
 }
 
 message ZMQPayload {
