@@ -822,6 +822,8 @@ func (reg *ConjureReg) getRandomDuration(base, min, max int) time.Duration {
 }
 
 func (reg *ConjureReg) getTcpToDecoy() uint32 {
+	reg.m.Lock()
+	defer reg.m.Unlock()
 	if reg != nil {
 		if reg.stats != nil {
 			return reg.stats.GetTcpToDecoy()
