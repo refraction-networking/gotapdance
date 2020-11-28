@@ -25,6 +25,14 @@ Client Config management tools. Used for adding
 
 Perform a AAAA lookup for each domain name as part of clientConfig supplement for Conjure.
 
+## CJProbe
+
+`cjprobe`
+
+Run UDP probe tool to test station reachability. Sends raw UDP packets or DNS requests containing
+string tag the conjure stations look for and log, validating that a station lies on path for a
+client, server pair.
+
 ## Elligator Test
 
 `elligator-test`

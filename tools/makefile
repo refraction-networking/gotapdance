@@ -3,7 +3,7 @@ GOCMD=go
 GOBUILD=$(GOCMD) build
 GOCLEAN=$(GOCMD) clean
 GOTEST=$(GOCMD) test
-BINARY_NAMES=clientconf v6lookup elligator-test utls-test
+BINARY_NAMES=clientconf v6lookup elligator-test utls-test cjprobe
 
 
 all: test build
@@ -23,6 +23,11 @@ clientconf:
 v6lookup:
 	echo "building v6lookup"; \
 	cd v6lookup && $(GOBUILD) -o ../bin/v6lookup ; \
+	cd ../; \
+
+cjprobe:
+	echo "building conjure probe tool"; \
+	cd cjprobe && $(GOBUILD) -o ../bin/cjprobe ; \
 	cd ../; \
 
 elligator-test:
