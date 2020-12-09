@@ -39,9 +39,14 @@ type Registrar interface {
 	Register(*ConjureSession, context.Context) (*ConjureReg, error)
 }
 
-type DecoyRegistrar struct{}
+type DecoyRegistrar struct {
 
-func (DecoyRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (*ConjureReg, error) {
+	// TcpDialer is a custom TCP dailer to use when establishing TCP connections
+	// to decoys. When nil, Dialer.TcpDialer will be used.
+	TcpDialer func(context.Context, string, string) (net.Conn, error)
+}
+
+func (r DecoyRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (*ConjureReg, error) {
 	Logger().Debugf("%v Registering V4 and V6 via DecoyRegistrar", cjSession.IDString())
 
 	// Choose N (width) decoys from decoylist
@@ -64,6 +69,10 @@ func (DecoyRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (
 		transport:      cjSession.Transport,
 		TcpDialer:      cjSession.TcpDialer,
 		useProxyHeader: cjSession.UseProxyHeader,
+	}
+
+	if r.TcpDialer != nil {
+		reg.TcpDialer = r.TcpDialer
 	}
 
 	// //[TODO]{priority:later} How to pass context to multiple registration goroutines?
