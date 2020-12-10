@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"log"
 	"math/big"
 	"math/rand"
 	"net"
@@ -212,7 +211,7 @@ func SelectPhantom(seed []byte, subnets SubnetConfig, transform SubnetFilter, we
 
 	s, err := parseSubnets(subnets.getSubnets(seed, weighted))
 	if err != nil {
-		log.Fatalf("Failed to parse subnets: %v", err)
+		return nil, fmt.Errorf("Failed to parse subnets: %v", err)
 	}
 
 	if transform != nil {
