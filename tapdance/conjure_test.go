@@ -181,7 +181,7 @@ func TestAPIRegistrar(t *testing.T) {
 			t.Fatalf("failed to read request body: %v", err)
 		}
 
-		payload := pb.ClientToAPI{}
+		payload := pb.C2SWrapper{}
 		err = proto.Unmarshal(body, &payload)
 		if err != nil {
 			t.Fatalf("failed to decode request body: %v", err)
