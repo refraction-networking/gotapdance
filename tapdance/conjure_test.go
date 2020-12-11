@@ -181,7 +181,7 @@ func TestAPIRegistrar(t *testing.T) {
 			t.Fatalf("failed to read request body: %v", err)
 		}
 
-		payload := pb.ClientToAPI{}
+		payload := pb.C2SWrapper{}
 		err = proto.Unmarshal(body, &payload)
 		if err != nil {
 			t.Fatalf("failed to decode request body: %v", err)
@@ -191,8 +191,8 @@ func TestAPIRegistrar(t *testing.T) {
 			t.Fatalf("incorrect covert address: expected 1.2.3.4:1234, got %s", payload.RegistrationPayload.GetCovertAddress())
 		}
 
-		if !bytes.Equal(payload.GetSecret(), session.Keys.SharedSecret) {
-			t.Fatalf("incorrect shared secret: expected %v, got %v", session.Keys.SharedSecret, payload.GetSecret())
+		if !bytes.Equal(payload.GetSharedSecret(), session.Keys.SharedSecret) {
+			t.Fatalf("incorrect shared secret: expected %v, got %v", session.Keys.SharedSecret, payload.GetSharedSecret())
 		}
 	}))
 
