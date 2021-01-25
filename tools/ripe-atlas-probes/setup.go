@@ -160,12 +160,22 @@ inputLoop:
 
 	fmt.Println("Successfully created traceroute measurements. Waiting for information on probes to proceed to DNS measurements.")
 
+	// The RIPE Atlas API allows us to specify another measurement ID to use the
+	// same probes in theory, however it seems that if the first measurement
+	// reports itself as failed, the second will never happen. Thus, we should manually
+	// get the probes to add onto the second measurement.
 	body := struct {
 		Probes []struct {
 			ID int `json:"id"`
 		} `json:"probes"`
 	}{}
 
+	// TODO: we can't check if body.Probes is the length we want, as some probes
+	// probably will not pick up the measurement. Checking for a non-zero length,
+	// however, isn't optimal---the probes might not be finished filling in. There
+	// isn't a clear way to tell whether probes are done being populated, but a
+	// model that waits until multiple calls end up in the same (non-zero) length
+	// consecutively might make more sense.
 	for len(body.Probes) == 0 {
 		// It seems like RIPE's API takes a bit of an eventual consistency model,
 		// so the probes aren't immediately available after creating the request.
