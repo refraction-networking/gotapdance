@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/jinzhu/copier"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 )
 
@@ -94,7 +95,7 @@ func lookupHost(decoy *pb.TLSDecoySpec, ip6Chan chan *pb.TLSDecoySpec) {
 			if decoyIP.To4() != nil {
 				continue
 			}
-			newDecoy := decoy.DeepCopy()
+			newDecoy := DeepCopy(decoy)
 			newDecoy.Ipv6Addr = decoyIP
 			newDecoy.Ipv4Addr = nil
 			fmt.Printf("%v, %v, (%v), [%v]\n", len(decoyIPs), decoyHostname, decoy.GetIpAddrStr(), decoyIP)
@@ -139,6 +140,13 @@ type jobTuple struct {
 	Decoy *pb.TLSDecoySpec
 	Total uint
 	JobId uint
+}
+
+// DeepCopy - Create a Deep Copy of a given TLSDecoySpec Object
+func DeepCopy(ds *pb.TLSDecoySpec) *pb.TLSDecoySpec {
+	newDs := pb.TLSDecoySpec{}
+	copier.Copy(&newDs, ds)
+	return &newDs
 }
 
 func ConnectToAll(decoyList []*pb.TLSDecoySpec, workers int) {
