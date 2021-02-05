@@ -361,3 +361,26 @@ func (a *assets) saveClientConf() error {
 func (a *assets) SetStatsSocksAddr(addr string) {
 	a.socksAddr = addr
 }
+
+func (a *assets) CacheRegistration(reg *ConjureReg) error {
+
+	// Convert ConjureReg to whatever form is stored.
+
+	// insert into clientConf
+
+	// saveClientConf
+	return a.saveClientConf()
+}
+
+func (a *assets) TryGetCachedRegistration() *ConjureReg {
+
+	// Retrieve all cached registrations from clientconf
+
+	// check their timeout values
+
+	// Convert to ConjureReg struct
+
+	// if any are still valid check for preferred.
+
+	return nil
+}

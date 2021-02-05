@@ -257,3 +257,14 @@ message StationToDetector {
 
     optional uint64 timeout_ns = 3;
 }
+
+message CJRegCacheEntry {
+    optional string phantom = 1;
+    optional string secret = 2;
+    optional uint32 attempted_conns = 3;
+    optional uint32 successful_conns = 4;
+}
+
+message CJRegCache {
+        map<string, CJRegCacheEntry> cache = 1;
+}

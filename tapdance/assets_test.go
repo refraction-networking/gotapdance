@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"testing"
+	"time"
 
 	"github.com/golang/protobuf/proto"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
@@ -187,3 +188,55 @@ func TestAssets_Pubkey(t *testing.T) {
 	os.Remove(dir2)
 	AssetsSetDir(oldpath)
 }
+
+func TestAssetsCacheing(t *testing.T) {
+	p4 := net.ParseIP("1.2.3.4")
+	reg := &ConjureReg{
+		phantom4:  &p4,
+		v6Support: both,
+		// timeout: 2 seconds from now
+	}
+
+	err := Assets().CacheRegistration(reg)
+	if err != nil {
+		t.Fatalf("CacheRegistration returned error: %v", err)
+	}
+
+	reg = Assets().TryGetCachedRegistration()
+	if reg == nil {
+		t.Fatalf("Was unable to retrieve cached registration")
+	}
+
+	time.Sleep(time.Duration(4) * time.Second)
+
+	reg = Assets().TryGetCachedRegistration()
+	if reg != nil {
+		t.Fatalf("Shouldn't have been able to retrieve cached registration after timeout.")
+	}
+}
+
+/*
+TODO Plan:
+	- Add timeout tracking to ConjureReg
+	- Add preferred status to Conjurereg
+	- Modify ConjureReg To track stats in a meaningful way across connections
+		* track updates to stats and registration state.
+	- Add Some struct to the ClientConf Protobuf to track Cached Registrations
+
+	- Add TryGetCachedRegistration to Dialer
+	- Add CacheRegistration to Dialer
+
+	- Expand tests
+
+	- track registrations for longer lifetimes on station, and in the detector
+	- generate registrations with longer lifetimes.
+
+
+Questions:
+-> HOW DO CLIENTS KNOW HOW LONG TO CACHE REGISTRATIONS FOR???????
+    * Just set some automatic default for now that is hardcoded on the station
+    and client independently. (i.e. both set a day for now)
+
+	* Bidirectional registration that sends the value for timeout from the stations
+	eventually
+*/
