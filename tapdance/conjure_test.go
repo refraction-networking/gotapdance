@@ -7,14 +7,18 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/golang/protobuf/proto"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	tls "github.com/refraction-networking/utls"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestTLSFailure(t *testing.T) {
@@ -165,6 +169,59 @@ func TestSelectDecoys(t *testing.T) {
 	if len(decoys) < 5 {
 		t.Fatalf("Not enough decoys returned from selection.")
 	}
+}
+
+func TestSelectDecoysErrorHandling(t *testing.T) {
+	// SelectDecoys(sharedSecret []byte, useV6 bool, width uint)[]*pb.TLSDecoySpec
+	seed, err := hex.DecodeString("5a87133b68da3468988a21659a12ed2ece07345c8c1a5b08459ffdea4218d12f")
+	if err != nil {
+		t.Fatalf("Issue decoding seedStr")
+	}
+
+	// // ====[ Assets dir doesn't exist ]=====
+	// AssetsSetDir("./non-existent-local-dir")
+	// _, err = SelectDecoys(seed, v6, 5)
+	// assert.Equal(t, "no decoys", err.Error())
+
+	// create temporary test dir
+	dir, err := ioutil.TempDir("", "assets-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir) // clean up
+	AssetsSetDir(dir)
+
+	// ====[ ClientConf file doesn't exist ]=====
+
+	_, err = SelectDecoys(seed, both, 5)
+	assert.Equal(t, "no decoys", err.Error())
+
+	// ====[ ClientConf file is empty ]=====
+
+	// create temporary ClientConf file in temp test Dir
+	tmpfile, err := ioutil.TempFile(dir, "ClientConf")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer os.Remove(tmpfile.Name()) // clean up
+
+	_, err = SelectDecoys(seed, both, 5)
+	assert.Equal(t, "no decoys", err.Error())
+
+	// ====[ ClientConf file not formatted as protobuf ]=====
+
+	tmpfn := filepath.Join(dir, "ClientConf")
+	content := []byte("temporary file's content")
+	if err := ioutil.WriteFile(tmpfn, content, 0666); err != nil {
+		log.Fatal(err)
+	}
+
+	_, err = SelectDecoys(seed, both, 5)
+	assert.Equal(t, "no decoys", err.Error())
+
+	// ====[ ClientConf file is v4 only - select v6 ]=====
+
+	// ====[ ClientConf file is v6 only - select v4 ]=====
 }
 
 func TestAPIRegistrar(t *testing.T) {
