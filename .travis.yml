@@ -43,7 +43,7 @@ _job_template: &_job_template
     - go get github.com/kardianos/govendor
     - (cd $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core && govendor remove github.com/refraction-networking/gotapdance/...)
     # Enable TapDance logging
-    - sed -i.bak -e 's#refraction_networking_tapdance.Logger().Out = ioutil.Discard##g' $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go
+    - sed -i.bak -e 's#refraction_networking_tapdance.Logger().Out = ioutil.Discard##g' $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/refraction/refraction.go
   after_success:
     # Upload built binaries to S3
     - sudo pip install awscli
@@ -98,7 +98,7 @@ jobs:
         # Build Tapdance ConsolClient
         - go build -a -v -race -o build/ConsoleClient-td-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
         # Add dialer options for Conjure and re-build the ConsoleClient
-        - patch $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go build/conjure.golang.patch
+        - patch $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/refraction/refraction.go build/conjure.golang.patch
         - go build -a -v -race -o build/ConsoleClient-cj-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
 
     - <<: *_job_template # Same build on OS X
@@ -114,7 +114,7 @@ jobs:
         # Build Tapdance ConsolClient
         - go build -a -v -race -o build/ConsoleClient-td-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
         # Add dialer options for Conjure and re-build the ConsoleClient
-        - patch $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go build/conjure.golang.patch
+        - patch $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/refraction/refraction.go build/conjure.golang.patch
         - go build -a -v -race -o build/ConsoleClient-cj-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
 
     - <<: *_job_template 
@@ -132,7 +132,7 @@ jobs:
         # Patch the Psiphon app's gradle build for java 1.8 compatibility [TODO]{priority:later} remove this when psiphon merges it themselves
         - patch $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/build.gradle build/PsiphonCoreGradle.patch
         # Digest this branch's ClientConf into Psiphon's embedded_config
-        - ./test_scripts/psiphon_digest_cc.sh ./assets/ClientConf $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/embedded_config.go
+        - ./test_scripts/psiphon_digest_cc.sh ./assets/ClientConf $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/refraction/embedded_config.go
         - go get ./...
       script:
         # Build Psiphon Android Library ca.psiphon.aar
@@ -167,9 +167,9 @@ jobs:
         # Patch the Psiphon app's gradle build for java 1.8 compatibility [TODO]{priority:later} remove this when psiphon merges it themselves
         - patch $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/build.gradle build/PsiphonCoreGradle.patch
         # Add dialer options to enable Conjure 
-        - patch $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/tapdance.go build/conjure.golang.patch
+        - patch $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/refraction/refraction.go build/conjure.golang.patch
         # Digest this branch's ClientConf into Psiphon's embedded_config
-        - ./test_scripts/psiphon_digest_cc.sh ./assets/ClientConf $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/tapdance/embedded_config.go
+        - ./test_scripts/psiphon_digest_cc.sh ./assets/ClientConf $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/refraction/embedded_config.go
       script:
         # Build Psiphon Android Library ca.psiphon.aar
         #   The psiandroid image has a pined version of gomobile --> executing go get ./... will pull over that version of gomobile to the latest version
