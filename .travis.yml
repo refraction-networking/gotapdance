@@ -98,7 +98,7 @@ jobs:
         # Build Tapdance ConsolClient
         - go build -a -v -race -o build/ConsoleClient-td-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
         
-        # # Add dialer options for Conjure and re-build the ConsoleClient (REMOVE?)
+        # # Add dialer params for Conjure and re-build the ConsoleClient (TODO??)
         # - patch $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/src/main/java/com/psiphon3/psiphonlibrary/TunnelManager.java build/conjure.java.patch
         
         - go build -a -v -race -o build/ConsoleClient-cj-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
@@ -116,7 +116,7 @@ jobs:
         # Build Tapdance ConsolClient
         - go build -a -v -race -o build/ConsoleClient-td-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
         
-        # # Add dialer options for Conjure and re-build the ConsoleClient (REMOVE?)
+        # # Add dialer params for Conjure and re-build the ConsoleClient (TODO??)
         # - patch $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/src/main/java/com/psiphon3/psiphonlibrary/TunnelManager.java build/conjure.java.patch
         
         - go build -a -v -race -o build/ConsoleClient-cj-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
@@ -131,7 +131,7 @@ jobs:
         - (cd $GOPATH/src/github.com/Psiphon-Inc/psiphon-android && git checkout $PSIPHON_ANDROID_VERSION)
         # Use modified EmbeddedValues.java for TapDance
         - openssl enc -nosalt -aes-256-cbc -md sha512 -pbkdf2 -iter 1000 -pass pass:$aes_cbc_passwd  -d -in build/EmbeddedValues.java.enc -out $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/src/main/java/com/psiphon3/psiphonlibrary/EmbeddedValues.java
-        # Patched tunneling protocol for TapDance
+        # Patched tunneling protocol to use TapDance
         - patch $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/src/main/java/com/psiphon3/psiphonlibrary/TunnelManager.java build/TunnelManager.tapdance.java.patch
         # Patch the Psiphon app's gradle build for java 1.8 compatibility [TODO]{priority:later} remove this when psiphon merges it themselves
         - patch $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/build.gradle build/PsiphonCoreGradle.patch
@@ -166,12 +166,12 @@ jobs:
         - (cd $GOPATH/src/github.com/Psiphon-Inc/psiphon-android && git checkout $PSIPHON_ANDROID_VERSION)
         # Use modified EmbeddedValues.java for TapDance
         - openssl enc -nosalt -aes-256-cbc -md sha512 -pbkdf2 -iter 1000 -pass pass:$aes_cbc_passwd  -d -in build/EmbeddedValues.java.enc -out $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/src/main/java/com/psiphon3/psiphonlibrary/EmbeddedValues.java
-        # Patched tunneling protocol for TapDance
+        # Patched tunneling protocol to use Conjure-ossh
         - patch $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/src/main/java/com/psiphon3/psiphonlibrary/TunnelManager.java build/TunnelManager.conjure.java.patch
         # Patch the Psiphon app's gradle build for java 1.8 compatibility [TODO]{priority:later} remove this when psiphon merges it themselves
         - patch $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/build.gradle build/PsiphonCoreGradle.patch
         
-        ##  Add dialer options to enable Conjure  (REMOVE?)
+        ##  Add dialer options to customize dialer Params for Conjure  (TODO??)
         # - patch $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/src/main/java/com/psiphon3/psiphonlibrary/TunnelManager.java.orig > build/conjure.java.patch build/conjure.java.patch
        
         # Digest this branch's ClientConf into Psiphon's embedded_config
