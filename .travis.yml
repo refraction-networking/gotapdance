@@ -97,8 +97,10 @@ jobs:
         - go build -o build/cli-$TRAVIS_OS_NAME ./cli
         # Build Tapdance ConsolClient
         - go build -a -v -race -o build/ConsoleClient-td-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
-        # Add dialer options for Conjure and re-build the ConsoleClient
-        - patch $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/refraction/refraction.go build/conjure.golang.patch
+        
+        # # Add dialer options for Conjure and re-build the ConsoleClient (REMOVE?)
+        # - patch $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/src/main/java/com/psiphon3/psiphonlibrary/TunnelManager.java build/conjure.java.patch
+        
         - go build -a -v -race -o build/ConsoleClient-cj-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
 
     - <<: *_job_template # Same build on OS X
@@ -113,8 +115,10 @@ jobs:
         - go build -o build/cli-$TRAVIS_OS_NAME ./cli
         # Build Tapdance ConsolClient
         - go build -a -v -race -o build/ConsoleClient-td-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
-        # Add dialer options for Conjure and re-build the ConsoleClient
-        - patch $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/refraction/refraction.go build/conjure.golang.patch
+        
+        # # Add dialer options for Conjure and re-build the ConsoleClient (REMOVE?)
+        # - patch $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/src/main/java/com/psiphon3/psiphonlibrary/TunnelManager.java build/conjure.java.patch
+        
         - go build -a -v -race -o build/ConsoleClient-cj-$TRAVIS_OS_NAME -tags 'TAPDANCE' github.com/Psiphon-Labs/psiphon-tunnel-core/ConsoleClient
 
     - <<: *_job_template 
@@ -128,7 +132,7 @@ jobs:
         # Use modified EmbeddedValues.java for TapDance
         - openssl enc -nosalt -aes-256-cbc -md sha512 -pbkdf2 -iter 1000 -pass pass:$aes_cbc_passwd  -d -in build/EmbeddedValues.java.enc -out $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/src/main/java/com/psiphon3/psiphonlibrary/EmbeddedValues.java
         # Patched tunneling protocol for TapDance
-        - patch $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/src/main/java/com/psiphon3/psiphonlibrary/TunnelManager.java build/TunnelManager.java.patch
+        - patch $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/src/main/java/com/psiphon3/psiphonlibrary/TunnelManager.java build/TunnelManager.tapdance.java.patch
         # Patch the Psiphon app's gradle build for java 1.8 compatibility [TODO]{priority:later} remove this when psiphon merges it themselves
         - patch $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/build.gradle build/PsiphonCoreGradle.patch
         # Digest this branch's ClientConf into Psiphon's embedded_config
@@ -163,11 +167,13 @@ jobs:
         # Use modified EmbeddedValues.java for TapDance
         - openssl enc -nosalt -aes-256-cbc -md sha512 -pbkdf2 -iter 1000 -pass pass:$aes_cbc_passwd  -d -in build/EmbeddedValues.java.enc -out $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/src/main/java/com/psiphon3/psiphonlibrary/EmbeddedValues.java
         # Patched tunneling protocol for TapDance
-        - patch $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/src/main/java/com/psiphon3/psiphonlibrary/TunnelManager.java build/TunnelManager.java.patch
+        - patch $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/src/main/java/com/psiphon3/psiphonlibrary/TunnelManager.java build/TunnelManager.conjure.java.patch
         # Patch the Psiphon app's gradle build for java 1.8 compatibility [TODO]{priority:later} remove this when psiphon merges it themselves
         - patch $GOPATH/src/github.com/Psiphon-Inc/psiphon-android/app/build.gradle build/PsiphonCoreGradle.patch
-        # Add dialer options to enable Conjure 
-        - patch $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/refraction/refraction.go build/conjure.golang.patch
+        
+        ##  Add dialer options to enable Conjure  (REMOVE?)
+        # - patch $GOPATH/src/bitbucket.org/psiphon/psiphon-circumvention-system/Android/app/src/main/java/com/psiphon3/psiphonlibrary/TunnelManager.java.orig > build/conjure.java.patch build/conjure.java.patch
+       
         # Digest this branch's ClientConf into Psiphon's embedded_config
         - ./test_scripts/psiphon_digest_cc.sh ./assets/ClientConf $GOPATH/src/github.com/Psiphon-Labs/psiphon-tunnel-core/psiphon/common/refraction/embedded_config.go
       script:
