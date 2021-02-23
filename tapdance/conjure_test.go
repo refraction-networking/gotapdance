@@ -15,6 +15,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	tls "github.com/refraction-networking/utls"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestTLSFailure(t *testing.T) {
@@ -157,11 +158,13 @@ func TestSelectDecoys(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Issue decoding seedStr")
 	}
-	decoys := SelectDecoys(seed, v6, 5)
+	decoys, err := SelectDecoys(seed, v6, 5)
+	assert.Nil(t, err)
 	if len(decoys) < 5 {
 		t.Fatalf("Not enough decoys returned from selection.")
 	}
-	decoys = SelectDecoys(seed, v4, 5)
+	decoys, err = SelectDecoys(seed, v4, 5)
+	assert.Nil(t, err)
 	if len(decoys) < 5 {
 		t.Fatalf("Not enough decoys returned from selection.")
 	}
