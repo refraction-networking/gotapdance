@@ -19,6 +19,7 @@ import (
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	tls "github.com/refraction-networking/utls"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTLSFailure(t *testing.T) {
@@ -180,10 +181,9 @@ func TestSelectDecoysErrorHandling(t *testing.T) {
 		t.Fatalf("Issue decoding seedStr")
 	}
 
-	// // ====[ Assets dir doesn't exist ]=====
-	// AssetsSetDir("./non-existent-local-dir")
-	// _, err = SelectDecoys(seed, v6, 5)
-	// assert.Equal(t, "no decoys", err.Error())
+	// ====[ Assets dir doesn't exist ]=====
+	_, err = AssetsSetDir("./non-existent-local-dir")
+	require.Contains(t, err.Error(), "no such file or directory")
 
 	// create temporary test dir
 	dir, err := ioutil.TempDir("", "assets-test")
@@ -191,12 +191,16 @@ func TestSelectDecoysErrorHandling(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(dir) // clean up
-	AssetsSetDir(dir)
+	_, err = AssetsSetDir(dir)
+	require.Contains(t, err.Error(), "no such file or directory")
 
 	// ====[ ClientConf file doesn't exist ]=====
 
-	_, err = SelectDecoys(seed, both, 5)
-	assert.Equal(t, "no decoys", err.Error())
+	// => still using default configuration path since there was not file to update
+	decoy, err := SelectDecoys(seed, both, 1)
+	require.Nil(t, err)
+	require.NotNil(t, decoy)
+	assert.Equal(t, "tapdance1.freeaeskey.xyz", decoy[0].GetHostname())
 
 	// ====[ ClientConf file is empty ]=====
 
@@ -207,8 +211,20 @@ func TestSelectDecoysErrorHandling(t *testing.T) {
 	}
 	defer os.Remove(tmpfile.Name()) // clean up
 
-	_, err = SelectDecoys(seed, both, 5)
-	assert.Equal(t, "no decoys", err.Error())
+	// Error occurs while updating assets dir, clientconf remains unchanged from
+	// default from initialization.
+	_, err = AssetsSetDir(dir)
+	require.Nil(t, err)
+
+	err = Assets().readConfigs()
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "no such file or directory")
+
+	// => still using default configuration path since there was not file to update
+	decoy, err = SelectDecoys(seed, both, 1)
+	require.Nil(t, err)
+	require.NotNil(t, decoy)
+	assert.Equal(t, "tapdance1.freeaeskey.xyz", decoy[0].GetHostname())
 
 	// ====[ ClientConf file not formatted as protobuf ]=====
 
@@ -218,12 +234,11 @@ func TestSelectDecoysErrorHandling(t *testing.T) {
 		log.Fatal(err)
 	}
 
-	_, err = SelectDecoys(seed, both, 5)
-	assert.Equal(t, "no decoys", err.Error())
-
-	// ====[ ClientConf file is v4 only - select v6 ]=====
-
-	// ====[ ClientConf file is v6 only - select v4 ]=====
+	// => still using default configuration path since there was not file to update
+	decoy, err = SelectDecoys(seed, both, 1)
+	require.Nil(t, err)
+	require.NotNil(t, decoy)
+	assert.Equal(t, "tapdance1.freeaeskey.xyz", decoy[0].GetHostname())
 }
 
 func TestAPIRegistrar(t *testing.T) {

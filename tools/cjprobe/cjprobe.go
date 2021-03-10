@@ -100,7 +100,7 @@ func main() {
 			}
 		}
 		if !*decoyOnly {
-			if blocks := clientConf.GetDarkDecoyBlocks(); blocks != nil {
+			if blocks := clientConf.GetPhantomSubnets(); blocks != nil {
 				for _, subnetStr := range blocks.Blocks {
 					_, subnet, err := net.ParseCIDR(subnetStr)
 					if err != nil {

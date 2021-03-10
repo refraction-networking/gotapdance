@@ -10,16 +10,22 @@ import (
 	"net"
 
 	wr "github.com/mroth/weightedrand"
+	pb "github.com/refraction-networking/gotapdance/protobuf"
 )
 
-type ConjurePhantomSubnet struct {
-	Weight  float32
-	Subnets []string
-}
+type ConjurePhantomSubnet pb.PhantomSubnets
 
-type SubnetConfig struct {
-	WeightedSubnets []ConjurePhantomSubnet
-}
+// struct {
+// 	Weight  float32
+// 	Subnets []string
+// }
+
+type SubnetConfig pb.PhantomSubnetsList
+
+// struct {
+// 	Generation      uint32
+// 	WeightedSubnets []ConjurePhantomSubnet
+// }
 
 // getSubnets - return EITHER all subnet strings as one composite array if we are
 //		selecting unweighted, or return the array associated with the (seed) selected
@@ -38,7 +44,7 @@ func (sc *SubnetConfig) getSubnets(seed []byte, weighted bool) []string {
 
 		choices := make([]wr.Choice, 0, len(sc.WeightedSubnets))
 		for _, cjSubnet := range sc.WeightedSubnets {
-			choices = append(choices, wr.Choice{Item: cjSubnet.Subnets, Weight: uint(cjSubnet.Weight)})
+			choices = append(choices, wr.Choice{Item: cjSubnet.Subnets, Weight: float32(cjSubnet.Weight)})
 		}
 		c, _ := wr.NewChooser(choices...)
 		out = c.Pick().([]string)
@@ -207,7 +213,7 @@ func selectIPAddr(seed []byte, subnets []*net.IPNet) (*net.IP, error) {
 }
 
 // SelectPhantom - select one phantom IP address based on shared secret
-func SelectPhantom(seed []byte, subnets SubnetConfig, transform SubnetFilter, weighted bool) (*net.IP, error) {
+func SelectPhantom(seed []byte, subnets *SubnetConfig, transform SubnetFilter, weighted bool) (*net.IP, error) {
 
 	s, err := parseSubnets(subnets.getSubnets(seed, weighted))
 	if err != nil {
@@ -225,11 +231,28 @@ func SelectPhantom(seed []byte, subnets SubnetConfig, transform SubnetFilter, we
 }
 
 // SelectPhantomUnweighted - select one phantom IP address based on shared secret
-func SelectPhantomUnweighted(seed []byte, subnets SubnetConfig, transform SubnetFilter) (*net.IP, error) {
+func SelectPhantomUnweighted(seed []byte, subnets *SubnetConfig, transform SubnetFilter) (*net.IP, error) {
 	return SelectPhantom(seed, subnets, transform, false)
 }
 
 // SelectPhantomWeighted - select one phantom IP address based on shared secret
-func SelectPhantomWeighted(seed []byte, subnets SubnetConfig, transform SubnetFilter) (*net.IP, error) {
+func SelectPhantomWeighted(seed []byte, subnets *SubnetConfig, transform SubnetFilter) (*net.IP, error) {
 	return SelectPhantom(seed, subnets, transform, true)
+}
+
+// GetDefaultPhantomSubnets implements the
+func GetDefaultPhantomSubnets() *SubnetConfig {
+	return &SubnetConfig{
+		Generation: uint32(1),
+		WeightedSubnets: []ConjurePhantomSubnet{
+			{
+				Weight:  float32(9),
+				Subnets: []string{"192.122.190.0/24", "2001:48a8:687f:1::/64"},
+			},
+			{
+				Weight:  float32(1),
+				Subnets: []string{"141.219.0.0/16", "35.8.0.0/16"},
+			},
+		},
+	}
 }
