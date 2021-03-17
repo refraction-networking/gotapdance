@@ -97,7 +97,7 @@ message PhantomSubnetsList{
 }
 
 message PhantomSubnets{
-    optional float weight = 1;
+    optional uint32 weight = 1;
     repeated string subnets = 2;
 }
 

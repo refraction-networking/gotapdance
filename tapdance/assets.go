@@ -383,7 +383,7 @@ func (a *assets) SetStatsSocksAddr(addr string) {
 }
 
 // GetPhantomSubnets -
-func (a *assets) GetPhantomSubnets() *ps.SubnetConfig {
+func (a *assets) GetPhantomSubnets() *pb.PhantomSubnetsList {
 	a.RLock()
 	defer a.RUnlock()
 
@@ -391,7 +391,7 @@ func (a *assets) GetPhantomSubnets() *ps.SubnetConfig {
 		return ps.GetDefaultPhantomSubnets()
 	}
 
-	if subnetConfig := a.config.GetPhantomSubnets; subnetConfig != nil {
+	if subnetConfig := a.config.GetPhantomSubnetsList(); subnetConfig != nil {
 		return subnetConfig
 	}
 
@@ -399,7 +399,7 @@ func (a *assets) GetPhantomSubnets() *ps.SubnetConfig {
 }
 
 // SetPhantomSubnets -
-func (a *assets) SetPhantomSubnets(subnetConf *ps.SubnetConfig) error {
+func (a *assets) SetPhantomSubnets(subnetConf *pb.PhantomSubnetsList) error {
 	a.Lock()
 	defer a.Unlock()
 
@@ -407,7 +407,7 @@ func (a *assets) SetPhantomSubnets(subnetConf *ps.SubnetConfig) error {
 		a.config = &pb.ClientConf{}
 	}
 
-	a.config.SetPhantomSubnets(subnetConf)
+	a.config.PhantomSubnetsList = subnetConf
 
 	err := a.saveClientConf()
 	return err

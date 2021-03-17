@@ -3,6 +3,7 @@ package tapdance
 import (
 	"bufio"
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -14,6 +15,7 @@ import (
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	ps "github.com/refraction-networking/gotapdance/tapdance/phantoms"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAssetsPhantomsBasics(t *testing.T) {
@@ -57,19 +59,26 @@ func TestAssetsPhantoms(t *testing.T) {
 		return false
 	}
 
+	seed, err := hex.DecodeString("5a87133b68da3468988a21659a12ed2ece07345c8c1a5b08459ffdea4218d12f")
+	require.Nil(t, err)
+
 	for i := 0; i < 10; i++ {
-		_sni, addr := Assets().GetDecoyAddress()
-		hostAddr, _, err := net.SplitHostPort(addr)
-		if err != nil {
-			t.Fatal("Corrupted addr:", addr, ". Error:", err.Error())
-		}
-		decoyServ := pb.InitTLSDecoySpec(hostAddr, _sni)
-		if !containsPhantom(decoyServ, Assets().config.DecoyList.TlsDecoys) {
-			fmt.Println("decoyServ not in List!")
-			fmt.Println("decoyServ:", decoyServ)
-			fmt.Println("Assets().decoys:", Assets().config.DecoyList.TlsDecoys)
-			t.Fail()
-		}
+		addr4, addr6, err := SelectPhantom(seed, both)
+		require.Nil(t, err)
+		require.Equal(t, "192.122.190.130", addr4.String())
+		require.Equal(t, "2001:48a8:687f:1:5fa4:c34c:434e:ddd", addr6.String())
+
+		// hostAddr, _, err := net.SplitHostPort(addr)
+		// if err != nil {
+		// 	t.Fatal("Corrupted addr:", addr, ". Error:", err.Error())
+		// }
+		// decoyServ := pb.InitTLSDecoySpec(hostAddr, _sni)
+		// if !containsPhantom(decoyServ, Assets().config.DecoyList.TlsDecoys) {
+		// 	fmt.Println("decoyServ not in List!")
+		// 	fmt.Println("decoyServ:", decoyServ)
+		// 	fmt.Println("Assets().decoys:", Assets().config.DecoyList.TlsDecoys)
+		// 	t.Fail()
+		// }
 	}
 	AssetsSetDir(dir1)
 
