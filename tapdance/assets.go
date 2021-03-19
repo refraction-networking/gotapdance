@@ -79,13 +79,12 @@ func getDefaultKey() []byte {
 	return key
 }
 
-// // TODO: Remove
-// func getDefaultTapdanceKey() []byte {
-// 	keyStr := "515868be7f45ab6f310afed4b229b7a479fc9fde553dea4ccdb369ab1899e70c"
-// 	key := make([]byte, hex.DecodedLen(len(keyStr)))
-// 	hex.Decode(key, []byte(keyStr))
-// 	return key
-// }
+func getDefaultTapdanceKey() []byte {
+	keyStr := "515868be7f45ab6f310afed4b229b7a479fc9fde553dea4ccdb369ab1899e70c"
+	key := make([]byte, hex.DecodedLen(len(keyStr)))
+	hex.Decode(key, []byte(keyStr))
+	return key
+}
 
 func initAssets(path string) error {
 	var defaultDecoys = []*pb.TLSDecoySpec{
@@ -94,14 +93,21 @@ func initAssets(path string) error {
 		pb.InitTLSDecoySpec("192.122.190.106", "tapdance3.freeaeskey.xyz"),
 	}
 
-	defaultKey := getDefaultKey()
+	defaultKey := getDefaultTapdanceKey()
+	defaultConjureKey := getDefaultKey()
+
 	defualtKeyType := pb.KeyType_AES_GCM_128
 	defaultPubKey := pb.PubKey{Key: defaultKey, Type: &defualtKeyType}
-	defaultGeneration := uint32(0)
+	defaultConjurePubKey := pb.PubKey{Key: defaultConjureKey, Type: &defualtKeyType}
+
+	defaultGeneration := uint32(1)
 	defaultDecoyList := pb.DecoyList{TlsDecoys: defaultDecoys}
-	defaultClientConf := pb.ClientConf{DecoyList: &defaultDecoyList,
+	defaultClientConf := pb.ClientConf{
+		DecoyList:     &defaultDecoyList,
 		DefaultPubkey: &defaultPubKey,
-		Generation:    &defaultGeneration}
+		ConjurePubkey: &defaultConjurePubKey,
+		Generation:    &defaultGeneration,
+	}
 
 	assetsInstance = &assets{
 		path:               path,

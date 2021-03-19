@@ -198,7 +198,6 @@ func TestSelectDecoysErrorHandling(t *testing.T) {
 	require.Nil(t, err)
 	AssetsSetDir(dir)
 
-	t.Logf("Updated ClientConf")
 	// SelectDecoys(sharedSecret []byte, useV6 bool, width uint)[]*pb.TLSDecoySpec
 	seed, err := hex.DecodeString("5a87133b68da3468988a21659a12ed2ece07345c8c1a5b08459ffdea4218d12f")
 	if err != nil {
