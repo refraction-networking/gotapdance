@@ -6,6 +6,7 @@ import (
 	"crypto/hmac"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -174,7 +175,30 @@ func TestSelectDecoys(t *testing.T) {
 	}
 }
 
+func copyFile(fromFile string, toFile string) error {
+	from, err := os.Open(fromFile)
+	if err != nil {
+		return err
+	}
+	defer from.Close()
+
+	to, err := os.OpenFile(toFile, os.O_RDWR|os.O_CREATE, 0666)
+	if err != nil {
+		return err
+	}
+	defer to.Close()
+
+	_, err = io.Copy(to, from)
+	return err
+}
+
 func TestSelectDecoysErrorHandling(t *testing.T) {
+	dir := t.TempDir()
+	err := copyFile("./assets/ClientConf.dev", dir+"/ClientConf")
+	require.Nil(t, err)
+	AssetsSetDir(dir)
+
+	t.Logf("Updated ClientConf")
 	// SelectDecoys(sharedSecret []byte, useV6 bool, width uint)[]*pb.TLSDecoySpec
 	seed, err := hex.DecodeString("5a87133b68da3468988a21659a12ed2ece07345c8c1a5b08459ffdea4218d12f")
 	if err != nil {
@@ -186,10 +210,7 @@ func TestSelectDecoysErrorHandling(t *testing.T) {
 	require.Contains(t, err.Error(), "no such file or directory")
 
 	// create temporary test dir
-	dir, err := ioutil.TempDir("", "assets-test")
-	if err != nil {
-		t.Fatal(err)
-	}
+	dir = t.TempDir()
 	defer os.RemoveAll(dir) // clean up
 	_, err = AssetsSetDir(dir)
 	require.Contains(t, err.Error(), "no such file or directory")
