@@ -59,9 +59,9 @@ stages:
 jobs:
   include:
     - stage: test
-      name: "Validation tests Go 1.13.X"
+      name: "Validation tests Go 1.15.X"
       go:
-        - "1.13.x"
+        - "1.15.x"
       install:
         - go get -t ./...
         - go get golang.org/x/lint/golint

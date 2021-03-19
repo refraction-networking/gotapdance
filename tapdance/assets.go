@@ -79,12 +79,13 @@ func getDefaultKey() []byte {
 	return key
 }
 
-func getDefaultTapdanceKey() []byte {
-	keyStr := "515868be7f45ab6f310afed4b229b7a479fc9fde553dea4ccdb369ab1899e70c"
-	key := make([]byte, hex.DecodedLen(len(keyStr)))
-	hex.Decode(key, []byte(keyStr))
-	return key
-}
+// // TODO: Remove
+// func getDefaultTapdanceKey() []byte {
+// 	keyStr := "515868be7f45ab6f310afed4b229b7a479fc9fde553dea4ccdb369ab1899e70c"
+// 	key := make([]byte, hex.DecodedLen(len(keyStr)))
+// 	hex.Decode(key, []byte(keyStr))
+// 	return key
+// }
 
 func initAssets(path string) error {
 	var defaultDecoys = []*pb.TLSDecoySpec{
