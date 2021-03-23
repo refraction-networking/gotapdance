@@ -3,10 +3,10 @@ GOCMD=go
 GOBUILD=$(GOCMD) build
 GOCLEAN=$(GOCMD) clean
 GOTEST=$(GOCMD) test
-BINARY_NAMES=clientconf v6lookup elligator-test utls-test cjprobe
+BINARY_NAMES=clientconf v6lookup elligator-test utls-test # cjprobe
 
 
-all: test build
+all: build
 build:
 	mkdir -p bin;
 	for binary in $(BINARY_NAMES) ; do \

@@ -5,6 +5,9 @@ import (
 	"math/rand"
 	"net"
 	"testing"
+
+	pb "github.com/refraction-networking/gotapdance/protobuf"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIPSelectionAlt(t *testing.T) {
@@ -44,10 +47,10 @@ func TestSelectWeightedMany(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var ps = SubnetConfig{
-		WeightedSubnets: []ConjurePhantomSubnet{
-			{Weight: 9, Subnets: []string{"192.122.190.0/24"}},
-			{Weight: 1, Subnets: []string{"141.219.0.0/16"}},
+	var ps = &pb.PhantomSubnetsList{
+		WeightedSubnets: []*pb.PhantomSubnets{
+			{Weight: &w1, Subnets: []string{"192.122.190.0/24"}},
+			{Weight: &w9, Subnets: []string{"141.219.0.0/16"}},
 		},
 	}
 
@@ -68,7 +71,7 @@ func TestSelectWeightedMany(t *testing.T) {
 		} else if net2.Contains(*addr) {
 			count[1]++
 		} else {
-			t.Fatalf("failed to parse SubnetConfig: %v, %v, %v", seed, true, ps)
+			t.Fatalf("failed to parse pb.PhantomSubnetsList: %v, %v, %v", seed, true, ps)
 		}
 	}
 	t.Logf("%.2f%%, %.2f%%", float32(count[0])/float32(loops)*100.0, float32(count[1])/float32(loops)*100.0)
@@ -79,11 +82,11 @@ func TestWeightedSelection(t *testing.T) {
 	count := []int{0, 0}
 	loops := 1000
 	rand.Seed(5421212341231)
-
-	var ps = SubnetConfig{
-		WeightedSubnets: []ConjurePhantomSubnet{
-			{Weight: 9, Subnets: []string{"1"}},
-			{Weight: 1, Subnets: []string{"2"}},
+	w := uint32(1)
+	var ps = &pb.PhantomSubnetsList{
+		WeightedSubnets: []*pb.PhantomSubnets{
+			{Weight: &w, Subnets: []string{"1"}},
+			{Weight: &w, Subnets: []string{"2"}},
 		},
 	}
 
@@ -94,9 +97,9 @@ func TestWeightedSelection(t *testing.T) {
 			t.Fatalf("Failed to generate seed: %v", err)
 		}
 
-		sa := ps.getSubnets(seed, true)
+		sa := getSubnets(ps, seed, true)
 		if sa == nil {
-			t.Fatalf("failed to parse SubnetConfig: %v, %v, %v", seed, true, ps)
+			t.Fatalf("failed to parse pb.PhantomSubnetsList: %v, %v, %v", seed, true, ps)
 
 		} else if sa[0] == "1" {
 			count[0]++
@@ -108,10 +111,12 @@ func TestWeightedSelection(t *testing.T) {
 	t.Logf("%.2f%%, %.2f%%", float32(count[0])/float32(loops)*100.0, float32(count[1])/float32(loops)*100.0)
 }
 
-var phantomSubnets = SubnetConfig{
-	WeightedSubnets: []ConjurePhantomSubnet{
-		{Weight: 9, Subnets: []string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}},
-		{Weight: 1, Subnets: []string{"141.219.0.0/16", "35.8.0.0/16"}},
+var w1 = uint32(1)
+var w9 = uint32(9)
+var phantomSubnets = &pb.PhantomSubnetsList{
+	WeightedSubnets: []*pb.PhantomSubnets{
+		{Weight: &w9, Subnets: []string{"192.122.190.0/24", "2001:48a8:687f:1::/64"}},
+		{Weight: &w1, Subnets: []string{"141.219.0.0/16", "35.8.0.0/16"}},
 	},
 }
 
@@ -138,4 +143,15 @@ func TestSelectFilter(t *testing.T) {
 		t.Fatalf("Failed to select phantom: %v", err)
 	}
 	t.Logf("%v\n", p)
+}
+
+func TestPhantomsV6OnlyFilter(t *testing.T) {
+	testNets := []string{"192.122.190.0/24", "2001:48a8:687f:1::/64", "2001:48a8:687f:1::/64"}
+	testNetsParsed, err := parseSubnets(testNets)
+	require.Nil(t, err)
+	require.Equal(t, 3, len(testNetsParsed))
+
+	testNetsParsed, err = V6Only(testNetsParsed)
+	require.Nil(t, err)
+	require.Equal(t, 2, len(testNetsParsed))
 }

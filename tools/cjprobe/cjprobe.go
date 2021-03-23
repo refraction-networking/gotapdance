@@ -100,15 +100,16 @@ func main() {
 			}
 		}
 		if !*decoyOnly {
-			if blocks := clientConf.GetDarkDecoyBlocks(); blocks != nil {
-				for _, subnetStr := range blocks.Blocks {
-					_, subnet, err := net.ParseCIDR(subnetStr)
-					if err != nil {
-						continue
-					}
-					subnets = append(subnets, subnet)
-				}
-			}
+			log.Warnf("Not currently implemented")
+			// if blocks := clientConf.GetPhantomSubnetsList(); blocks != nil {
+			// 	for _, subnetStr := range blocks.Blocks {
+			// 		_, subnet, err := net.ParseCIDR(subnetStr)
+			// 		if err != nil {
+			// 			continue
+			// 		}
+			// 		subnets = append(subnets, subnet)
+			// 	}
+			// }
 		}
 	}
 	// select random addresses from subnets
