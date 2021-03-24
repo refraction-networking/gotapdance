@@ -44,7 +44,7 @@ func printClientConf(clientConf *pb.ClientConf) {
 
 	phantoms := clientConf.GetPhantomSubnetsList()
 	if phantoms != nil {
-		fmt.Printf("\nPhantom Subnets List: Generation: %v\n", phantoms.GetGeneration())
+		fmt.Printf("\nPhantom Subnets List:\n")
 		for i, block := range phantoms.GetWeightedSubnets() {
 			fmt.Printf("%d:\n  weight: %d, subnets: %v\n", i, block.GetWeight(), block.GetSubnets())
 		}
@@ -138,11 +138,9 @@ func main() {
 		clientConf = parseClientConf(*fname)
 	}
 
-	var gen = uint32(1)
 	var w1 = uint32(9)
 	var w2 = uint32(1)
 	clientConf.PhantomSubnetsList = &pb.PhantomSubnetsList{
-		Generation: &gen,
 		WeightedSubnets: []*pb.PhantomSubnets{
 			{
 				Weight:  &w1,
