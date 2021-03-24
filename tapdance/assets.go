@@ -398,8 +398,8 @@ func (a *assets) GetPhantomSubnets() *pb.PhantomSubnetsList {
 		return ps.GetDefaultPhantomSubnets()
 	}
 
-	if subnetConfig := a.config.GetPhantomSubnetsList(); subnetConfig != nil {
-		return subnetConfig
+	if phantomSubnetsList := a.config.GetPhantomSubnetsList(); phantomSubnetsList != nil {
+		return phantomSubnetsList
 	}
 
 	return ps.GetDefaultPhantomSubnets()

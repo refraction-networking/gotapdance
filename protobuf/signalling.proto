@@ -93,7 +93,6 @@ message DecoyList {
 
 message PhantomSubnetsList{
     repeated PhantomSubnets weighted_subnets = 1;
-    optional uint32 generation = 2;
 }
 
 message PhantomSubnets{
