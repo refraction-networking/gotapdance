@@ -13,20 +13,6 @@ import (
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 )
 
-// type ConjurePhantomSubnet pb.PhantomSubnets
-
-// // struct {
-// // 	Weight  float32
-// // 	Subnets []string
-// // }
-
-// type SubnetConfig pb.PhantomSubnetsList
-
-// // struct {
-// // 	Generation      uint32
-// // 	WeightedSubnets []ConjurePhantomSubnet
-// // }
-
 // getSubnets - return EITHER all subnet strings as one composite array if we are
 //		selecting unweighted, or return the array associated with the (seed) selected
 //		array of subnet strings based on the associated weights
@@ -270,11 +256,9 @@ func SelectPhantomWeighted(seed []byte, subnets *pb.PhantomSubnetsList, transfor
 
 // GetDefaultPhantomSubnets implements the
 func GetDefaultPhantomSubnets() *pb.PhantomSubnetsList {
-	var gen = uint32(1)
 	var w1 = uint32(9.0)
 	var w2 = uint32(1.0)
 	return &pb.PhantomSubnetsList{
-		Generation: &gen,
 		WeightedSubnets: []*pb.PhantomSubnets{
 			{
 				Weight:  &w1,
