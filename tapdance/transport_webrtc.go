@@ -105,9 +105,9 @@ func (wt *webrtcTransport) webrtcSetCallbackHandlers() {
 	})
 }
 
-// webrtcPreRegister returns an SDPDeflated struct
-// It needs to be exchanged in registration.
-func (wt *webrtcTransport) webrtcPreRegister(ClientIP net.IP) s2s.SDPDeflated {
+// webrtcPreRegister returns an SDPDeflated struct and a string seed.
+// Both need to be exchanged in registration.
+func (wt *webrtcTransport) webrtcPreRegister(ClientIP net.IP) (s2s.SDPDeflated, string) {
 	seed, _ := wt.webrtcSeed()
 	clientHkdfParams := s2s.NewHKDFParams().SetSecret(conjureSecret).SetSalt(seed).SetInfoPrefix(clientHKDF)
 	serverHkdfParams := s2s.NewHKDFParams().SetSecret(conjureSecret).SetSalt(seed).SetInfoPrefix(serverHKDF)
@@ -167,7 +167,7 @@ func (wt *webrtcTransport) webrtcPreRegister(ClientIP net.IP) s2s.SDPDeflated {
 	JsonOffer := s2s.ToJSON(wt.DataChannel.GetLocalDescription())
 	ParsedOffer := s2s.ParseSDP(JsonOffer)
 	DeflatedOffer := ParsedOffer.Deflate(ClientIP)
-	return DeflatedOffer
+	return DeflatedOffer, seed
 	// return s2s.ParseSDP(s2s.ToJSON(wt.DataChannel.GetLocalDescription())).Deflate(ClientIP)
 }
 
