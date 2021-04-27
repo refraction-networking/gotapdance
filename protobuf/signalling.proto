@@ -141,6 +141,7 @@ enum TransportType {
     Null = 0;
     Min = 1;   // Send a 32-byte HMAC id to let the station distinguish registrations to same host
     Obfs4 = 2; // Not implemented yet?
+    WebRTC = 3;
 }
 
 message StationToClient {

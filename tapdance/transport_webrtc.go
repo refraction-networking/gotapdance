@@ -7,12 +7,14 @@ import (
 
 	randutil "github.com/Gaukas/randutil_kai"
 	s2s "github.com/Gaukas/seed2sdp"
-	"github.com/pion/webrtc"
+	webrtc "github.com/pion/webrtc/v3"
 	"golang.org/x/crypto/hkdf"
 )
 
-var conjureDataChannel *s2s.DataChannel = nil
-var conjureWebRTCSeed string = ""
+type webrtcTransport struct {
+	DataChannel *s2s.DataChannel
+	Seed        string
+}
 
 const (
 	runesAlpha string = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -31,25 +33,25 @@ const (
 	txBufferLimit uint64 = 33554432 // Buffer: 32 M
 )
 
-func setWebrtcSeed(seed string) {
-	conjureWebRTCSeed = seed
+func (wt *webrtcTransport) setWebrtcSeed(seed string) {
+	wt.Seed = seed
 }
 
-func webrtcSeed() (string, error) {
-	if len(conjureWebRTCSeed) != 0 {
-		return conjureWebRTCSeed, nil
+func (wt *webrtcTransport) webrtcSeed() (string, error) {
+	if len(wt.Seed) != 0 {
+		return wt.Seed, nil
 	}
 	tempSeed, err := randutil.GenerateCryptoRandomString(lenSeed, runesAlpha+runesDigit)
 	if err != nil {
 		return "", err
 	}
-	conjureWebRTCSeed = tempSeed
-	return conjureWebRTCSeed, nil
+	wt.Seed = tempSeed
+	return wt.Seed, nil
 }
 
 // Select one IP from IPList
-func webrtcSelectIP(IPList []net.IP) net.IP {
-	seed, _ := webrtcSeed()
+func (wt *webrtcTransport) webrtcSelectIP(IPList []net.IP) net.IP {
+	seed, _ := wt.webrtcSeed()
 	ipReader := hkdf.New(sha256.New, []byte(conjureSecret), []byte(seed), []byte(ipHKDF))
 	ipGen := randutil.NewReaderMathRandomGenerator(ipReader)
 
@@ -57,18 +59,18 @@ func webrtcSelectIP(IPList []net.IP) net.IP {
 }
 
 // Select port in [low, high)
-func webrtcSelectPort(low int, high int) int {
-	seed, _ := webrtcSeed()
+func (wt *webrtcTransport) webrtcSelectPort(low int, high int) uint16 {
+	seed, _ := wt.webrtcSeed()
 	portReader := hkdf.New(sha256.New, []byte(conjureSecret), []byte(seed), []byte(portHKDF))
 	portGen := randutil.NewReaderMathRandomGenerator(portReader)
 
-	return low + portGen.Intn(high-low)
+	return uint16(low + portGen.Intn(high-low))
 }
 
 // TO-DO: Finish callback handlers as a client
-func webrtcSetCallbackHandlers() {
+func (wt *webrtcTransport) webrtcSetCallbackHandlers() {
 	// Called when Peer Connection state changes
-	conjureDataChannel.WebRTCPeerConnection.OnICEConnectionStateChange(func(connectionState webrtc.ICEConnectionState) {
+	wt.DataChannel.WebRTCPeerConnection.OnICEConnectionStateChange(func(connectionState webrtc.ICEConnectionState) {
 		Logger().Warnf("Peer Connection changed state to: %s\n", connectionState.String())
 		if connectionState.String() == "disconnected" || connectionState.String() == "closed" {
 			Logger().Infof("Peer Connection disconnected\n")
@@ -78,39 +80,39 @@ func webrtcSetCallbackHandlers() {
 	})
 
 	// Called when datachannel is established
-	conjureDataChannel.WebRTCDataChannel.OnOpen(func() {
-		Logger().Infof("Successfully opened Data Channel '%s'-'%d'. \n", conjureDataChannel.WebRTCDataChannel.Label(), conjureDataChannel.WebRTCDataChannel.ID())
+	wt.DataChannel.WebRTCDataChannel.OnOpen(func() {
+		Logger().Infof("Successfully opened Data Channel '%s'-'%d'. \n", wt.DataChannel.WebRTCDataChannel.Label(), wt.DataChannel.WebRTCDataChannel.ID())
 	})
 
 	// Called when receive message from peer
-	conjureDataChannel.WebRTCDataChannel.OnMessage(func(msg webrtc.DataChannelMessage) {
-		Logger().Debugf("%s OnRecv: %d bytes\n", conjureDataChannel.WebRTCDataChannel.Label(), len(msg.Data))
+	wt.DataChannel.WebRTCDataChannel.OnMessage(func(msg webrtc.DataChannelMessage) {
+		Logger().Debugf("%s OnRecv: %d bytes\n", wt.DataChannel.WebRTCDataChannel.Label(), len(msg.Data))
 		// TO-DO: Handle the msg.Data as a transport interface
 	})
 
 	// Called when Data Channel is closed (by peer)
-	conjureDataChannel.WebRTCDataChannel.OnClose(func() {
-		Logger().Warnf("Data Channel %s closed\n", conjureDataChannel.WebRTCDataChannel.Label())
+	wt.DataChannel.WebRTCDataChannel.OnClose(func() {
+		Logger().Warnf("Data Channel %s closed\n", wt.DataChannel.WebRTCDataChannel.Label())
 		Logger().Debugf("Tearing down Peer Connection due to closed datachannel\n")
-		conjureDataChannel.WebRTCPeerConnection.Close()
+		wt.DataChannel.WebRTCPeerConnection.Close()
 	})
 
 	// Called when there is a Data Channel layer error (not peer connection). Safe to tear down connection.
-	conjureDataChannel.WebRTCDataChannel.OnError(func(err error) {
-		Logger().Errorf("[Fatal] Data Channel %s errored: %v\n", conjureDataChannel.WebRTCDataChannel.Label(), err)
+	wt.DataChannel.WebRTCDataChannel.OnError(func(err error) {
+		Logger().Errorf("[Fatal] Data Channel %s errored: %v\n", wt.DataChannel.WebRTCDataChannel.Label(), err)
 		Logger().Debugf("Tearing down Peer Connection due to error in datachannel\n")
-		conjureDataChannel.WebRTCPeerConnection.Close()
+		wt.DataChannel.WebRTCPeerConnection.Close()
 	})
 }
 
 // webrtcPreRegister returns an SDPDeflated struct
 // It needs to be exchanged in registration.
-func webrtcPreRegister(ClientIP net.IP) s2s.SDPDeflated {
-	seed, _ := webrtcSeed()
+func (wt *webrtcTransport) webrtcPreRegister(ClientIP net.IP) s2s.SDPDeflated {
+	seed, _ := wt.webrtcSeed()
 	clientHkdfParams := s2s.NewHKDFParams().SetSecret(conjureSecret).SetSalt(seed).SetInfoPrefix(clientHKDF)
 	serverHkdfParams := s2s.NewHKDFParams().SetSecret(conjureSecret).SetSalt(seed).SetInfoPrefix(serverHKDF)
 
-	conjureDataChannel = s2s.DeclareDatachannel(
+	wt.DataChannel = s2s.DeclareDatachannel(
 		&s2s.DataChannelConfig{
 			Label:          "Conjure DataChannel - Client Owned",
 			SelfSDPType:    "offer",
@@ -149,49 +151,49 @@ func webrtcPreRegister(ClientIP net.IP) s2s.SDPDeflated {
 	)
 
 	// Block until DataChannel is created. (Not connecting to any peer yet)
-	if conjureDataChannel.Initialize() != nil {
+	if wt.DataChannel.Initialize() != nil {
 		Logger().Error("Client failed to initialize a data channel instance.")
 		panic("DataChannel.Initialize() unsuccessful.")
 	}
 
-	webrtcSetCallbackHandlers()
+	wt.webrtcSetCallbackHandlers()
 
 	// Block until Offer is ready to exchange. (Not connecting to any peer yet)
-	if conjureDataChannel.CreateOffer() != nil {
+	if wt.DataChannel.CreateOffer() != nil {
 		Logger().Error("Client failed to create SDP offer.")
 		panic("DataChannel.CreateOffer() unsuccessful.")
 	}
 
-	// JsonOffer := s2s.ToJSON(dataChannel.GetLocalDescription())
-	// ParsedOffer := s2s.ParseSDP(JsonOffer)
-	// DeflatedOffer := ParsedOffer.Deflate(MyPublicIP(v4))
-	// return DeflatedOffer
-	return s2s.ParseSDP(s2s.ToJSON(conjureDataChannel.GetLocalDescription())).Deflate(ClientIP)
+	JsonOffer := s2s.ToJSON(wt.DataChannel.GetLocalDescription())
+	ParsedOffer := s2s.ParseSDP(JsonOffer)
+	DeflatedOffer := ParsedOffer.Deflate(ClientIP)
+	return DeflatedOffer
+	// return s2s.ParseSDP(s2s.ToJSON(wt.DataChannel.GetLocalDescription())).Deflate(ClientIP)
 }
 
 // webrtcPostRegister establishs the peer connection & data channel.
 // calling this function will trigger IMMEDIATE communication with server
 // Advice: sleep for several seconds after registration, due to unstable ICE response time
-func webrtcPostRegister(IPList []net.IP) {
+func (wt *webrtcTransport) webrtcPostRegister(IPList []net.IP) {
 	AnswerCandidateHost := s2s.ICECandidate{}
 	AnswerCandidateHost.
 		SetComponent(s2s.ICEComponentRTP).SetProtocol(s2s.UDP).
-		SetIpAddr(webrtcSelectIP(IPList)).SetPort(webrtcSelectPort(portLow, portHigh)).
+		SetIpAddr(wt.webrtcSelectIP(IPList)).SetPort(wt.webrtcSelectPort(portLow, portHigh)).
 		SetCandidateType(s2s.Host)
 
-	err := conjureDataChannel.SetAnswer([]s2s.ICECandidate{AnswerCandidateHost})
+	err := wt.DataChannel.SetAnswer([]s2s.ICECandidate{AnswerCandidateHost})
 	if err != nil {
 		Logger().Error("Client failed to set SDP answer.")
 		panic(err)
 	}
 }
 
-func webrtcSend(data []byte) {
-	for !conjureDataChannel.ReadyToSend() {
+func (wt *webrtcTransport) webrtcSend(data []byte) {
+	for !wt.DataChannel.ReadyToSend() {
 		// fmt.Println("[Info] Data Channel not ready...")
 	} // Always wait for ready to send
-	Logger().Debugf("Sending %d Bytes via %s\n", len(data), conjureDataChannel.WebRTCDataChannel.Label())
-	sendErr := conjureDataChannel.Send(data)
+	Logger().Debugf("Sending %d Bytes via %s\n", len(data), wt.DataChannel.WebRTCDataChannel.Label())
+	sendErr := wt.DataChannel.Send(data)
 	if sendErr != nil {
 		Logger().Errorf("Error in webrtcSend(), sending %d Bytes unsuccessful.", len(data))
 		panic(sendErr)
