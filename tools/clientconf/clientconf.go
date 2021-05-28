@@ -10,6 +10,7 @@ import (
 	"net"
 
 	"github.com/golang/protobuf/proto"
+	toml "github.com/pelletier/go-toml"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 )
 
@@ -45,8 +46,13 @@ func printClientConf(clientConf *pb.ClientConf) {
 	phantoms := clientConf.GetPhantomSubnetsList()
 	if phantoms != nil {
 		fmt.Printf("\nPhantom Subnets List:\n")
-		for i, block := range phantoms.GetWeightedSubnets() {
-			fmt.Printf("%d:\n  weight: %d, subnets: %v\n", i, block.GetWeight(), block.GetSubnets())
+		var index uint = 0
+		for _, block := range phantoms.GetWeightedSubnets() {
+			fmt.Printf("\nweight: %d, subnets:\n", block.GetWeight())
+			for _, subnet := range block.GetSubnets() {
+				fmt.Printf(" %d: %s\n", index, subnet)
+				index++
+			}
 		}
 	}
 }
@@ -109,6 +115,53 @@ func updateDecoy(decoy *pb.TLSDecoySpec, host string, ip string, pubkey string, 
 	}
 }
 
+func addSubnet(subnet *string, weight *uint, clientConf *pb.ClientConf) {
+	if *weight > 4294967295 {
+		log.Fatal("Error: -add-subnet requires the weight flag to be set to a 32-bit unsinged value (between 0 and 4294967295)")
+	}
+	_, _, err := net.ParseCIDR(*subnet)
+	if err != nil {
+		log.Fatal("Error: " + *subnet + " is not a valid CIDR block")
+	}
+	var weight32 = uint32(*weight)
+	for _, phantomSubnets := range clientConf.PhantomSubnetsList.WeightedSubnets {
+		if *phantomSubnets.Weight == weight32 {
+			phantomSubnets.Subnets = append(phantomSubnets.Subnets, *subnet)
+			return
+		}
+	}
+	// add new item to PhantomSubnetsList.WeightedSubnets if weight has not been used before
+	var newPhantomSubnet = pb.PhantomSubnets{
+		Weight:  &weight32,
+		Subnets: []string{*subnet},
+	}
+	clientConf.PhantomSubnetsList.WeightedSubnets = append(clientConf.PhantomSubnetsList.WeightedSubnets, &newPhantomSubnet)
+}
+
+func deleteSubnet(index int, clientConf *pb.ClientConf) {
+	if index < 0 {
+		log.Fatal("Error: -delete-subnet requires a positive index")
+	}
+	var blockRange int = 0
+	var weightedSubnets = &clientConf.PhantomSubnetsList.WeightedSubnets
+	for blockIndex, block := range *weightedSubnets {
+		blockRange += len(block.Subnets)
+		if blockRange > index {
+			fmt.Printf("index: %d, block_range: %d, len_block: %d", index, blockRange, len(block.Subnets))
+			var indexInBlock = index - (blockRange - len(block.Subnets))
+			block.Subnets[indexInBlock] = block.Subnets[len(block.Subnets)-1]
+			block.Subnets = block.Subnets[:len(block.Subnets)-1]
+			if len(block.Subnets) == 0 { // delete group if no longer contains subnets
+				(*weightedSubnets)[blockIndex] = (*weightedSubnets)[len(*weightedSubnets)-1]
+				(*weightedSubnets)[len(*weightedSubnets)-1] = nil
+				*weightedSubnets = (*weightedSubnets)[:len(*weightedSubnets)-1]
+			}
+			return
+		}
+	}
+	log.Fatal("Error: Index " + fmt.Sprint(index) + " provided to -delete-subnet is out of range")
+}
+
 func main() {
 	var fname = flag.String("f", "", "`ClientConf` file to parse")
 	var out_fname = flag.String("o", "", "`output` file name to write new/modified config")
@@ -126,6 +179,13 @@ func main() {
 	var timeout = flag.Int("timeout", 0, "New/modified timeout")
 	var tcpwin = flag.Int("tcpwin", 0, "New/modified tcpwin")
 
+	var add_subnet = flag.String("add-subnet", "", "Add a subnet, requires additional weight flag")
+	var delete_subnet = flag.Int("delete-subnet", -1, "Specifies the index of a subnet to delete")
+	var weight = flag.Uint("weight", 4294967296, "Subnet weight when add-subnet used")
+	var subnet_file = flag.String("subnet-file", "", "Path to TOML file containing lists of subnets to use in config. TOML should be formatted like: \n"+
+		"[[WeightedSubnets]] \n\tWeight = 9 \n\tSubnets = [\"192.122.190.0/24\", \"2001:48a8:687f:1::/64\"] \n"+
+		"[[WeightedSubnets]] \n\tWeight = 1 \n\tSubnets = [\"141.219.0.0/16\", \"35.8.0.0/16\"]",
+	)
 	var all = flag.Bool("all", false, "If set, replace all pubkeys/timeouts/tcpwins in decoy list with pubkey/timeout/tcpwin if provided")
 
 	var noout = flag.Bool("noout", false, "Don't print ClientConf")
@@ -138,19 +198,25 @@ func main() {
 		clientConf = parseClientConf(*fname)
 	}
 
-	var w1 = uint32(9)
-	var w2 = uint32(1)
-	clientConf.PhantomSubnetsList = &pb.PhantomSubnetsList{
-		WeightedSubnets: []*pb.PhantomSubnets{
-			{
-				Weight:  &w1,
-				Subnets: []string{"192.122.190.0/24", "2001:48a8:687f:1::/64"},
-			},
-			{
-				Weight:  &w2,
-				Subnets: []string{"141.219.0.0/16", "35.8.0.0/16"},
-			},
-		},
+	// Use subnet-fille
+	if *subnet_file != "" {
+		tree, err := toml.LoadFile(*subnet_file)
+		if err != nil {
+			log.Fatalf("error opening configuration file: %v", err)
+		}
+		subnets := pb.PhantomSubnetsList{}
+		tree.Unmarshal(&subnets)
+		//fmt.Printf("%+v\n", subnets)
+		clientConf.PhantomSubnetsList = &subnets
+	}
+
+	// Delete a subnet
+	if *delete_subnet != -1 {
+		deleteSubnet(*delete_subnet, clientConf)
+	}
+	// Add a subnet
+	if *add_subnet != "" {
+		addSubnet(add_subnet, weight, clientConf)
 	}
 
 	// Update generation
