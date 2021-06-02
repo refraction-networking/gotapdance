@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"strings"
 
 	"github.com/golang/protobuf/proto"
 	toml "github.com/pelletier/go-toml"
@@ -115,25 +116,27 @@ func updateDecoy(decoy *pb.TLSDecoySpec, host string, ip string, pubkey string, 
 	}
 }
 
-func addSubnet(subnet *string, weight *uint, clientConf *pb.ClientConf) {
-	if *weight > 4294967295 {
-		log.Fatal("Error: -add-subnet requires the weight flag to be set to a 32-bit unsinged value (between 0 and 4294967295)")
+func addSubnets(subnets []string, weight *uint, clientConf *pb.ClientConf) {
+	if *weight == 0 {
+		log.Fatal("Error: -add-subnet requires the weight flag to be set to a non-zero 32-bit unsinged integer")
 	}
-	_, _, err := net.ParseCIDR(*subnet)
-	if err != nil {
-		log.Fatal("Error: " + *subnet + " is not a valid CIDR block")
+	for _, s := range subnets {
+		_, _, err := net.ParseCIDR(s)
+		if err != nil {
+			log.Fatal("Error: " + s + " is not a valid CIDR block")
+		}
 	}
 	var weight32 = uint32(*weight)
 	for _, phantomSubnets := range clientConf.PhantomSubnetsList.WeightedSubnets {
 		if *phantomSubnets.Weight == weight32 {
-			phantomSubnets.Subnets = append(phantomSubnets.Subnets, *subnet)
+			phantomSubnets.Subnets = append(phantomSubnets.Subnets, subnets...)
 			return
 		}
 	}
 	// add new item to PhantomSubnetsList.WeightedSubnets if weight has not been used before
 	var newPhantomSubnet = pb.PhantomSubnets{
 		Weight:  &weight32,
-		Subnets: []string{*subnet},
+		Subnets: subnets,
 	}
 	clientConf.PhantomSubnetsList.WeightedSubnets = append(clientConf.PhantomSubnetsList.WeightedSubnets, &newPhantomSubnet)
 }
@@ -179,9 +182,9 @@ func main() {
 	var timeout = flag.Int("timeout", 0, "New/modified timeout")
 	var tcpwin = flag.Int("tcpwin", 0, "New/modified tcpwin")
 
-	var add_subnet = flag.String("add-subnet", "", "Add a subnet, requires additional weight flag")
+	var add_subnets = flag.String("add-subnets", "", "Add a subnet or list of space-separated subnets between double quotes (\"127.0.0.1/24 2001::/32\" etc.), requires additional weight flag")
 	var delete_subnet = flag.Int("delete-subnet", -1, "Specifies the index of a subnet to delete")
-	var weight = flag.Uint("weight", 4294967296, "Subnet weight when add-subnet used")
+	var weight = flag.Uint("weight", 0, "Subnet weight when add-subnets is used")
 	var subnet_file = flag.String("subnet-file", "", "Path to TOML file containing lists of subnets to use in config. TOML should be formatted like: \n"+
 		"[[WeightedSubnets]] \n\tWeight = 9 \n\tSubnets = [\"192.122.190.0/24\", \"2001:48a8:687f:1::/64\"] \n"+
 		"[[WeightedSubnets]] \n\tWeight = 1 \n\tSubnets = [\"141.219.0.0/16\", \"35.8.0.0/16\"]",
@@ -215,8 +218,9 @@ func main() {
 		deleteSubnet(*delete_subnet, clientConf)
 	}
 	// Add a subnet
-	if *add_subnet != "" {
-		addSubnet(add_subnet, weight, clientConf)
+	if *add_subnets != "" {
+		subnets := strings.Split(*add_subnets, " ")
+		addSubnets(subnets, weight, clientConf)
 	}
 
 	// Update generation
