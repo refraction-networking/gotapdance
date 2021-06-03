@@ -127,13 +127,8 @@ func addSubnets(subnets []string, weight *uint, clientConf *pb.ClientConf) {
 		}
 	}
 	var weight32 = uint32(*weight)
-	for _, phantomSubnets := range clientConf.PhantomSubnetsList.WeightedSubnets {
-		if *phantomSubnets.Weight == weight32 {
-			phantomSubnets.Subnets = append(phantomSubnets.Subnets, subnets...)
-			return
-		}
-	}
-	// add new item to PhantomSubnetsList.WeightedSubnets if weight has not been used before
+	
+	// add new item to PhantomSubnetsList.WeightedSubnets
 	var newPhantomSubnet = pb.PhantomSubnets{
 		Weight:  &weight32,
 		Subnets: subnets,
