@@ -273,12 +273,12 @@ message RegistrationResponse {
   optional bytes ipv6addr = 2;
 
   // Respond with randomized port
-  optional uint16 port = 3;
+  optional uint32 port = 3;
 
   // Future: station provides client with secret, want chanel present
   // Leave null for now
   optional bytes serverRandom = 4;
 
-  // Optional string for if registration wrong, populate this error string
+  // If registration wrong, populate this error string
   optional string error = 5;
 }
