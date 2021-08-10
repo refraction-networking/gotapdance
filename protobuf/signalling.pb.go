@@ -143,6 +143,7 @@ func (x C2S_Transition) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
+
 // Deprecated: Do not use.
 func (x *C2S_Transition) UnmarshalJSON(b []byte) error {
 	num, err := protoimpl.X.UnmarshalJSONEnum(x.Descriptor(), b)
@@ -1342,7 +1343,6 @@ type StationToDetector struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
-
 	PhantomIp *string `protobuf:"bytes,1,opt,name=phantom_ip,json=phantomIp" json:"phantom_ip,omitempty"`
 	ClientIp  *string `protobuf:"bytes,2,opt,name=client_ip,json=clientIp" json:"client_ip,omitempty"`
 	TimeoutNs *uint64 `protobuf:"varint,3,opt,name=timeout_ns,json=timeoutNs" json:"timeout_ns,omitempty"`
