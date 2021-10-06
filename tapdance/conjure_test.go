@@ -302,18 +302,23 @@ func TestAPIRegistrar(t *testing.T) {
 
 func TestAPIRegistrarBidirectional(t *testing.T) {
 	AssetsSetDir("./assets")
+	// Make Conjure session with covert address
 	session := makeConjureSession("1.2.3.4:1234", pb.TransportType_Min)
 
+	// Create mock server
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check that method is what we expect
 		if r.Method != "POST" {
 			t.Fatalf("incorrect request method: expected POST, got %v", r.Method)
 		}
 
+		// Read in request as server
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			t.Fatalf("failed to read request body: %v", err)
 		}
 
+		// Make payload for registration
 		payload := pb.C2SWrapper{}
 		err = proto.Unmarshal(body, &payload)
 		if err != nil {
@@ -335,6 +340,8 @@ func TestAPIRegistrarBidirectional(t *testing.T) {
 	}
 
 	response := &ConjureReg{}
+	// register.Register() connects to server set up above and sends registration info
+	// "response" will store the RegistrationResponse protobuf that the server replies with
 	response, err := registrar.Register(session, context.TODO())
 	if err != nil {
 		t.Fatalf("bidirectional registrar failed with error: %v", err)

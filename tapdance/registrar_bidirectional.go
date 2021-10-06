@@ -105,18 +105,14 @@ func (r APIRegistrarBidirectional) Register(cjSession *ConjureSession, ctx conte
 			sleepWithContext(ctx, r.ConnectionDelay)
 		}
 
-		// Save the ipv4address in the Conjure Reg struct (phantom4) to return
-		ip4 := make(net.IP, 4)
-		addr4 := regResp.GetIpv4Addr()
-		binary.BigEndian.PutUint32(ip4, addr4)
-		reg.phantom4 = &ip4
+		// Helper function defined below that takes in the registraion response protobuf from the
+		// executeHTTPRequestBidireectional() func and the ConjureReg that we want to return and
+		// unpacks the returned ipv addresses into the conjureReg
+		// LATER: carry more stuff in registration response protobuf and unpack helper will handle that too
+		conjReg := r.unpackRegResp(reg, regResp)
 
-		// Save the ipv6address in the Conjure Reg struct (phantom6) to return
-		addr6 := net.IP(regResp.Ipv6Addr)
-		reg.phantom4 = &addr6
-
-		// Return reg (ConjureReg struct) containing the ipv4 and ipv6 addresses from the server
-		return reg, nil
+		// Return conjReg (ConjureReg struct) containing the ipv4 and ipv6 addresses from the server
+		return conjReg, nil
 	}
 
 	// If we make it here, we failed API registration
@@ -167,19 +163,31 @@ func (r APIRegistrarBidirectional) executeHTTPRequestBidirectional(ctx context.C
 	}
 
 	return regResp, nil
+}
 
-	// // This function needs to return a referene to a ConjureReg struct that will then be returned from the Register() func that called this func
-	// // Currently: RR pb; Goal: Update the payload passed into this function to reflect the ipv4 and ipv6 addresses sent in the RR pb
+func (r APIRegistrarBidirectional) unpackRegResp(reg *ConjureReg, regResp *pb.RegistrationResponse) *ConjureReg {
+	if reg.v6Support == v4 {
+		// Save the ipv4address in the Conjure Reg struct (phantom4) to return
+		ip4 := make(net.IP, 4)
+		addr4 := regResp.GetIpv4Addr()
+		binary.BigEndian.PutUint32(ip4, addr4)
+		reg.phantom4 = &ip4
+	} else if reg.v6Support == v6 {
+		// Save the ipv6address in the Conjure Reg struct (phantom6) to return
+		addr6 := net.IP(regResp.GetIpv6Addr())
+		reg.phantom4 = &addr6
+	} else {
+		// Case where cjSession.V6Support == both
+		// Save the ipv4address in the Conjure Reg struct (phantom4) to return
+		ip4 := make(net.IP, 4)
+		addr4 := regResp.GetIpv4Addr()
+		binary.BigEndian.PutUint32(ip4, addr4)
+		reg.phantom4 = &ip4
 
-	// // Save the registration response protobuf
-	// // First unmarshal the payload that was passed into this function
-	// protoPayload := pb.C2SWrapper{}
-	// if err = proto.Unmarshal(payload, &protoPayload); err != nil {
-	// 	Logger().Warnf("error in unmarshaling payload: %v", err)
-	// 	return resp_payload, err
-	// }
+		// Save the ipv6address in the Conjure Reg struct (phantom6) to return
+		addr6 := net.IP(regResp.GetIpv6Addr())
+		reg.phantom4 = &addr6
+	}
 
-	// // protoPayload now has
-
-	// return nil
+	return reg
 }
