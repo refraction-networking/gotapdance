@@ -152,8 +152,14 @@ message DeflatedSDP {
     optional uint32 composed_info = 4;
 }
 
+message WebrtcRandseed {
+    optional string seed = 1;
+    optional string shared_secret = 2;
+}
+
 message WebrtcSDP {
     repeated DeflatedSDP deflated_sdps = 1;
+    optional WebrtcRandseed rand_seed = 2;
 }
 
 message StationToClient {
