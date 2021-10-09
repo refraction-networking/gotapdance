@@ -141,6 +141,19 @@ enum TransportType {
     Null = 0;
     Min = 1;   // Send a 32-byte HMAC id to let the station distinguish registrations to same host
     Obfs4 = 2; // Not implemented yet?
+    Webrtc = 3; // DTLS transport, yay
+}
+
+message DeflatedSDP {
+    optional uint32 sdp_type = 1; // TODO: Single byte (uint8)
+    // the IP is represented as a 16-byte datatype.
+    optional uint64 ip_upper = 2; // ip := upper << 64 | lower
+    optional uint64 ip_lower = 3;
+    optional uint32 composed_info = 4;
+}
+
+message WebrtcSDP {
+    repeated DeflatedSDP deflated_sdps = 1;
 }
 
 message StationToClient {
@@ -199,6 +212,9 @@ message ClientToStation {
 
     // NullTransport, MinTransport, Obfs4Transport, etc. Transport type we want from phantom proxy
     optional TransportType transport = 12;
+
+    // Everything required from the client for a WebRTC Peer Connection
+    optional WebrtcSDP webrtc = 13;
 
     // Station is only required to check this variable during session initialization.
     // If set, station must facilitate connection to said target by itself, i.e. write into squid
