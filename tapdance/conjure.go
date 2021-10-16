@@ -292,6 +292,8 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 
 	cjSession.setV6Support(both)
 
+	// TODO: WebRTC Init Connection and get LocalSDP, send with Register()
+
 	// Choose Phantom Address in Register depending on v6 support.
 	registration, err := registrationMethod.Register(cjSession, ctx)
 	if err != nil {
@@ -300,6 +302,8 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 	}
 
 	Logger().Debugf("%v Attempting to Connect ...", cjSession.IDString())
+
+	// TODO: WebRTC Set RemoteSDP in Connect()
 
 	return registration.Connect(ctx)
 	// return Connect(cjSession)
@@ -355,6 +359,9 @@ type ConjureSession struct {
 	//		connection when tunneling the whole device.
 	TcpDialer func(context.Context, string, string) (net.Conn, error)
 
+	// This part is temporary, for webrtc debugging
+	Webrtc *pb.WebrtcSDP
+
 	// performance tracking
 	stats *pb.SessionStats
 }
@@ -374,6 +381,24 @@ func makeConjureSession(covert string, transport pb.TransportType) *ConjureSessi
 		Transport:      transport,
 		CovertAddress:  covert,
 		SessionID:      sessionsTotal.GetAndInc(),
+	}
+
+	// TODO: Optimization
+	// Webrtc Transport: Generate or just Fetch SharedSecret & Seed
+	if transport == pb.TransportType_Webrtc {
+		var seed string = "seedseedseedseed"
+		var sharedsecret string = "secretsecretsecretsecret"
+
+		paramsWebRTCRandseed := pb.WebrtcRandseed{
+			Seed:         &seed,
+			SharedSecret: &sharedsecret,
+		}
+
+		paramsWebRTC := pb.WebrtcSDP{
+			RandSeed: &paramsWebRTCRandseed,
+		}
+
+		cjSession.Webrtc = &paramsWebRTC
 	}
 
 	sharedSecretStr := make([]byte, hex.EncodedLen(len(keys.SharedSecret)))

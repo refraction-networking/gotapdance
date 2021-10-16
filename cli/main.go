@@ -38,7 +38,7 @@ func main() {
 
 	var td = flag.Bool("td", false, "Enable tapdance cli mode for compatibility")
 	var APIRegistration = flag.String("api-endpoint", "", "If set, API endpoint to use when performing API registration. If not set, uses decoy registration.")
-	var transport = flag.String("transport", "min", `The transport to use for Conjure connections. Current values include "min" and "obfs4".`)
+	var transport = flag.String("transport", "min", `The transport to use for Conjure connections. Current values include "min" and "obfs4". "webrtc" in beta.`)
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Dark Decoy CLI\n$./cli -connect-addr=<decoy_address> [OPTIONS] \n\nOptions:\n")
@@ -209,6 +209,8 @@ func getTransportFromName(name string) pb.TransportType {
 		return pb.TransportType_Min
 	case "obfs4":
 		return pb.TransportType_Obfs4
+	case "webrtc":
+		return pb.TransportType_Webrtc
 	default:
 		return pb.TransportType_Min
 	}

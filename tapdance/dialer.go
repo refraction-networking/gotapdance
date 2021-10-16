@@ -62,36 +62,53 @@ func (d *Dialer) Dial(network, address string) (net.Conn, error) {
 //
 // Example: Dial("tcp", "golang.org:80")
 func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	if network != "tcp" {
-		return nil, &net.OpError{Op: "dial", Net: network, Err: net.UnknownNetworkError(network)}
-	}
-	if len(address) > 0 {
-		_, _, err := net.SplitHostPort(address)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if d.TcpDialer == nil {
-		// custom dialer is not set, use default
-		defaultDialer := net.Dialer{}
-		d.TcpDialer = defaultDialer.DialContext
-	}
-
-	if !d.SplitFlows {
-		if !d.DarkDecoy {
-			flow, err := makeTdFlow(flowBidirectional, nil, address)
+	if network == "tcp" {
+		if len(address) > 0 {
+			_, _, err := net.SplitHostPort(address)
 			if err != nil {
 				return nil, err
 			}
-			flow.tdRaw.TcpDialer = d.TcpDialer
-			flow.tdRaw.useProxyHeader = d.UseProxyHeader
-			return flow, flow.DialContext(ctx)
-		} else {
-			// _, err := makeTdFlow(flowBidirectional, nil, address)
-			// if err != nil {
-			// 	return nil, err
-			// }
+		}
+
+		if d.TcpDialer == nil {
+			// custom dialer is not set, use default
+			defaultDialer := net.Dialer{}
+			d.TcpDialer = defaultDialer.DialContext
+		}
+
+		if !d.SplitFlows {
+			if !d.DarkDecoy {
+				flow, err := makeTdFlow(flowBidirectional, nil, address)
+				if err != nil {
+					return nil, err
+				}
+				flow.tdRaw.TcpDialer = d.TcpDialer
+				flow.tdRaw.useProxyHeader = d.UseProxyHeader
+				return flow, flow.DialContext(ctx)
+			} else {
+				// _, err := makeTdFlow(flowBidirectional, nil, address)
+				// if err != nil {
+				// 	return nil, err
+				// }
+				cjSession := makeConjureSession(address, d.Transport)
+				cjSession.TcpDialer = d.TcpDialer
+				cjSession.UseProxyHeader = d.UseProxyHeader
+				cjSession.Width = uint(d.Width)
+
+				if d.V6Support {
+					cjSession.V6Support = &V6{include: both, support: true}
+				} else {
+					cjSession.V6Support = &V6{include: v4, support: false}
+				}
+				if len(address) == 0 {
+					return nil, errors.New("Dark Decoys require target address to be set")
+				}
+				return DialConjure(ctx, cjSession, d.DarkDecoyRegistrar)
+			}
+		} // TODO: Error strings shouldn't be capitalized ;)
+		return nil, errors.New("SplitFlows are not supported")
+	} else if network == "udp" { // Added for WebRTC. Will try to keep compatibility
+		if d.DarkDecoy {
 			cjSession := makeConjureSession(address, d.Transport)
 			cjSession.TcpDialer = d.TcpDialer
 			cjSession.UseProxyHeader = d.UseProxyHeader
@@ -103,12 +120,14 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 				cjSession.V6Support = &V6{include: v4, support: false}
 			}
 			if len(address) == 0 {
-				return nil, errors.New("Dark Decoys require target address to be set")
+				return nil, errors.New("dark decoys require target address to be set")
 			}
 			return DialConjure(ctx, cjSession, d.DarkDecoyRegistrar)
 		}
+		return nil, errors.New("udp transports are only implemented for conjure")
+	} else {
+		return nil, &net.OpError{Op: "dial", Net: network, Err: net.UnknownNetworkError(network)}
 	}
-	return nil, errors.New("SplitFlows are not supported")
 }
 
 // DialProxy establishes direct connection to TapDance station proxy.
