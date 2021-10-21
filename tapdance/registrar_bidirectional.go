@@ -175,7 +175,7 @@ func (r APIRegistrarBidirectional) unpackRegResp(reg *ConjureReg, regResp *pb.Re
 	} else if reg.v6Support == v6 {
 		// Save the ipv6address in the Conjure Reg struct (phantom6) to return
 		addr6 := net.IP(regResp.GetIpv6Addr())
-		reg.phantom4 = &addr6
+		reg.phantom6 = &addr6
 	} else {
 		// Case where cjSession.V6Support == both
 		// Save the ipv4address in the Conjure Reg struct (phantom4) to return
@@ -186,7 +186,7 @@ func (r APIRegistrarBidirectional) unpackRegResp(reg *ConjureReg, regResp *pb.Re
 
 		// Save the ipv6address in the Conjure Reg struct (phantom6) to return
 		addr6 := net.IP(regResp.GetIpv6Addr())
-		reg.phantom4 = &addr6
+		reg.phantom6 = &addr6
 	}
 
 	return reg
