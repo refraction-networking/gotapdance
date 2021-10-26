@@ -52,3 +52,22 @@ export http_proxy=127.0.0.1:10500
 wget https://twitter.com
 ```
 Most of the popular utilities also have a flag to specify a proxy.
+
+
+## Docker
+
+A simple dockerfile is provided that instantiates a golang environment in which to
+run the cli. This is primarily meant to be used with the GNS3 simulation
+environment.
+
+To build the docker environemnt use:
+
+```sh
+# run from repo root
+docker build -t gotapdance/cli -f cli/cli.dockerfile .
+```
+
+The environemnt can then be attached to using a `docker exec` or using telnet
+in the case of gns3. See the [wiki page](https://docs.gns3.com/docs/emulators/create-a-docker-container-for-gns3)
+for local docker image builds in gns3 for more details on setting up local
+docker appliances in gns3.
