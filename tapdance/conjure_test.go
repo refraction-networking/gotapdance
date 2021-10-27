@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/hmac"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -299,3 +300,108 @@ func TestAPIRegistrar(t *testing.T) {
 
 	server.Close()
 }
+
+func TestAPIRegistrarBidirectional(t *testing.T) {
+	AssetsSetDir("./assets")
+	// Make Conjure session with covert address
+	session := makeConjureSession("1.2.3.4:1234", pb.TransportType_Min)
+	addr4 := binary.BigEndian.Uint32(net.ParseIP("127.0.0.1").To4())
+	addr6 := net.ParseIP("2001:48a8:687f:1:41d3:ff12:45b:73c8")
+	var port uint32 = 80
+
+	// Create mock server
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check that method is what we expect
+		if r.Method != "POST" {
+			t.Fatalf("incorrect request method: expected POST, got %v", r.Method)
+		}
+
+		// Read in request as server
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("failed to read request body: %v", err)
+		}
+
+		// Make payload for registration
+		payload := pb.C2SWrapper{}
+		err = proto.Unmarshal(body, &payload)
+		if err != nil {
+			t.Fatalf("failed to decode request body: %v", err)
+		}
+
+		if payload.RegistrationPayload.GetCovertAddress() != "1.2.3.4:1234" {
+			t.Fatalf("incorrect covert address: expected 1.2.3.4:1234, got %s", payload.RegistrationPayload.GetCovertAddress())
+		}
+
+		if !bytes.Equal(payload.GetSharedSecret(), session.Keys.SharedSecret) {
+			t.Fatalf("incorrect shared secret: expected %v, got %v", session.Keys.SharedSecret, payload.GetSharedSecret())
+		}
+
+		regResp := &pb.RegistrationResponse{
+			Port:     &port,
+			Ipv4Addr: &addr4,
+			Ipv6Addr: []byte(addr6.To16()),
+		}
+
+		t.Logf("IPv6 address %v -----> %v", addr6, regResp.Ipv6Addr)
+
+		body, _ = proto.Marshal(regResp)
+		w.Write(body)
+	}))
+
+	registrar := APIRegistrarBidirectional{
+		Endpoint: server.URL,
+		Client:   server.Client(),
+	}
+
+	response := &ConjureReg{}
+	// register.Register() connects to server set up above and sends registration info
+	// "response" will store the RegistrationResponse protobuf that the server replies with
+	response, err := registrar.Register(session, context.TODO())
+	if err != nil {
+		t.Fatalf("bidirectional registrar failed with error: %v", err)
+	}
+
+	if response.phantom4 == nil {
+		t.Fatal("phantom4 is nil")
+	} else if response.phantom4.String() != "127.0.0.1" {
+		t.Fatalf("phantom4 is wrong %v", response.phantom4.String())
+	}
+	if response.phantom6 == nil {
+		t.Fatal("phantom6 is nil")
+	} else if response.phantom6.String() != "2001:48a8:687f:1:41d3:ff12:45b:73c8" {
+		t.Fatalf("%v phantom6 is wrong\n expected: %v", response.phantom6.String(), "2001:48a8:687f:1:41d3:ff12:45b:73c8")
+
+	}
+
+	server.Close()
+}
+
+// func TestAPIRegistrarBidirectionalReal(t *testing.T) {
+// 	AssetsSetDir("./assets")
+// 	// Make Conjure session with covert address
+// 	session := makeConjureSession("1.2.3.4:1234", pb.TransportType_Min)
+
+// 	session.V6Support = &V6{support: true, include: both}
+
+// 	// For nil client default dialer is used.
+// 	registrar := APIRegistrarBidirectional{
+// 		Endpoint: "https://registration.refraction.network/api/register-bidirectional",
+// 		Client:   nil,
+// 	}
+
+// 	response := &ConjureReg{}
+// 	// register.Register() connects to server set up above and sends registration info
+// 	// "response" will store the RegistrationResponse protobuf that the server replies with
+// 	response, err := registrar.Register(session, context.TODO())
+// 	if err != nil {
+// 		t.Fatalf("bidirectional registrar failed with error: %v", err)
+// 	}
+
+// 	if response.phantom4 == nil {
+// 		t.Fatal("phantom4 is nil")
+// 	}
+// 	if response.phantom6 == nil {
+// 		t.Fatal("phantom6 is nil")
+// 	}
+// }
