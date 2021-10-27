@@ -96,7 +96,13 @@ func (r APIRegistrarBidirectional) Register(cjSession *ConjureSession, ctx conte
 		regResp, err = r.executeHTTPRequestBidirectional(ctx, cjSession, payload)
 		if err != nil || regResp == nil {
 			Logger().Warnf("%v failed bidirectional API registration, attempt %d/%d", cjSession.IDString(), tries, r.MaxRetries+1)
-			return nil, err
+			continue
+		}
+
+		// Handle server error
+		if regResp.GetError() != "" {
+			Logger().Debugf("%v bidirectional API registration returned err: %s", cjSession.IDString(), regResp.GetError())
+			continue
 		}
 
 		Logger().Debugf("%v bidirectional API registration succeeded", cjSession.IDString())
