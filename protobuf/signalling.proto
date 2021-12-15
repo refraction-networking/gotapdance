@@ -281,4 +281,8 @@ message RegistrationResponse {
 
   // If registration wrong, populate this error string
   optional string error = 5;
+
+  // ClientConf field (optional)
+  optional ClientConf clientConf = 6;
 }
+
