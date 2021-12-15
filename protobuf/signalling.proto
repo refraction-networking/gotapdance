@@ -233,7 +233,7 @@ enum RegistrationSource {
 
 message C2SWrapper {
   optional bytes shared_secret = 1;
-	optional ClientToStation registration_payload = 3;
+  optional ClientToStation registration_payload = 3;
   optional RegistrationSource registration_source = 4;
 
   // client source address when receiving a registration
@@ -281,4 +281,7 @@ message RegistrationResponse {
 
   // If registration wrong, populate this error string
   optional string error = 5;
+
+  // ClientConf field (optional)
+  optional ClientConf clientConf = 6;
 }
