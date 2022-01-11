@@ -197,9 +197,11 @@ func (r APIRegistrarBidirectional) unpackRegResp(reg *ConjureReg, regResp *pb.Re
 
 	// Client config -- check if not nil in the registration response
 	if regResp.ClientConf != nil {
-		_err := Assets().SetClientConf(regResp.ClientConf)
-		if _err != nil {
-			Logger().Warnf("could not set ClientConf in bidirectional API: %v", _err.Error())
+		if Assets().config.GetGeneration() <= regResp.ClientConf.GetGeneration() {
+			_err := Assets().SetClientConf(regResp.ClientConf)
+			if _err != nil {
+				Logger().Warnf("could not set ClientConf in bidirectional API: %v", _err.Error())
+			}
 		}
 	}
 
