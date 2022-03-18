@@ -37,7 +37,8 @@ func main() {
 		"Default(unset): connects client to forwardproxy, to which CONNECT request is yet to be written.")
 
 	var td = flag.Bool("td", false, "Enable tapdance cli mode for compatibility")
-	var APIRegistration = flag.String("api-endpoint", "", "If set, API endpoint to use when performing API registration. If not set, uses decoy registration.")
+	var APIRegistration = flag.String("api-endpoint", "", "If set, API endpoint to use when performing API registration. Defaults to https://registration.refraction.network/api/register (or register-bidirectional for bdapi)")
+	var registrar = flag.String("registrar", "decoy", "One of decoy, api, bdapi.")
 	var transport = flag.String("transport", "min", `The transport to use for Conjure connections. Current values include "min" and "obfs4".`)
 
 	flag.Usage = func() {
@@ -88,21 +89,23 @@ func main() {
 		fmt.Printf("Using Station Pubkey: %s\n", hex.EncodeToString(tapdance.Assets().GetConjurePubkey()[:]))
 	}
 
-	err := connectDirect(*td, *APIRegistration, *connect_target, *port, *proxyHeader, v6Support, *width, *transport)
+	err := connectDirect(*td, *APIRegistration, *registrar, *connect_target, *port, *proxyHeader, v6Support, *width, *transport)
 	if err != nil {
 		tapdance.Logger().Println(err)
 		os.Exit(1)
 	}
 
-	tapdanceProxy := tdproxy.NewTapDanceProxy(*port)
-	err = tapdanceProxy.ListenAndServe()
-	if err != nil {
-		tdproxy.Logger.Errorf("Failed to ListenAndServe(): %v\n", err)
-		os.Exit(1)
-	}
+	// Dead code?
+	/*
+		tapdanceProxy := tdproxy.NewTapDanceProxy(*port)
+		err = tapdanceProxy.ListenAndServe()
+		if err != nil {
+			tdproxy.Logger.Errorf("Failed to ListenAndServe(): %v\n", err)
+			os.Exit(1)
+		}*/
 }
 
-func connectDirect(td bool, apiEndpoint string, connect_target string, localPort int, proxyHeader bool, v6Support bool, width int, transport string) error {
+func connectDirect(td bool, apiEndpoint string, registrar string, connect_target string, localPort int, proxyHeader bool, v6Support bool, width int, transport string) error {
 	if _, _, err := net.SplitHostPort(connect_target); err != nil {
 		return fmt.Errorf("failed to parse host and port from connect_target %s: %v",
 			connect_target, err)
@@ -122,13 +125,31 @@ func connectDirect(td bool, apiEndpoint string, connect_target string, localPort
 		Transport:          getTransportFromName(transport),
 	}
 
-	if apiEndpoint != "" {
+	if registrar == "api" {
+		if apiEndpoint == "" {
+			apiEndpoint = "https://registration.refraction.network/api/register"
+		}
+		tdDialer.DarkDecoyRegistrar = tapdance.APIRegistrar{
+			Endpoint:           apiEndpoint,
+			ConnectionDelay:    750 * time.Millisecond,
+			MaxRetries:         3,
+			SecondaryRegistrar: tapdance.DecoyRegistrar{},
+		}
+	} else if registrar == "bdapi" {
+		if apiEndpoint == "" {
+			apiEndpoint = "https://registration.refraction.network/api/register-bidirectional"
+		}
+
 		tdDialer.DarkDecoyRegistrar = tapdance.APIRegistrarBidirectional{
 			Endpoint:           apiEndpoint,
 			ConnectionDelay:    750 * time.Millisecond,
 			MaxRetries:         3,
 			SecondaryRegistrar: tapdance.DecoyRegistrar{},
 		}
+	} else if registrar == "decoy" {
+		// Done
+	} else {
+		return fmt.Errorf("Unknown registrar %v", registrar)
 	}
 
 	for {
