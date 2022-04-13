@@ -1,6 +1,6 @@
 module github.com/refraction-networking/gotapdance
 
-go 1.17
+go 1.16
 
 require (
 	git.torproject.org/pluggable-transports/goptlib.git v1.2.0
@@ -19,16 +19,4 @@ require (
 	golang.org/x/crypto v0.0.0-20220411220226-7b82a4e95df4
 	golang.org/x/net v0.0.0-20220412020605-290c469a71a5
 	google.golang.org/protobuf v1.28.0
-)
-
-require (
-	filippo.io/edwards25519 v1.0.0-rc.1.0.20210721174708-390f27c3be20 // indirect
-	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/dchest/siphash v1.2.1 // indirect
-	github.com/keltia/proxy v0.9.3 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
-	gitlab.com/yawning/edwards25519-extra.git v0.0.0-20211229043746-2f91fcc9fbdb // indirect
-	golang.org/x/sys v0.0.0-20211216021012-1d35b9e2eb4e // indirect
-	golang.org/x/text v0.3.7 // indirect
-	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c // indirect
 )
