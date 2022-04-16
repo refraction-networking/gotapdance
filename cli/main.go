@@ -230,6 +230,8 @@ func getTransportFromName(name string) pb.TransportType {
 		return pb.TransportType_Min
 	case "obfs4":
 		return pb.TransportType_Obfs4
+	case "webrtc":
+		return pb.TransportType_Webrtc
 	default:
 		return pb.TransportType_Min
 	}

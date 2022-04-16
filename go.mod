@@ -4,6 +4,7 @@ go 1.16
 
 require (
 	git.torproject.org/pluggable-transports/goptlib.git v1.2.0
+	github.com/GaukasWang/conjuRTC v0.2.0
 	github.com/golang/protobuf v1.5.2
 	github.com/jinzhu/copier v0.3.5
 	github.com/keltia/ripe-atlas v0.0.0-20211221125000-f6eb808d5dc6

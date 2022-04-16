@@ -25,6 +25,8 @@ import (
 	"gitlab.com/yawning/obfs4.git/transports/obfs4"
 	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/hkdf"
+
+	webrtc "github.com/GaukasWang/conjuRTC/lib"
 )
 
 // V6 - Struct to track V6 support and cache result across sessions
@@ -533,6 +535,12 @@ func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
 		}
 
 		return conn, err
+	case pb.TransportType_Webrtc:
+		conn, err := reg.WebRTCClient.Connect(ctx, phantoms)
+		if err != nil {
+			Logger().Infof("%v failed to form webrtc connection: %v", reg.sessionIDStr, err)
+		}
+		return conn, err
 	case pb.TransportType_Null:
 		// Dial and do nothing to the connection before returning it to the user.
 		return reg.getFirstConnection(ctx, reg.TcpDialer, phantoms)
@@ -553,6 +561,8 @@ type ConjureReg struct {
 	phantomSNI     string
 	v6Support      uint
 	transport      pb.TransportType
+
+	WebRTCClient *webrtc.Client
 
 	// THIS IS REQUIRED TO INTERFACE WITH PSIPHON ANDROID
 	//		we use their dialer to prevent connection loopback into our own proxy
@@ -773,6 +783,26 @@ func (reg *ConjureReg) generateClientToStation() *pb.ClientToStation {
 
 	for (proto.Size(initProto)+AES_GCM_TAG_SIZE)%3 != 0 {
 		initProto.Padding = append(initProto.Padding, byte(0))
+	}
+
+	// WebRTC Client Initialization
+	if transport == pb.TransportType_Webrtc {
+		wc, err := webrtc.DefaultClient()
+		if err != nil {
+			Logger().Errorf("could not create WebRTC client: %v", err.Error())
+			return nil
+		}
+		err = wc.Prepare()
+		if err != nil {
+			Logger().Errorf("could not prepare WebRTC client: %v", err.Error())
+			return nil
+		}
+		reg.WebRTCClient = wc
+		initProto.WebrtcSignal, err = wc.WebRTCSignal()
+		if err != nil {
+			Logger().Errorf("could not create WebRTC signal: %v", err.Error())
+			return nil
+		}
 	}
 
 	return initProto
