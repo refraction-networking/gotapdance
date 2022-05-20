@@ -1,13 +1,17 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
+	"sync"
 
 	"github.com/mingyech/conjure-dns-registrar/pkg/dns"
+	"github.com/xtaci/smux"
 )
 
 // dnsNameCapacity returns the number of bytes remaining for encoded data after
@@ -28,6 +32,49 @@ func dnsNameCapacity(domain dns.Name) int {
 	// Base32 expands every 5 bytes to 8.
 	capacity = capacity * 5 / 8
 	return capacity
+}
+
+func handle(local *net.TCPConn, remote *smux.Session, conv uint32) error {
+	stream, err := sess.OpenStream()
+	if err != nil {
+		return fmt.Errorf("session %08x opening stream: %v", conv, err)
+	}
+	defer func() {
+		log.Printf("end stream %08x:%d", conv, stream.ID())
+		stream.Close()
+	}()
+	log.Printf("begin stream %08x:%d", conv, stream.ID())
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		_, err := io.Copy(stream, local)
+		if err == io.EOF {
+			// smux Stream.Write may return io.EOF.
+			err = nil
+		}
+		if err != nil && !errors.Is(err, io.ErrClosedPipe) {
+			log.Printf("stream %08x:%d copy stream←local: %v", conv, stream.ID(), err)
+		}
+		local.CloseRead()
+		stream.Close()
+	}()
+	go func() {
+		defer wg.Done()
+		_, err := io.Copy(local, stream)
+		if err == io.EOF {
+			// smux Stream.WriteTo may return io.EOF.
+			err = nil
+		}
+		if err != nil && !errors.Is(err, io.ErrClosedPipe) {
+			log.Printf("stream %08x:%d copy local←stream: %v", conv, stream.ID(), err)
+		}
+		local.CloseWrite()
+	}()
+	wg.Wait()
+
+	return err
 }
 
 func run(domain dns.Name, localAddr *net.TCPAddr, remoteAddr net.Addr, pconn net.PacketConn) error {
