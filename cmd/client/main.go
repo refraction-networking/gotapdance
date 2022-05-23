@@ -13,9 +13,9 @@ import (
 
 func handle(pconn net.PacketConn, remoteAddr *net.UDPAddr, msg string) error {
 	defer func() {
-		log.Printf("end stream :%s", remoteAddr.String())
+		fmt.Printf("end stream :%s\n", remoteAddr.String())
 	}()
-	log.Printf("begin stream :%s", remoteAddr.String())
+	fmt.Printf("begin stream :%s\n", remoteAddr.String())
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -24,14 +24,14 @@ func handle(pconn net.PacketConn, remoteAddr *net.UDPAddr, msg string) error {
 
 		_, err := pconn.WriteTo([]byte(msg), remoteAddr)
 
-		log.Printf("stream :%s write to: %v", remoteAddr.String(), err)
+		fmt.Printf("stream :%s write to: %v\n", remoteAddr.String(), err)
 	}()
 	go func() {
 		defer wg.Done()
 		var buf []byte
 		_, recvAddr, err := pconn.ReadFrom(buf)
 		response := string(buf)
-		log.Printf("stream :%s read from: %s: [%s] %v", remoteAddr.String(), recvAddr.String(), response, err)
+		fmt.Printf("stream :%s read from: %s: [%s] %v\n", remoteAddr.String(), recvAddr.String(), response, err)
 	}()
 	wg.Wait()
 
@@ -41,12 +41,13 @@ func handle(pconn net.PacketConn, remoteAddr *net.UDPAddr, msg string) error {
 func run(domain dns.Name, remoteAddr *net.UDPAddr, pconn net.PacketConn, msg string) error {
 	defer pconn.Close()
 
-	go func() {
-		err := handle(pconn, remoteAddr, msg)
-		if err != nil {
-			log.Printf("handle: %v", err)
-		}
-	}()
+	fmt.Printf("running\n")
+
+	fmt.Printf("handling\n")
+	err := handle(pconn, remoteAddr, msg)
+	if err != nil {
+		fmt.Printf("handle: %v\n", err)
+	}
 	return nil
 }
 
