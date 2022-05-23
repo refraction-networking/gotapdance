@@ -33,7 +33,7 @@ func dnsNameCapacity(domain dns.Name) int {
 	return capacity
 }
 
-func handle(local *net.TCPConn, remote *net.UDPConn, conv uint32) error {
+func handle(local *net.TCPConn, remote *net.PacketConn, conv uint32) error {
 	defer func() {
 		log.Printf("end stream %08x:%d", conv, remote.RemoteAddr())
 		remote.Close()
@@ -45,6 +45,7 @@ func handle(local *net.TCPConn, remote *net.UDPConn, conv uint32) error {
 	go func() {
 		defer wg.Done()
 		_, err := io.Copy(remote, local)
+		remote.ReadFrom(local)
 		if err == io.EOF {
 			// smux Stream.Write may return io.EOF.
 			err = nil
@@ -72,14 +73,8 @@ func handle(local *net.TCPConn, remote *net.UDPConn, conv uint32) error {
 	return nil
 }
 
-func run(domain dns.Name, localAddr *net.TCPAddr, remoteAddr net.Addr, pconn net.PacketConn) error {
+func run(domain dns.Name, remoteAddr *net.UDPAddr, pconn net.PacketConn) error {
 	defer pconn.Close()
-
-	ln, err := net.ListenTCP("tcp", localAddr)
-	if err != nil {
-		return fmt.Errorf("opening local listener: %v", err)
-	}
-	defer ln.Close()
 
 	mtu := dnsNameCapacity(domain) - 8 - 1 - numPadding - 1 // clientid + padding length prefix + padding + data length prefix
 	if mtu < 80 {
@@ -97,7 +92,7 @@ func run(domain dns.Name, localAddr *net.TCPAddr, remoteAddr net.Addr, pconn net
 		}
 		go func() {
 			defer local.Close()
-			err := handle(local.(*net.TCPConn), sess, conn.GetConv())
+			err := handle(local.(*net.TCPConn), remote, conn.GetConv())
 			if err != nil {
 				log.Printf("handle: %v", err)
 			}
@@ -115,17 +110,10 @@ func main() {
 		os.Exit(2)
 	}
 
-	var remoteAddr net.Addr
 	var pconn net.PacketConn
 	remoteAddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
 		log.Fatal(err)
-	}
-
-	localAddr, err := net.ResolveTCPAddr("tcp", flag.Arg(1))
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
 	}
 
 	domain, err := dns.ParseName(flag.Arg(0))
@@ -139,7 +127,7 @@ func main() {
 	fmt.Println("addr: ", remoteAddr)
 
 	pconn = NewDNSPacketConn(pconn, remoteAddr, domain)
-	err = run(domain, localAddr, remoteAddr, pconn)
+	err = run(domain, remoteAddr, pconn, msg)
 	if err != nil {
 		log.Fatal(err)
 	}
