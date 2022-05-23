@@ -33,12 +33,11 @@ func dnsNameCapacity(domain dns.Name) int {
 	return capacity
 }
 
-func handle(local *net.TCPConn, remote *net.PacketConn, conv uint32) error {
+func handle(pconn net.PacketConn, remoteAddr *net.UDPAddr, msg string) error {
 	defer func() {
-		log.Printf("end stream %08x:%d", conv, remote.RemoteAddr())
-		remote.Close()
+		log.Printf("end stream :%d", remoteAddr)
 	}()
-	log.Printf("begin stream %08x:%d", conv, remote.RemoteAddr())
+	log.Printf("begin stream :%d", remoteAddr)
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -51,7 +50,7 @@ func handle(local *net.TCPConn, remote *net.PacketConn, conv uint32) error {
 			err = nil
 		}
 		if err != nil && !errors.Is(err, io.ErrClosedPipe) {
-			log.Printf("stream %08x:%d copy stream←local: %v", conv, remote.RemoteAddr(), err)
+			log.Printf("stream :%d copy stream←local: %v", remoteAddr, err)
 		}
 		local.CloseRead()
 		remote.Close()
@@ -64,7 +63,7 @@ func handle(local *net.TCPConn, remote *net.PacketConn, conv uint32) error {
 			err = nil
 		}
 		if err != nil && !errors.Is(err, io.ErrClosedPipe) {
-			log.Printf("stream %08x:%d copy local←stream: %v", conv, remote.RemoteAddr(), err)
+			log.Printf("stream :%d copy local←stream: %v", remoteAddr, err)
 		}
 		local.CloseWrite()
 	}()
@@ -73,31 +72,15 @@ func handle(local *net.TCPConn, remote *net.PacketConn, conv uint32) error {
 	return nil
 }
 
-func run(domain dns.Name, remoteAddr *net.UDPAddr, pconn net.PacketConn) error {
+func run(domain dns.Name, remoteAddr *net.UDPAddr, pconn net.PacketConn, msg string) error {
 	defer pconn.Close()
 
-	mtu := dnsNameCapacity(domain) - 8 - 1 - numPadding - 1 // clientid + padding length prefix + padding + data length prefix
-	if mtu < 80 {
-		return fmt.Errorf("domain %s leaves only %d bytes for payload", domain, mtu)
-	}
-	log.Printf("effective MTU %d", mtu)
-
-	for {
-		local, err := ln.Accept()
+	go func() {
+		err := handle(pconn, remoteAddr, msg)
 		if err != nil {
-			if err, ok := err.(net.Error); ok && err.Temporary() {
-				continue
-			}
-			return err
+			log.Printf("handle: %v", err)
 		}
-		go func() {
-			defer local.Close()
-			err := handle(local.(*net.TCPConn), remote, conn.GetConv())
-			if err != nil {
-				log.Printf("handle: %v", err)
-			}
-		}()
-	}
+	}()
 }
 
 func main() {
@@ -125,6 +108,8 @@ func main() {
 	pconn, err = net.ListenUDP("udp", nil)
 
 	fmt.Println("addr: ", remoteAddr)
+
+	msg := "hi"
 
 	pconn = NewDNSPacketConn(pconn, remoteAddr, domain)
 	err = run(domain, remoteAddr, pconn, msg)
