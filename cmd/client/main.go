@@ -1,10 +1,8 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"os"
@@ -13,59 +11,27 @@ import (
 	"github.com/mingyech/conjure-dns-registrar/pkg/dns"
 )
 
-// dnsNameCapacity returns the number of bytes remaining for encoded data after
-// including domain in a DNS name.
-func dnsNameCapacity(domain dns.Name) int {
-	// Names must be 255 octets or shorter in total length.
-	// https://tools.ietf.org/html/rfc1035#section-2.3.4
-	capacity := 255
-	// Subtract the length of the null terminator.
-	capacity -= 1
-	for _, label := range domain {
-		// Subtract the length of the label and the length octet.
-		capacity -= len(label) + 1
-	}
-	// Each label may be up to 63 bytes long and requires 64 bytes to
-	// encode.
-	capacity = capacity * 63 / 64
-	// Base32 expands every 5 bytes to 8.
-	capacity = capacity * 5 / 8
-	return capacity
-}
-
 func handle(pconn net.PacketConn, remoteAddr *net.UDPAddr, msg string) error {
 	defer func() {
-		log.Printf("end stream :%d", remoteAddr)
+		log.Printf("end stream :%s", remoteAddr.String())
 	}()
-	log.Printf("begin stream :%d", remoteAddr)
+	log.Printf("begin stream :%s", remoteAddr.String())
 
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		_, err := io.Copy(remote, local)
-		remote.ReadFrom(local)
-		if err == io.EOF {
-			// smux Stream.Write may return io.EOF.
-			err = nil
-		}
-		if err != nil && !errors.Is(err, io.ErrClosedPipe) {
-			log.Printf("stream :%d copy stream←local: %v", remoteAddr, err)
-		}
-		local.CloseRead()
-		remote.Close()
+
+		_, err := pconn.WriteTo([]byte(msg), remoteAddr)
+
+		log.Printf("stream :%s write to: %v", remoteAddr.String(), err)
 	}()
 	go func() {
 		defer wg.Done()
-		_, err := io.Copy(local, remote)
-		if err == io.EOF {
-			// smux Stream.WriteTo may return io.EOF.
-			err = nil
-		}
-		if err != nil && !errors.Is(err, io.ErrClosedPipe) {
-			log.Printf("stream :%d copy local←stream: %v", remoteAddr, err)
-		}
-		local.CloseWrite()
+		var buf []byte
+		_, recvAddr, err := pconn.ReadFrom(buf)
+		response := string(buf)
+		log.Printf("stream :%s read from: %s: [%s] %v", remoteAddr.String(), recvAddr.String(), response, err)
 	}()
 	wg.Wait()
 
@@ -81,6 +47,7 @@ func run(domain dns.Name, remoteAddr *net.UDPAddr, pconn net.PacketConn, msg str
 			log.Printf("handle: %v", err)
 		}
 	}()
+	return nil
 }
 
 func main() {
@@ -106,6 +73,10 @@ func main() {
 	}
 
 	pconn, err = net.ListenUDP("udp", nil)
+
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	fmt.Println("addr: ", remoteAddr)
 
