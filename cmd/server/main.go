@@ -45,6 +45,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/mingyech/conjure-dns-registrar/pkg/dns"
@@ -127,6 +128,26 @@ func nextPacket(r *bytes.Reader) ([]byte, error) {
 			return p, eof(err)
 		}
 	}
+}
+
+func handle(ttConn *turbotunnel.QueuePacketConn) error {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		var buf []byte
+		_, recvAddr, err := ttConn.ReadFrom(buf)
+		response := string(buf)
+		fmt.Printf("stream :%s read from: %s: [%s], err: %v\n", recvAddr.String(), recvAddr.String(), response, err)
+
+		msg := "hey"
+		_, err = ttConn.WriteTo([]byte(msg), recvAddr)
+		fmt.Printf("stream :%s write to: [%s], err: %v\n", recvAddr.String(), msg, err)
+
+	}()
+	wg.Wait()
+
+	return nil
 }
 
 // responseFor constructs a response dns.Message that is appropriate for query.
@@ -313,8 +334,8 @@ func recvLoop(domain dns.Name, dnsConn net.PacketConn, ttConn *turbotunnel.Queue
 				msg := string([]byte(p))
 
 				log.Printf("msg recieved: [%s]\n", msg)
-
-				// Feed the incoming packet to KCP.
+				log.Printf("resp: [%v]\n", resp)
+				// Feed the incoming packet to tt.
 				ttConn.QueueIncoming(p, clientID)
 			}
 		} else {
@@ -355,6 +376,8 @@ func sendLoop(dnsConn net.PacketConn, ttConn *turbotunnel.QueuePacketConn, ch <-
 		if rec.Resp.Rcode() == dns.RcodeNoError && len(rec.Resp.Question) == 1 {
 			// If it's a non-error response, we can fill the Answer
 			// section with downstream packets.
+			log.Printf("rec: resp: [%v]\n", rec.Resp)
+			log.Printf("rec: addr: [%v]\n", rec.Addr)
 
 			// Any changes to how responses are built need to happen
 			// also in computeMaxEncodedPayload.
@@ -435,6 +458,7 @@ func sendLoop(dnsConn net.PacketConn, ttConn *turbotunnel.QueuePacketConn, ch <-
 		}
 
 		buf, err := rec.Resp.WireFormat()
+		log.Printf("rec: resp ans data: [%v]\n", rec.Resp.Answer[0].Data)
 		if err != nil {
 			log.Printf("resp WireFormat: %v", err)
 			continue
@@ -448,6 +472,7 @@ func sendLoop(dnsConn net.PacketConn, ttConn *turbotunnel.QueuePacketConn, ch <-
 		}
 
 		// Now we actually send the message as a UDP packet.
+		log.Printf("sending\n")
 		_, err = dnsConn.WriteTo(buf, rec.Addr)
 		if err != nil {
 			if err, ok := err.(net.Error); ok && err.Temporary() {
@@ -570,12 +595,12 @@ func run(domain dns.Name, dnsConn net.PacketConn) error {
 	log.Printf("effective MTU %d", mtu)
 
 	ttConn := turbotunnel.NewQueuePacketConn(turbotunnel.DummyAddr{}, idleTimeout*2)
-	// go func() {
-	// 	err := acceptSessions(ln, privkey, mtu, upstream)
-	// 	if err != nil {
-	// 		log.Printf("acceptSessions: %v", err)
-	// 	}
-	// }()
+	go func() {
+		err := handle(ttConn)
+		if err != nil {
+			log.Printf("handle: %v", err)
+		}
+	}()
 
 	ch := make(chan *record, 100)
 	defer close(ch)
@@ -584,12 +609,12 @@ func run(domain dns.Name, dnsConn net.PacketConn) error {
 	// for each response to collect downstream data before being evicted by
 	// another response that needs to be sent.
 
-	// go func() {
-	// 	err := sendLoop(dnsConn, ttConn, ch, maxEncodedPayload)
-	// 	if err != nil {
-	// 		log.Printf("sendLoop: %v", err)
-	// 	}
-	// }()
+	go func() {
+		err := sendLoop(dnsConn, ttConn, ch, maxEncodedPayload)
+		if err != nil {
+			log.Printf("sendLoop: %v", err)
+		}
+	}()
 
 	return recvLoop(domain, dnsConn, ttConn, ch)
 }
