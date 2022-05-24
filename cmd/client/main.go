@@ -11,6 +11,10 @@ import (
 	"github.com/mingyech/conjure-dns-registrar/pkg/dns"
 )
 
+const (
+	bufSize = 4096
+)
+
 func handle(pconn net.PacketConn, remoteAddr *net.UDPAddr, msg string) error {
 	defer func() {
 		log.Printf("end stream :%s\n", remoteAddr.String())
@@ -31,7 +35,7 @@ func handle(pconn net.PacketConn, remoteAddr *net.UDPAddr, msg string) error {
 	}()
 	go func() {
 		defer wg.Done()
-		var buf [4096]byte
+		var buf [bufSize]byte
 
 		_, recvAddr, err := pconn.ReadFrom(buf[:])
 		if err != nil {
