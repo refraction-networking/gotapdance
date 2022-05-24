@@ -23,13 +23,20 @@ func handle(pconn net.PacketConn, remoteAddr *net.UDPAddr, msg string) error {
 		defer wg.Done()
 
 		_, err := pconn.WriteTo([]byte(msg), remoteAddr)
+		if err != nil {
+			log.Fatalf("ReadFrom: %v", err)
+		}
 
 		log.Printf("stream :%s write: [%s], err: %v\n", remoteAddr.String(), msg, err)
 	}()
 	go func() {
 		defer wg.Done()
 		var buf [4096]byte
+
 		_, recvAddr, err := pconn.ReadFrom(buf[:])
+		if err != nil {
+			log.Fatalf("ReadFrom: %v", err)
+		}
 		response := string(buf[:])
 		log.Printf("stream: %s: server: %s: read: [%s], err: %v\n", remoteAddr.String(), recvAddr.String(), response, err)
 	}()
@@ -42,7 +49,6 @@ func run(domain dns.Name, remoteAddr *net.UDPAddr, pconn net.PacketConn, msg str
 	defer pconn.Close()
 
 	// TODO: add encryption
-
 	err := handle(pconn, remoteAddr, msg)
 	if err != nil {
 		log.Printf("handle: %v\n", err)
@@ -53,8 +59,10 @@ func run(domain dns.Name, remoteAddr *net.UDPAddr, pconn net.PacketConn, msg str
 func main() {
 	var addr string
 	var domain string
+	var msg string
 	flag.StringVar(&addr, "addr", "", "address of DNS resolver")
 	flag.StringVar(&domain, "domain", "", "base domain in requests")
+	flag.StringVar(&msg, "msg", "hi", "message to send")
 	flag.Parse()
 	if addr == "" {
 		fmt.Println("DNS resolver address must be specified")
@@ -85,8 +93,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	msg := "hi"
 
 	pconn = NewDNSPacketConn(pconn, remoteAddr, basename)
 	err = run(basename, remoteAddr, pconn, msg)
