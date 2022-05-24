@@ -45,7 +45,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/mingyech/conjure-dns-registrar/pkg/dns"
@@ -71,6 +70,8 @@ const (
 
 	// How long to wait for a TCP connection to upstream to be established.
 	upstreamDialTimeout = 30 * time.Second
+
+	bufSize = 4096
 )
 
 var (
@@ -131,22 +132,25 @@ func nextPacket(r *bytes.Reader) ([]byte, error) {
 }
 
 func handle(ttConn *turbotunnel.QueuePacketConn, msg string) error {
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		var buf []byte
-		_, recvAddr, err := ttConn.ReadFrom(buf)
-		response := string(buf)
-		fmt.Printf("stream :%s read from: %s: [%s], err: %v\n", recvAddr.String(), recvAddr.String(), response, err)
+	for {
+		var buf [bufSize]byte
+		_, recvAddr, err := ttConn.ReadFrom(buf[:])
+		received := string(buf[:])
+
+		fmt.Println("Recived: ", received)
+
+		if err != nil {
+			log.Printf("stream :%s read from: %s: [%s]: err: %v\n", recvAddr.String(), recvAddr.String(), received, err)
+			return err
+		}
 
 		_, err = ttConn.WriteTo([]byte(msg), recvAddr)
-		fmt.Printf("stream :%s write to: [%s], err: %v\n", recvAddr.String(), msg, err)
 
-	}()
-	wg.Wait()
-
-	return nil
+		if err != nil {
+			log.Printf("stream :%s write to: [%s], err: %v\n", recvAddr.String(), msg, err)
+			return err
+		}
+	}
 }
 
 // responseFor constructs a response dns.Message that is appropriate for query.
