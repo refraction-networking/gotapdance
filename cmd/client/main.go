@@ -6,7 +6,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"sync"
 
 	"github.com/mingyech/conjure-dns-registrar/pkg/dns"
 )
@@ -16,36 +15,19 @@ const (
 )
 
 func handle(pconn net.PacketConn, remoteAddr *net.UDPAddr, msg string) error {
-	defer func() {
-		log.Printf("end stream :%s\n", remoteAddr.String())
-	}()
-	log.Printf("begin stream :%s\n", remoteAddr.String())
+	_, err := pconn.WriteTo([]byte(msg), remoteAddr)
+	if err != nil {
+		log.Fatalf("stream :%s write: [%s], err: %v\n", remoteAddr.String(), msg, err)
+	}
 
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
+	var buf [bufSize]byte
 
-		_, err := pconn.WriteTo([]byte(msg), remoteAddr)
-		if err != nil {
-			log.Fatalf("ReadFrom: %v", err)
-		}
-
-		log.Printf("stream :%s write: [%s], err: %v\n", remoteAddr.String(), msg, err)
-	}()
-	go func() {
-		defer wg.Done()
-		var buf [bufSize]byte
-
-		_, recvAddr, err := pconn.ReadFrom(buf[:])
-		if err != nil {
-			log.Fatalf("ReadFrom: %v", err)
-		}
-		response := string(buf[:])
-		fmt.Printf("Response: %s\n", response)
-		log.Printf("stream: %s: server: %s: read: [%s], err: %v\n", remoteAddr.String(), recvAddr.String(), response, err)
-	}()
-	wg.Wait()
+	_, recvAddr, err := pconn.ReadFrom(buf[:])
+	response := string(buf[:])
+	if err != nil {
+		log.Fatalf("stream: %s: server: %s: read: [%s], err: %v\n", remoteAddr.String(), recvAddr.String(), response, err)
+	}
+	fmt.Printf("Response: [%s]\n", response)
 
 	return nil
 }

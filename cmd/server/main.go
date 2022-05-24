@@ -137,7 +137,7 @@ func handle(ttConn *turbotunnel.QueuePacketConn, msg string) error {
 		_, recvAddr, err := ttConn.ReadFrom(buf[:])
 		received := string(buf[:])
 
-		fmt.Println("Recived: ", received)
+		fmt.Printf("Recived: [%s]", received)
 
 		if err != nil {
 			log.Printf("stream :%s read from: %s: [%s]: err: %v\n", recvAddr.String(), recvAddr.String(), received, err)
@@ -337,7 +337,6 @@ func recvLoop(domain dns.Name, dnsConn net.PacketConn, ttConn *turbotunnel.Queue
 				msg := string([]byte(p))
 
 				log.Printf("msg recieved: [%s]\n", msg)
-				log.Printf("resp: [%v]\n", resp)
 				// Feed the incoming packet to tt.
 				ttConn.QueueIncoming(p, clientID)
 			}
@@ -379,8 +378,6 @@ func sendLoop(dnsConn net.PacketConn, ttConn *turbotunnel.QueuePacketConn, ch <-
 		if rec.Resp.Rcode() == dns.RcodeNoError && len(rec.Resp.Question) == 1 {
 			// If it's a non-error response, we can fill the Answer
 			// section with downstream packets.
-			log.Printf("rec: resp: [%v]\n", rec.Resp)
-			log.Printf("rec: addr: [%v]\n", rec.Addr)
 
 			// Any changes to how responses are built need to happen
 			// also in computeMaxEncodedPayload.
@@ -461,7 +458,6 @@ func sendLoop(dnsConn net.PacketConn, ttConn *turbotunnel.QueuePacketConn, ch <-
 		}
 
 		buf, err := rec.Resp.WireFormat()
-		log.Printf("rec: resp ans data: [%v]\n", rec.Resp.Answer[0].Data)
 		if err != nil {
 			log.Printf("resp WireFormat: %v", err)
 			continue
@@ -475,7 +471,6 @@ func sendLoop(dnsConn net.PacketConn, ttConn *turbotunnel.QueuePacketConn, ch <-
 		}
 
 		// Now we actually send the message as a UDP packet.
-		log.Printf("sending%v\n", buf)
 		_, err = dnsConn.WriteTo(buf, rec.Addr)
 		if err != nil {
 			if err, ok := err.(net.Error); ok && err.Temporary() {
