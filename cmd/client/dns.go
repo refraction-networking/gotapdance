@@ -9,7 +9,6 @@ import (
 	"io"
 	"log"
 	"net"
-	"time"
 
 	"github.com/mingyech/conjure-dns-registrar/pkg/dns"
 	"github.com/mingyech/conjure-dns-registrar/pkg/turbotunnel"
@@ -22,21 +21,6 @@ const (
 	// to reduce the chance of a cache hit. Cannot be greater than 31,
 	// because the prefix codes indicating padding start at 224.
 	numPaddingForPoll = 8
-
-	// sendLoop has a poll timer that automatically sends an empty polling
-	// query when a certain amount of time has elapsed without a send. The
-	// poll timer is initially set to initPollDelay. It increases by a
-	// factor of pollDelayMultiplier every time the poll timer expires, up
-	// to a maximum of maxPollDelay. The poll timer is reset to
-	// initPollDelay whenever an a send occurs that is not the result of the
-	// poll timer expiring.
-	initPollDelay       = 500 * time.Millisecond
-	maxPollDelay        = 10 * time.Second
-	pollDelayMultiplier = 2.0
-
-	// A limit on the number of empty poll requests we may send in a burst
-	// as a result of receiving data.
-	pollLimit = 16
 )
 
 // base32Encoding is a base32 encoding without padding.
@@ -59,9 +43,6 @@ var base32Encoding = base32.StdEncoding.WithPadding(base32.NoPadding)
 type DNSPacketConn struct {
 	clientID turbotunnel.ClientID
 	domain   dns.Name
-	// Sending on pollChan permits sendLoop to send an empty polling query.
-	// sendLoop also does its own polling according to a time schedule.
-	pollChan chan struct{}
 	// QueuePacketConn is the direct receiver of ReadFrom and WriteTo calls.
 	// recvLoop and sendLoop take the messages out of the receive and send
 	// queues and actually put them on the network.
@@ -78,7 +59,6 @@ func NewDNSPacketConn(transport net.PacketConn, addr net.Addr, domain dns.Name) 
 	c := &DNSPacketConn{
 		clientID:        clientID,
 		domain:          domain,
-		pollChan:        make(chan struct{}, pollLimit),
 		QueuePacketConn: turbotunnel.NewQueuePacketConn(clientID, 0),
 	}
 	go func() {
@@ -205,26 +185,14 @@ func (c *DNSPacketConn) recvLoop(transport net.PacketConn) error {
 
 		// Pull out the packets contained in the payload.
 		r := bytes.NewReader(payload)
-		any := false
 		for {
 			p, err := nextPacket(r)
 			if err != nil {
 				break
 			}
-			any = true
 			c.QueuePacketConn.QueueIncoming(p, addr)
 		}
 
-		// If the payload contained one or more packets, permit sendLoop
-		// to poll immediately. ACKs on received data will effectively
-		// serve as another stream of polls whose rate is proportional
-		// to the rate of incoming packets.
-		if any {
-			select {
-			case c.pollChan <- struct{}{}:
-			default:
-			}
-		}
 	}
 }
 
@@ -335,51 +303,12 @@ func (c *DNSPacketConn) send(transport net.PacketConn, p []byte, addr net.Addr) 
 // on the network using send. It also does polling with empty packets when
 // requested by pollChan or after a timeout.
 func (c *DNSPacketConn) sendLoop(transport net.PacketConn, addr net.Addr) error {
-	pollDelay := initPollDelay
-	pollTimer := time.NewTimer(pollDelay)
 	for {
 		var p []byte
 		outgoing := c.QueuePacketConn.OutgoingQueue(addr)
-		pollTimerExpired := false
 		// Prioritize sending an actual data packet from outgoing. Only
 		// consider a poll when outgoing is empty.
-		select {
-		case p = <-outgoing:
-		default:
-			select {
-			case p = <-outgoing:
-			case <-c.pollChan:
-			case <-pollTimer.C:
-				pollTimerExpired = true
-			}
-		}
-
-		if len(p) > 0 {
-			// A data-carrying packet displaces one pending poll
-			// opportunity, if any.
-			select {
-			case <-c.pollChan:
-			default:
-			}
-		}
-
-		if pollTimerExpired {
-			// We're polling because it's been a while since we last
-			// polled. Increase the poll delay.
-			pollDelay = time.Duration(float64(pollDelay) * pollDelayMultiplier)
-			if pollDelay > maxPollDelay {
-				pollDelay = maxPollDelay
-			}
-		} else {
-			// We're sending an actual data packet, or we're polling
-			// in response to a received packet. Reset the poll
-			// delay to initial.
-			if !pollTimer.Stop() {
-				<-pollTimer.C
-			}
-			pollDelay = initPollDelay
-		}
-		pollTimer.Reset(pollDelay)
+		p = <-outgoing
 
 		// Unlike in the server, in the client we assume that because
 		// the data capacity of queries is so limited, it's not worth

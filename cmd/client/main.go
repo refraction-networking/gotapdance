@@ -18,7 +18,7 @@ func handle(pconn net.PacketConn, remoteAddr *net.UDPAddr, msg string) error {
 	log.Printf("begin stream :%s\n", remoteAddr.String())
 
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(3)
 	go func() {
 		defer wg.Done()
 
@@ -39,7 +39,7 @@ func handle(pconn net.PacketConn, remoteAddr *net.UDPAddr, msg string) error {
 }
 
 func run(domain dns.Name, remoteAddr *net.UDPAddr, pconn net.PacketConn, msg string) error {
-	defer pconn.Close()
+	//defer pconn.Close()
 
 	// TODO: add encryption
 
