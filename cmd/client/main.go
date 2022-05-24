@@ -24,14 +24,14 @@ func handle(pconn net.PacketConn, remoteAddr *net.UDPAddr, msg string) error {
 
 		_, err := pconn.WriteTo([]byte(msg), remoteAddr)
 
-		fmt.Printf("stream :%s write to: %v\n", remoteAddr.String(), err)
+		fmt.Printf("stream :%s write to: [%s], err: %v\n", remoteAddr.String(), msg, err)
 	}()
 	go func() {
 		defer wg.Done()
 		var buf []byte
 		_, recvAddr, err := pconn.ReadFrom(buf)
 		response := string(buf)
-		fmt.Printf("stream :%s read from: %s: [%s] %v\n", remoteAddr.String(), recvAddr.String(), response, err)
+		fmt.Printf("stream :%s read from: %s: [%s], err: %v\n", remoteAddr.String(), recvAddr.String(), response, err)
 	}()
 	wg.Wait()
 
@@ -53,10 +53,18 @@ func run(domain dns.Name, remoteAddr *net.UDPAddr, pconn net.PacketConn, msg str
 
 func main() {
 	var addr string
+	var domain string
 	flag.StringVar(&addr, "addr", "", "address of DNS resolver")
+	flag.StringVar(&domain, "domain", "", "base domain in requests")
 	flag.Parse()
 	if addr == "" {
 		fmt.Println("DNS resolver address must be specified")
+		flag.Usage()
+		os.Exit(2)
+	}
+
+	if domain == "" {
+		fmt.Println("domain must be specified")
 		flag.Usage()
 		os.Exit(2)
 	}
@@ -67,10 +75,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	domain, err := dns.ParseName(flag.Arg(0))
+	basename, err := dns.ParseName(domain)
+
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "invalid domain %+q: %v\n", flag.Arg(0), err)
-		os.Exit(1)
+		log.Fatal(err)
 	}
 
 	pconn, err = net.ListenUDP("udp", nil)
@@ -83,8 +91,8 @@ func main() {
 
 	msg := "hi"
 
-	pconn = NewDNSPacketConn(pconn, remoteAddr, domain)
-	err = run(domain, remoteAddr, pconn, msg)
+	pconn = NewDNSPacketConn(pconn, remoteAddr, basename)
+	err = run(basename, remoteAddr, pconn, msg)
 	if err != nil {
 		log.Fatal(err)
 	}
