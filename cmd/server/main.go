@@ -130,7 +130,7 @@ func nextPacket(r *bytes.Reader) ([]byte, error) {
 	}
 }
 
-func handle(ttConn *turbotunnel.QueuePacketConn) error {
+func handle(ttConn *turbotunnel.QueuePacketConn, msg string) error {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -140,7 +140,6 @@ func handle(ttConn *turbotunnel.QueuePacketConn) error {
 		response := string(buf)
 		fmt.Printf("stream :%s read from: %s: [%s], err: %v\n", recvAddr.String(), recvAddr.String(), response, err)
 
-		msg := "hey"
 		_, err = ttConn.WriteTo([]byte(msg), recvAddr)
 		fmt.Printf("stream :%s write to: [%s], err: %v\n", recvAddr.String(), msg, err)
 
@@ -472,7 +471,7 @@ func sendLoop(dnsConn net.PacketConn, ttConn *turbotunnel.QueuePacketConn, ch <-
 		}
 
 		// Now we actually send the message as a UDP packet.
-		log.Printf("sending\n")
+		log.Printf("sending%v\n", buf)
 		_, err = dnsConn.WriteTo(buf, rec.Addr)
 		if err != nil {
 			if err, ok := err.(net.Error); ok && err.Temporary() {
@@ -573,7 +572,7 @@ func computeMaxEncodedPayload(limit int) int {
 	return low
 }
 
-func run(domain dns.Name, dnsConn net.PacketConn) error {
+func run(domain dns.Name, dnsConn net.PacketConn, msg string) error {
 	defer dnsConn.Close()
 
 	// We have a variable amount of room in which to encode downstream
@@ -596,7 +595,7 @@ func run(domain dns.Name, dnsConn net.PacketConn) error {
 
 	ttConn := turbotunnel.NewQueuePacketConn(turbotunnel.DummyAddr{}, idleTimeout*2)
 	go func() {
-		err := handle(ttConn)
+		err := handle(ttConn, msg)
 		if err != nil {
 			log.Printf("handle: %v", err)
 		}
@@ -621,6 +620,7 @@ func run(domain dns.Name, dnsConn net.PacketConn) error {
 
 func main() {
 	var udpAddr string
+	var msg string
 
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(), `Usage:
@@ -635,6 +635,7 @@ Example:
 		flag.PrintDefaults()
 	}
 	flag.StringVar(&udpAddr, "udp", "", "UDP address to listen on (required)")
+	flag.StringVar(&msg, "msg", "hey", "message to response with")
 	flag.Parse()
 
 	log.SetFlags(log.LstdFlags | log.LUTC)
@@ -659,7 +660,7 @@ Example:
 		os.Exit(1)
 	}
 
-	err = run(domain, dnsConn)
+	err = run(domain, dnsConn, msg)
 	if err != nil {
 		log.Fatal(err)
 	}
