@@ -621,46 +621,40 @@ func run(domain dns.Name, dnsConn net.PacketConn, msg string) error {
 func main() {
 	var udpAddr string
 	var msg string
+	var domain string
 
-	flag.Usage = func() {
-		fmt.Fprintf(flag.CommandLine.Output(), `Usage:
-  %[1]s -gen-key -privkey-file PRIVKEYFILE -pubkey-file PUBKEYFILE
-  %[1]s -udp ADDR -privkey-file PRIVKEYFILE DOMAIN UPSTREAMADDR
-
-Example:
-  %[1]s -gen-key -privkey-file server.key -pubkey-file server.pub
-  %[1]s -udp :53 -privkey-file server.key t.example.com 127.0.0.1:8000
-
-`, os.Args[0])
-		flag.PrintDefaults()
-	}
-	flag.StringVar(&udpAddr, "udp", "", "UDP address to listen on (required)")
+	flag.StringVar(&udpAddr, "addr", "[::]:5300", "UDP address to listen on")
 	flag.StringVar(&msg, "msg", "hey", "message to response with")
+	flag.StringVar(&domain, "domain", "", "base domain in requests")
 	flag.Parse()
+
+	if udpAddr == "" {
+		fmt.Fprintf(os.Stderr, "the -udp option is required\n")
+		flag.Usage()
+		os.Exit(2)
+	}
+
+	if domain == "" {
+		fmt.Println("domain must be specified")
+		flag.Usage()
+		os.Exit(2)
+	}
 
 	log.SetFlags(log.LstdFlags | log.LUTC)
 
-	if flag.NArg() != 1 {
-		flag.Usage()
-		os.Exit(1)
-	}
-	domain, err := dns.ParseName(flag.Arg(0))
+	basename, err := dns.ParseName(domain)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "invalid domain %+q: %v\n", flag.Arg(0), err)
 		os.Exit(1)
 	}
 
-	if udpAddr == "" {
-		fmt.Fprintf(os.Stderr, "the -udp option is required\n")
-		os.Exit(1)
-	}
 	dnsConn, err := net.ListenPacket("udp", udpAddr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "opening UDP listener: %v\n", err)
 		os.Exit(1)
 	}
 
-	err = run(domain, dnsConn, msg)
+	err = run(basename, dnsConn, msg)
 	if err != nil {
 		log.Fatal(err)
 	}
