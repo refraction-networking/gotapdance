@@ -38,6 +38,7 @@ func handle(pconn net.PacketConn, remoteAddr *net.UDPAddr, msg string) error {
 			log.Fatalf("ReadFrom: %v", err)
 		}
 		response := string(buf[:])
+		fmt.Printf("Response: %s\n", response)
 		log.Printf("stream: %s: server: %s: read: [%s], err: %v\n", remoteAddr.String(), recvAddr.String(), response, err)
 	}()
 	wg.Wait()
