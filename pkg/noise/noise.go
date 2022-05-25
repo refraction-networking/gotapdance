@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"strings"
 
 	"github.com/flynn/noise"
@@ -60,12 +61,11 @@ func writeMessage(w io.Writer, msg []byte) error {
 	return err
 }
 
-// socket is the internal type that represents a Noise-wrapped
-// io.ReadWriteCloser.
-type socket struct {
+// interface to wrap noise around a PacketConn interface
+type NoisePacketConn struct {
 	recvPipe   *io.PipeReader
 	sendCipher *noise.CipherState
-	io.ReadWriteCloser
+	net.PacketConn
 }
 
 func newSocket(rwc io.ReadWriteCloser, recvCipher, sendCipher *noise.CipherState) *socket {
