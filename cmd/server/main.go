@@ -157,7 +157,7 @@ func handle(ttConn *turbotunnel.QueuePacketConn, msg string, privkey []byte) err
 		}
 
 		received := string(recvBuf[:])
-		fmt.Printf("Recived: [%s]", received)
+		fmt.Printf("Recived: [%s]\n", received)
 
 		if err != nil {
 			return err
@@ -168,7 +168,7 @@ func handle(ttConn *turbotunnel.QueuePacketConn, msg string, privkey []byte) err
 			return err
 		}
 
-		log.Printf("Sent: [%s]\n", msg)
+		fmt.Printf("Sent: [%s]\n", msg)
 	}
 }
 
@@ -353,9 +353,6 @@ func recvLoop(domain dns.Name, dnsConn net.PacketConn, ttConn *turbotunnel.Queue
 					break
 				}
 
-				msg := string([]byte(p))
-
-				log.Printf("msg recieved: [%s]\n", msg)
 				// Feed the incoming packet to tt.
 				ttConn.QueueIncoming(p, clientID)
 			}

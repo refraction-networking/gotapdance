@@ -38,7 +38,7 @@ func handle(pconn net.PacketConn, remoteAddr *net.UDPAddr, msg string, pubkey []
 		return err
 	}
 
-	log.Printf("Sent: [%s]\n", msg)
+	fmt.Printf("Sent: [%s]\n", msg)
 
 	var responseBuf [maxMsgLen]byte
 	_, err = econn.Read(responseBuf[:])
