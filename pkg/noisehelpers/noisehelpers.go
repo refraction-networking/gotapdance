@@ -3,7 +3,7 @@
 // stream using 16-bit length prefixes.
 //
 // https://noiseprotocol.org/noise.html
-package noise
+package noisehelpers
 
 import (
 	"bufio"
@@ -65,7 +65,16 @@ func writeMessage(w io.Writer, msg []byte) error {
 type NoisePacketConn struct {
 	recvPipe   *io.PipeReader
 	sendCipher *noise.CipherState
+	remoteAddr *net.UDPAddr
 	net.PacketConn
+}
+
+// socket is the internal type that represents a Noise-wrapped
+// io.ReadWriteCloser.
+type socket struct {
+	recvPipe   *io.PipeReader
+	sendCipher *noise.CipherState
+	io.ReadWriteCloser
 }
 
 func newSocket(rwc io.ReadWriteCloser, recvCipher, sendCipher *noise.CipherState) *socket {
