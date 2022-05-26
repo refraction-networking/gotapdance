@@ -57,6 +57,7 @@ func handle(pconn net.PacketConn, remoteAddr *net.UDPAddr, msg string, pubkey []
 	log.Println("-> e, es")
 	// -> e, es
 	msgToSend, _, _, err := handshakeState.WriteMessage(nil, nil)
+	fmt.Println("Msg size: ", len(msgToSend))
 
 	if err != nil {
 		return err
@@ -71,22 +72,22 @@ func handle(pconn net.PacketConn, remoteAddr *net.UDPAddr, msg string, pubkey []
 
 	// <- e, es
 	log.Println("<- e, es")
-	var recvMsg [bufSize]byte
+	var recvMsg [48]byte
 	_, recvAddr, err := pconn.ReadFrom(recvMsg[:])
 
 	if err != nil {
-		return nil
+		return err
 	}
 	payload, sendCipher, recvCipher, err := handshakeState.ReadMessage(nil, recvMsg[:])
 
-	log.Println("e, es recieved")
-
 	if err != nil {
-		return nil
+		return err
 	}
 	if len(payload) != 0 {
 		return errors.New("unexpected server payload")
 	}
+
+	log.Println("e, es recieved")
 
 	log.Println("noise handshake complete")
 

@@ -38,6 +38,7 @@ import (
 	"bytes"
 	"encoding/base32"
 	"encoding/binary"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -47,7 +48,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/flynn/noise"
 	"github.com/mingyech/conjure-dns-registrar/pkg/dns"
+	"github.com/mingyech/conjure-dns-registrar/pkg/noisehelpers"
 	"github.com/mingyech/conjure-dns-registrar/pkg/turbotunnel"
 )
 
@@ -72,7 +75,21 @@ const (
 	upstreamDialTimeout = 30 * time.Second
 
 	bufSize = 4096
+	KeyLen  = 32
 )
+
+// cipherSuite represents 25519_ChaChaPoly_BLAKE2s.
+var cipherSuite = noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, noise.HashBLAKE2s)
+
+// newConfig instantiates configuration settings that are common to clients and
+// servers.
+func newConfig() noise.Config {
+	return noise.Config{
+		CipherSuite: cipherSuite,
+		Pattern:     noise.HandshakeNK,
+		Prologue:    []byte("dnstt 2020-04-13"),
+	}
+}
 
 var (
 	// We don't send UDP payloads larger than this, in an attempt to avoid
@@ -93,6 +110,16 @@ var (
 
 // base32Encoding is a base32 encoding without padding.
 var base32Encoding = base32.StdEncoding.WithPadding(base32.NoPadding)
+
+// readKeyFromFile reads a key from a named file.
+func readKeyFromFile(filename string) ([]byte, error) {
+	f, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return noisehelpers.ReadKey(f)
+}
 
 // nextPacket reads the next length-prefixed packet from r, ignoring padding. It
 // returns a nil error only when a packet was read successfully. It returns
@@ -131,11 +158,61 @@ func nextPacket(r *bytes.Reader) ([]byte, error) {
 	}
 }
 
-func handle(ttConn *turbotunnel.QueuePacketConn, msg string) error {
+func handle(ttConn *turbotunnel.QueuePacketConn, msg string, privkey []byte) error {
 	for {
-		var buf [bufSize]byte
-		_, recvAddr, err := ttConn.ReadFrom(buf[:])
-		received := string(buf[:])
+
+		config := newConfig()
+		config.Initiator = false
+		config.StaticKeypair = noise.DHKey{
+			Private: privkey,
+			Public:  noisehelpers.PubkeyFromPrivkey(privkey),
+		}
+		handshakeState, err := noise.NewHandshakeState(config)
+		if err != nil {
+			return err
+		}
+
+		log.Println("start noise handshake")
+
+		// -> e, es
+		log.Println("-> e, es")
+		var recvMsg [48]byte
+		_, recvAddr, err := ttConn.ReadFrom(recvMsg[:])
+		if err != nil {
+			return err
+		}
+		payload, _, _, err := handshakeState.ReadMessage(nil, recvMsg[:])
+		if err != nil {
+			return err
+		}
+		if len(payload) != 0 {
+			return errors.New("unexpected client payload")
+		}
+
+		log.Println("e, es recieved")
+		// <- e, es
+		log.Println("<- e, es")
+		msgToSend, recvCipher, sendCipher, err := handshakeState.WriteMessage(nil, nil)
+		if err != nil {
+			return err
+		}
+		_, err = ttConn.WriteTo(msgToSend, recvAddr)
+		if err != nil {
+			return err
+		}
+
+		log.Println("e, es sent")
+
+		var encryptedRecv [bufSize]byte
+		_, _, err = ttConn.ReadFrom(encryptedRecv[:])
+		if err != nil {
+			return err
+		}
+		recvBuf, err := recvCipher.Decrypt(nil, nil, encryptedRecv[:])
+		if err != nil {
+			return err
+		}
+		received := string(recvBuf[:])
 
 		fmt.Printf("Recived: [%s]", received)
 
@@ -144,12 +221,19 @@ func handle(ttConn *turbotunnel.QueuePacketConn, msg string) error {
 			return err
 		}
 
-		_, err = ttConn.WriteTo([]byte(msg), recvAddr)
+		encryptedMsg, err := sendCipher.Encrypt(nil, nil, []byte(msg))
 
 		if err != nil {
-			log.Printf("stream :%s write to: [%s], err: %v\n", recvAddr.String(), msg, err)
-			return err
+			return errors.New("encrypt failed")
 		}
+
+		_, err = ttConn.WriteTo(encryptedMsg, recvAddr)
+
+		if err != nil {
+			log.Fatalf("stream :%s write: [%s], err: %v\n", recvAddr.String(), msg, err)
+		}
+
+		log.Printf("Sent: [%s]\n", msg)
 	}
 }
 
@@ -571,7 +655,7 @@ func computeMaxEncodedPayload(limit int) int {
 	return low
 }
 
-func run(domain dns.Name, dnsConn net.PacketConn, msg string) error {
+func run(domain dns.Name, dnsConn net.PacketConn, msg string, privkey []byte) error {
 	defer dnsConn.Close()
 
 	// We have a variable amount of room in which to encode downstream
@@ -594,7 +678,7 @@ func run(domain dns.Name, dnsConn net.PacketConn, msg string) error {
 
 	ttConn := turbotunnel.NewQueuePacketConn(turbotunnel.DummyAddr{}, idleTimeout*2)
 	go func() {
-		err := handle(ttConn, msg)
+		err := handle(ttConn, msg, privkey)
 		if err != nil {
 			log.Printf("handle: %v", err)
 		}
@@ -621,10 +705,12 @@ func main() {
 	var udpAddr string
 	var msg string
 	var domain string
+	var privkeyFilename string
 
 	flag.StringVar(&udpAddr, "addr", "[::]:5300", "UDP address to listen on")
 	flag.StringVar(&msg, "msg", "hey", "message to response with")
 	flag.StringVar(&domain, "domain", "", "base domain in requests")
+	flag.StringVar(&privkeyFilename, "privkey", "", "server private key")
 	flag.Parse()
 
 	if udpAddr == "" {
@@ -653,7 +739,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	err = run(basename, dnsConn, msg)
+	privkey, err := readKeyFromFile(privkeyFilename)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = run(basename, dnsConn, msg, privkey)
 	if err != nil {
 		log.Fatal(err)
 	}
