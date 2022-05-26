@@ -38,7 +38,6 @@ import (
 	"bytes"
 	"encoding/base32"
 	"encoding/binary"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -48,9 +47,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/flynn/noise"
 	"github.com/mingyech/conjure-dns-registrar/pkg/dns"
-	"github.com/mingyech/conjure-dns-registrar/pkg/noisehelpers"
+	"github.com/mingyech/conjure-dns-registrar/pkg/encryption"
 	"github.com/mingyech/conjure-dns-registrar/pkg/turbotunnel"
 )
 
@@ -74,22 +72,9 @@ const (
 	// How long to wait for a TCP connection to upstream to be established.
 	upstreamDialTimeout = 30 * time.Second
 
-	bufSize = 4096
-	KeyLen  = 32
+	bufSize   = 4096
+	maxMsgLen = 140
 )
-
-// cipherSuite represents 25519_ChaChaPoly_BLAKE2s.
-var cipherSuite = noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, noise.HashBLAKE2s)
-
-// newConfig instantiates configuration settings that are common to clients and
-// servers.
-func newConfig() noise.Config {
-	return noise.Config{
-		CipherSuite: cipherSuite,
-		Pattern:     noise.HandshakeNK,
-		Prologue:    []byte("dnstt 2020-04-13"),
-	}
-}
 
 var (
 	// We don't send UDP payloads larger than this, in an attempt to avoid
@@ -118,7 +103,7 @@ func readKeyFromFile(filename string) ([]byte, error) {
 		return nil, err
 	}
 	defer f.Close()
-	return noisehelpers.ReadKey(f)
+	return encryption.ReadKey(f)
 }
 
 // nextPacket reads the next length-prefixed packet from r, ignoring padding. It
@@ -160,77 +145,27 @@ func nextPacket(r *bytes.Reader) ([]byte, error) {
 
 func handle(ttConn *turbotunnel.QueuePacketConn, msg string, privkey []byte) error {
 	for {
-
-		config := newConfig()
-		config.Initiator = false
-		config.StaticKeypair = noise.DHKey{
-			Private: privkey,
-			Public:  noisehelpers.PubkeyFromPrivkey(privkey),
-		}
-		handshakeState, err := noise.NewHandshakeState(config)
+		econn, err := encryption.NewServer(ttConn, privkey)
 		if err != nil {
 			return err
 		}
 
-		log.Println("start noise handshake")
-
-		// -> e, es
-		log.Println("-> e, es")
-		var recvMsg [48]byte
-		_, recvAddr, err := ttConn.ReadFrom(recvMsg[:])
-		if err != nil {
-			return err
-		}
-		payload, _, _, err := handshakeState.ReadMessage(nil, recvMsg[:])
-		if err != nil {
-			return err
-		}
-		if len(payload) != 0 {
-			return errors.New("unexpected client payload")
-		}
-
-		log.Println("e, es recieved")
-		// <- e, es
-		log.Println("<- e, es")
-		msgToSend, recvCipher, sendCipher, err := handshakeState.WriteMessage(nil, nil)
-		if err != nil {
-			return err
-		}
-		_, err = ttConn.WriteTo(msgToSend, recvAddr)
+		var recvBuf [maxMsgLen]byte
+		_, err = econn.Read(recvBuf[:])
 		if err != nil {
 			return err
 		}
 
-		log.Println("e, es sent")
-
-		var encryptedRecv [bufSize]byte
-		_, _, err = ttConn.ReadFrom(encryptedRecv[:])
-		if err != nil {
-			return err
-		}
-		recvBuf, err := recvCipher.Decrypt(nil, nil, encryptedRecv[:])
-		if err != nil {
-			return err
-		}
 		received := string(recvBuf[:])
-
 		fmt.Printf("Recived: [%s]", received)
 
 		if err != nil {
-			log.Printf("stream :%s read from: %s: [%s]: err: %v\n", recvAddr.String(), recvAddr.String(), received, err)
 			return err
 		}
 
-		encryptedMsg, err := sendCipher.Encrypt(nil, nil, []byte(msg))
-
+		_, err = econn.Write([]byte(msg))
 		if err != nil {
-			return errors.New("encrypt failed")
-		}
-
-		_, err = ttConn.WriteTo(encryptedMsg, recvAddr)
-
-		if err != nil {
-			log.Fatalf("stream :%s write: [%s], err: %v\n", recvAddr.String(), msg, err)
+			return err
 		}
 
 		log.Printf("Sent: [%s]\n", msg)

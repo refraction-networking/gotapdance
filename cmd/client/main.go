@@ -1,35 +1,20 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"net"
 	"os"
 
-	"github.com/flynn/noise"
 	"github.com/mingyech/conjure-dns-registrar/pkg/dns"
-	"github.com/mingyech/conjure-dns-registrar/pkg/noisehelpers"
+	"github.com/mingyech/conjure-dns-registrar/pkg/encryption"
 )
 
 const (
-	bufSize = 4096
-	KeyLen  = 32
+	bufSize   = 4096
+	maxMsgLen = 140
 )
-
-// cipherSuite represents 25519_ChaChaPoly_BLAKE2s.
-var cipherSuite = noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, noise.HashBLAKE2s)
-
-// newConfig instantiates configuration settings that are common to clients and
-// servers.
-func newConfig() noise.Config {
-	return noise.Config{
-		CipherSuite: cipherSuite,
-		Pattern:     noise.HandshakeNK,
-		Prologue:    []byte("dnstt 2020-04-13"),
-	}
-}
 
 // readKeyFromFile reads a key from a named file.
 func readKeyFromFile(filename string) ([]byte, error) {
@@ -38,88 +23,33 @@ func readKeyFromFile(filename string) ([]byte, error) {
 		return nil, err
 	}
 	defer f.Close()
-	return noisehelpers.ReadKey(f)
+	return encryption.ReadKey(f)
 }
 
 func handle(pconn net.PacketConn, remoteAddr *net.UDPAddr, msg string, pubkey []byte) error {
 
-	config := newConfig()
-	serverPubkey := pubkey
-	config.Initiator = true
-	config.PeerStatic = serverPubkey
-	handshakeState, err := noise.NewHandshakeState(config)
+	econn, err := encryption.NewClient(pconn, remoteAddr, pubkey)
 	if err != nil {
 		return err
 	}
 
-	log.Println("start noise handshake")
-
-	log.Println("-> e, es")
-	// -> e, es
-	msgToSend, _, _, err := handshakeState.WriteMessage(nil, nil)
-	fmt.Println("Msg size: ", len(msgToSend))
-
+	_, err = econn.Write([]byte(msg))
 	if err != nil {
 		return err
-	}
-
-	_, err = pconn.WriteTo(msgToSend, remoteAddr)
-	if err != nil {
-		return err
-	}
-
-	log.Println("e, es sent")
-
-	// <- e, es
-	log.Println("<- e, es")
-	var recvMsg [48]byte
-	_, recvAddr, err := pconn.ReadFrom(recvMsg[:])
-
-	if err != nil {
-		return err
-	}
-	payload, sendCipher, recvCipher, err := handshakeState.ReadMessage(nil, recvMsg[:])
-
-	if err != nil {
-		return err
-	}
-	if len(payload) != 0 {
-		return errors.New("unexpected server payload")
-	}
-
-	log.Println("e, es recieved")
-
-	log.Println("noise handshake complete")
-
-	encryptedMsg, err := sendCipher.Encrypt(nil, nil, []byte(msg))
-
-	if err != nil {
-		return errors.New("encrypt failed")
-	}
-
-	_, err = pconn.WriteTo(encryptedMsg, remoteAddr)
-
-	if err != nil {
-		log.Fatalf("stream :%s write: [%s], err: %v\n", remoteAddr.String(), msg, err)
 	}
 
 	log.Printf("Sent: [%s]\n", msg)
 
-	var encryptedResponse [bufSize]byte
-
-	_, recvAddr, err = pconn.ReadFrom(encryptedResponse[:])
+	var responseBuf [maxMsgLen]byte
+	_, err = econn.Read(responseBuf[:])
 
 	if err != nil {
-		return errors.New("recv failed")
-	}
-	responseBuf, err := recvCipher.Decrypt(nil, nil, encryptedResponse[:])
-	if err != nil {
-		return errors.New("decrypt failed")
+		return err
 	}
 
 	response := string(responseBuf[:])
 	if err != nil {
-		log.Fatalf("stream: %s: server: %s: read: [%s], err: %v\n", remoteAddr.String(), recvAddr.String(), response, err)
+		return err
 	}
 	fmt.Printf("Response: [%s]\n", response)
 
