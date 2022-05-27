@@ -26,7 +26,7 @@ func readKeyFromFile(filename string) ([]byte, error) {
 	return encryption.ReadKey(f)
 }
 
-func handle(pconn net.PacketConn, remoteAddr *net.UDPAddr, msg string, pubkey []byte) error {
+func handle(pconn net.PacketConn, remoteAddr net.Addr, msg string, pubkey []byte) error {
 
 	econn, err := encryption.NewClient(pconn, remoteAddr, pubkey)
 	if err != nil {
