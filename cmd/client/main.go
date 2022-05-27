@@ -59,7 +59,6 @@ func handle(pconn net.PacketConn, remoteAddr *net.UDPAddr, msg string, pubkey []
 func run(domain dns.Name, remoteAddr *net.UDPAddr, pconn net.PacketConn, msg string, pubkey []byte) error {
 	defer pconn.Close()
 
-	// TODO: add encryption
 	err := handle(pconn, remoteAddr, msg, pubkey)
 	if err != nil {
 		log.Printf("handle: %v\n", err)

@@ -2,6 +2,7 @@ package encryption
 
 import (
 	"bufio"
+	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -23,6 +24,7 @@ const (
 // cipherSuite represents 25519_ChaChaPoly_BLAKE2s.
 var cipherSuite = noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, noise.HashBLAKE2s)
 
+// Provides an interface to send and recieve messages over encryption
 type EncryptedPacketConn struct {
 	remoteAddr net.Addr
 	sendCipher *noise.CipherState
@@ -74,6 +76,13 @@ func DecodeKey(s string) ([]byte, error) {
 	return key, err
 }
 
+// GeneratePrivkey generates a private key. The corresponding public key can be
+// derived using PubkeyFromPrivkey.
+func GeneratePrivkey() ([]byte, error) {
+	pair, err := noise.DH25519.GenerateKeypair(rand.Reader)
+	return pair.Private, err
+}
+
 // PubkeyFromPrivkey returns the public key that corresponds to privkey.
 func PubkeyFromPrivkey(privkey []byte) []byte {
 	pubkey, err := curve25519.X25519(privkey, curve25519.Basepoint)
@@ -98,17 +107,28 @@ func (e *EncryptedPacketConn) sendMsg(msg []byte) (int, error) {
 	return e.WriteTo(msg, e.remoteAddr)
 }
 
+// Listen for msg only from remote addr
 func (e *EncryptedPacketConn) recvMsg(msg []byte) (int, error) {
 	var recvAddr net.Addr
 	var readLen int
 	var err error
-	//for recvAddr != e.remoteAddr {
-	readLen, recvAddr, err = e.ReadFrom(msg)
-	//}
-	_ = recvAddr
+	for {
+		readLen, recvAddr, err = e.ReadFrom(msg)
+		if err != nil {
+			return 0, err
+		}
+		if e.remoteAddr == nil {
+			e.remoteAddr = recvAddr
+			break
+		}
+		if recvAddr.String() == e.remoteAddr.String() {
+			break
+		}
+	}
 	return readLen, err
 }
 
+// Read and decrypt incomming message
 func (e *EncryptedPacketConn) Read(p []byte) (int, error) {
 	var encryptedResponse [maxMsgLen]byte
 	_, err := e.recvMsg(encryptedResponse[:])
@@ -125,6 +145,7 @@ func (e *EncryptedPacketConn) Read(p []byte) (int, error) {
 	return len(msg), nil
 }
 
+// Put noise protocol over a PacketConn. Handle the initial handshake with server and provides Write and Read methods.
 func NewClient(pconn net.PacketConn, remote net.Addr, pubkey []byte) (*EncryptedPacketConn, error) {
 
 	e := &EncryptedPacketConn{
@@ -182,6 +203,7 @@ func NewClient(pconn net.PacketConn, remote net.Addr, pubkey []byte) (*Encrypted
 	return e, nil
 }
 
+// Put noise protocol over a PacketConn. Handle the initial handshake with client and provides Write and Read methods.
 func NewServer(pconn net.PacketConn, privkey []byte) (*EncryptedPacketConn, error) {
 
 	e := &EncryptedPacketConn{
