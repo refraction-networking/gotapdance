@@ -17,9 +17,10 @@ import (
 )
 
 const (
-	KeyLen                = 32
-	handshakeMsgLen       = KeyLen + 16
-	maxMsgLen       uint8 = 140
+	KeyLen                    = 32
+	handshakeMsgLen           = KeyLen + 16
+	maxMsgLen           uint8 = 140
+	recvTimeoutDuration       = 1 * time.Second
 )
 
 // cipherSuite represents 25519_ChaChaPoly_BLAKE2s.
@@ -137,7 +138,7 @@ func (e *EncryptedPacketConn) recvMsg(msg []byte) (int, error) {
 				continue
 			}
 			return result.readLen, result.err
-		case <-time.After(3 * time.Second):
+		case <-time.After(recvTimeoutDuration):
 			log.Printf("timout from read")
 			return 0, errors.New("Read timed out")
 		}
