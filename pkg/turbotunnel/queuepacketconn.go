@@ -79,20 +79,6 @@ func (c *QueuePacketConn) OutgoingQueue(addr net.Addr) <-chan []byte {
 	return c.remotes.SendQueue(addr)
 }
 
-// Stash places p in the stash for addr, if the stash is not already occupied.
-// Returns true if the packet was placed in the stash, or false if the stash was
-// already occupied. This method is similar to WriteTo, except that it puts the
-// packet in the stash queue (accessible via Unstash), rather than the outgoing
-// queue (accessible via OutgoingQueue).
-func (c *QueuePacketConn) Stash(p []byte, addr net.Addr) bool {
-	return c.remotes.Stash(addr, p)
-}
-
-// Unstash returns the channel that represents the stash for addr.
-func (c *QueuePacketConn) Unstash(addr net.Addr) <-chan []byte {
-	return c.remotes.Unstash(addr)
-}
-
 // ReadFrom returns a packet and address previously stored by QueueIncoming.
 func (c *QueuePacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
 	select {

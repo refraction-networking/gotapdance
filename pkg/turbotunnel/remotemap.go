@@ -13,7 +13,6 @@ type remoteRecord struct {
 	Addr      net.Addr
 	LastSeen  time.Time
 	SendQueue chan []byte
-	Stash     chan []byte
 }
 
 // RemoteMap manages a mapping of live remote peers, keyed by address, to their
@@ -71,27 +70,6 @@ func (m *RemoteMap) SendQueue(addr net.Addr) chan []byte {
 	return m.inner.Lookup(addr, time.Now()).SendQueue
 }
 
-// Stash places p in the stash corresponding to addr, if the stash is not
-// already occupied. Returns true if the p was placed in the stash, false
-// otherwise.
-func (m *RemoteMap) Stash(addr net.Addr, p []byte) bool {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-	select {
-	case m.inner.Lookup(addr, time.Now()).Stash <- p:
-		return true
-	default:
-		return false
-	}
-}
-
-// Unstash returns the channel that reads from the stash for addr.
-func (m *RemoteMap) Unstash(addr net.Addr) <-chan []byte {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-	return m.inner.Lookup(addr, time.Now()).Stash
-}
-
 // remoteMapInner is the inner type of RemoteMap, implementing heap.Interface.
 // byAge is the backing store, a heap ordered by LastSeen time, to facilitate
 // expiring old records. byAddr is a map from addresses to heap indices, to
@@ -128,7 +106,6 @@ func (inner *remoteMapInner) Lookup(addr net.Addr, now time.Time) *remoteRecord 
 			Addr:      addr,
 			LastSeen:  now,
 			SendQueue: make(chan []byte, QueueSize),
-			Stash:     make(chan []byte, 1),
 		}
 		heap.Push(inner, record)
 	}
