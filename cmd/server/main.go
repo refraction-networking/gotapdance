@@ -220,9 +220,9 @@ func nextPacket(r *bytes.Reader) ([]byte, error) {
 	}
 }
 
-func handle(ttConn *turbotunnel.QueuePacketConn, msg string, privkey []byte) error {
+func handle(pconn net.PacketConn, msg string, privkey []byte) error {
 	for {
-		econn, err := encryption.NewServer(ttConn, privkey)
+		econn, err := encryption.NewServer(pconn, privkey)
 		if err != nil {
 			return err
 		}
