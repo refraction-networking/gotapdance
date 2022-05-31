@@ -28,32 +28,38 @@ func readKeyFromFile(filename string) ([]byte, error) {
 
 func handle(pconn net.PacketConn, remoteAddr net.Addr, msg string, pubkey []byte) error {
 
-	econn, err := encryption.NewClient(pconn, remoteAddr, pubkey)
-	if err != nil {
-		return err
+	for {
+		econn, err := encryption.NewClient(pconn, remoteAddr, pubkey)
+		if err != nil {
+			log.Printf("Error: %v", err)
+			continue
+		}
+
+		_, err = econn.Write([]byte(msg))
+		if err != nil {
+			log.Printf("Error: %v", err)
+			continue
+		}
+
+		fmt.Printf("Sent: [%s]\n", msg)
+
+		var responseBuf [maxMsgLen]byte
+		_, err = econn.Read(responseBuf[:])
+
+		if err != nil {
+			log.Printf("Error: %v", err)
+			continue
+		}
+
+		response := string(responseBuf[:])
+		if err != nil {
+			log.Printf("Error: %v", err)
+			continue
+		}
+		fmt.Printf("Response: [%s]\n", response)
+		return nil
 	}
 
-	_, err = econn.Write([]byte(msg))
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("Sent: [%s]\n", msg)
-
-	var responseBuf [maxMsgLen]byte
-	_, err = econn.Read(responseBuf[:])
-
-	if err != nil {
-		return err
-	}
-
-	response := string(responseBuf[:])
-	if err != nil {
-		return err
-	}
-	fmt.Printf("Response: [%s]\n", response)
-
-	return nil
 }
 
 func run(domain dns.Name, remoteAddr *net.UDPAddr, pconn net.PacketConn, msg string, pubkey []byte) error {
