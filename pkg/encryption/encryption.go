@@ -132,10 +132,12 @@ func (e *EncryptedPacketConn) recvMsg(msg []byte) (int, error) {
 				e.remoteAddr = result.recvAddr
 			}
 			if result.recvAddr.String() != e.remoteAddr.String() {
+				log.Printf("recived addr [%s] != remote addr [%s]", result.recvAddr.String(), e.remoteAddr.String())
 				continue
 			}
 			return result.readLen, result.err
 		case <-time.After(3 * time.Second):
+			log.Printf("timout from read")
 			return 0, errors.New("Read timed out")
 		}
 
