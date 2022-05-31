@@ -224,25 +224,29 @@ func handle(pconn net.PacketConn, msg string, privkey []byte) error {
 	for {
 		econn, err := encryption.NewServer(pconn, privkey)
 		if err != nil {
-			return err
+			log.Printf("Error: %v", err)
+			continue
 		}
 
 		var recvBuf [maxMsgLen]byte
 		_, err = econn.Read(recvBuf[:])
 		if err != nil {
-			return err
+			log.Printf("Error: %v", err)
+			continue
 		}
 
 		received := string(recvBuf[:])
 		fmt.Printf("Recived: [%s]\n", received)
 
 		if err != nil {
-			return err
+			log.Printf("Error: %v", err)
+			continue
 		}
 
 		_, err = econn.Write([]byte(msg))
 		if err != nil {
-			return err
+			log.Printf("Error: %v", err)
+			continue
 		}
 
 		fmt.Printf("Sent: [%s]\n", msg)

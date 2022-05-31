@@ -10,15 +10,16 @@ import (
 	"log"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/flynn/noise"
 	"golang.org/x/crypto/curve25519"
 )
 
 const (
-	KeyLen          = 32
-	handshakeMsgLen = KeyLen + 16
-	maxMsgLen       = 140
+	KeyLen                = 32
+	handshakeMsgLen       = KeyLen + 16
+	maxMsgLen       uint8 = 140
 )
 
 // cipherSuite represents 25519_ChaChaPoly_BLAKE2s.
@@ -109,39 +110,58 @@ func (e *EncryptedPacketConn) sendMsg(msg []byte) (int, error) {
 
 // Listen for msg only from remote addr
 func (e *EncryptedPacketConn) recvMsg(msg []byte) (int, error) {
-	var recvAddr net.Addr
-	var readLen int
-	var err error
-	for {
-		readLen, recvAddr, err = e.ReadFrom(msg)
-		if err != nil {
-			return 0, err
-		}
-		if e.remoteAddr == nil {
-			e.remoteAddr = recvAddr
-			break
-		}
-		if recvAddr.String() == e.remoteAddr.String() {
-			break
-		}
+	type result struct {
+		recvAddr net.Addr
+		readLen  int
+		err      error
 	}
-	return readLen, err
+	for {
+		resultChan := make(chan result, 1)
+		go func() {
+			var result result
+			result.readLen, result.recvAddr, result.err = e.ReadFrom(msg)
+			resultChan <- result
+		}()
+
+		select {
+		case result := <-resultChan:
+			if result.err != nil {
+				return 0, result.err
+			}
+			if e.remoteAddr == nil {
+				e.remoteAddr = result.recvAddr
+			}
+			if result.recvAddr.String() != e.remoteAddr.String() {
+				continue
+			}
+			return result.readLen, result.err
+		case <-time.After(3 * time.Second):
+			return 0, errors.New("Read timed out")
+		}
+
+	}
 }
 
 // Read and decrypt incomming message
 func (e *EncryptedPacketConn) Read(p []byte) (int, error) {
 	var encryptedResponse [maxMsgLen]byte
 	_, err := e.recvMsg(encryptedResponse[:])
-	length := uint8(encryptedResponse[0])
 	if err != nil {
 		return 0, err
 	}
-	encryptedMsg := encryptedResponse[1 : 1+length]
-	msg, err := e.recvCipher.Decrypt(nil, nil, encryptedMsg[:])
-	if err != nil {
-		return 0, nil
+	return e.handleReadMsg(p, encryptedResponse[:])
+}
+
+func (e *EncryptedPacketConn) handleReadMsg(decrypted []byte, encryptedResponse []byte) (int, error) {
+	length := uint8(encryptedResponse[0])
+	if 1+length > maxMsgLen {
+		return 0, errors.New("invalid message length recieved")
 	}
-	copy(p, msg)
+	msg, err := e.recvCipher.Decrypt(nil, nil, encryptedResponse[1:1+length])
+	copy(decrypted, msg)
+	if err != nil {
+		return 0, err
+	}
 	return len(msg), nil
 }
 
@@ -244,7 +264,6 @@ func NewServer(pconn net.PacketConn, privkey []byte) (*EncryptedPacketConn, erro
 
 	// <- e, es
 	log.Println("<- e, es")
-
 	msgToSend, recvCipher, sendCipher, err := handshakeState.WriteMessage(nil, nil)
 
 	if err != nil {
