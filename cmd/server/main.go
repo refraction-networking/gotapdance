@@ -489,67 +489,10 @@ func sendLoop(dnsConn net.PacketConn, ttConn *turbotunnel.QueuePacketConn, ch <-
 			}
 
 			var payload bytes.Buffer
-			limit := maxEncodedPayload
-			// We loop and bundle as many packets from OutgoingQueue
-			// into the response as will fit. Any packet that would
-			// overflow the capacity of the DNS response, we stash
-			// to be bundled into a future response.
-			timer := time.NewTimer(maxResponseDelay)
-			for {
-				var p []byte
-				unstash := ttConn.Unstash(rec.ClientID)
-				outgoing := ttConn.OutgoingQueue(rec.ClientID)
-				// Prioritize taking a packet first from the
-				// stash, then from the outgoing queue, then
-				// finally check for the expiration of the timer
-				// or for a receive on ch (indicating a new
-				// query that we must respond to).
-				select {
-				case p = <-unstash:
-				default:
-					select {
-					case p = <-unstash:
-					case p = <-outgoing:
-					default:
-						select {
-						case p = <-unstash:
-						case p = <-outgoing:
-						case <-timer.C:
-						case nextRec = <-ch:
-						}
-					}
-				}
-				// We wait for the first packet in a bundle
-				// only. The second and later packets must be
-				// immediately available or they will be omitted
-				// from this bundle.
-				timer.Reset(0)
-
-				if len(p) == 0 {
-					// timer expired or receive on ch, we
-					// are done with this response.
-					break
-				}
-
-				limit -= 2 + len(p)
-				if payload.Len() == 0 {
-					// No packet length check for the first
-					// packet; if it's too large, we allow
-					// it to be truncated and dropped by the
-					// receiver.
-				} else if limit < 0 {
-					// Stash this packet to send in the next
-					// response.
-					ttConn.Stash(p, rec.ClientID)
-					break
-				}
-				if int(uint16(len(p))) != len(p) {
-					panic(len(p))
-				}
-				binary.Write(&payload, binary.BigEndian, uint16(len(p)))
-				payload.Write(p)
-			}
-			timer.Stop()
+			outgoing := ttConn.OutgoingQueue(rec.ClientID)
+			p := <-outgoing
+			binary.Write(&payload, binary.BigEndian, uint16(len(p)))
+			payload.Write(p)
 
 			rec.Resp.Answer[0].Data = dns.EncodeRDataTXT(payload.Bytes())
 		}

@@ -133,6 +133,7 @@ func (e *EncryptedPacketConn) recvMsg(msg []byte) (int, error) {
 			}
 			if result.recvAddr.String() != e.remoteAddr.String() {
 				log.Printf("recived addr [%s] != remote addr [%s]", result.recvAddr.String(), e.remoteAddr.String())
+				e.WriteTo([]byte(" "), result.recvAddr)
 				continue
 			}
 			return result.readLen, result.err
