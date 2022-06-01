@@ -422,7 +422,6 @@ func recvLoop(domain dns.Name, dnsConn net.PacketConn, ttConn *turbotunnel.Queue
 		log.Println(query.Question)
 
 		resp, payload := responseFor(&query, domain)
-		log.Println("Response: ", resp)
 		// Extract the ClientID from the payload.
 		var clientID turbotunnel.ClientID
 		n = copy(clientID[:], payload)
