@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/flynn/noise"
+	"github.com/mingyech/conjure-dns-registrar/pkg/turbotunnel"
 	"golang.org/x/crypto/curve25519"
 )
 
@@ -26,12 +27,28 @@ const (
 // cipherSuite represents 25519_ChaChaPoly_BLAKE2s.
 var cipherSuite = noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, noise.HashBLAKE2s)
 
+var recvChanMap turbotunnel.RemoteMap = *turbotunnel.NewRemoteMap(2 * time.Minute)
+
 // Provides an interface to send and recieve messages over encryption
 type EncryptedPacketConn struct {
 	remoteAddr net.Addr
 	sendCipher *noise.CipherState
 	recvCipher *noise.CipherState
 	net.PacketConn
+}
+
+func ListenMessages(pconn net.PacketConn) {
+	go func() {
+		for {
+			var msg [maxMsgLen]byte
+			_, recvAddr, err := pconn.ReadFrom(msg[:])
+			if err != nil {
+				log.Printf("listen message err: %v\n", err)
+			}
+			log.Printf("recieved msg from: [%s], pushing to corresponding recvChan\n", recvAddr.String())
+			recvChanMap.SendQueue(recvAddr) <- msg[:]
+		}
+	}()
 }
 
 // newConfig instantiates configuration settings that are common to clients and
@@ -111,41 +128,16 @@ func (e *EncryptedPacketConn) sendMsg(msg []byte) (int, error) {
 
 // Listen for msg only from remote addr
 func (e *EncryptedPacketConn) recvMsg(msg []byte) (int, error) {
-	type result struct {
-		recvAddr net.Addr
-		readLen  int
-		err      error
-	}
+	recvChan := recvChanMap.SendQueue(e.remoteAddr)
+
 	for {
-		resultChan := make(chan result, 1)
-		go func() {
-			var result result
-			result.readLen, result.recvAddr, result.err = e.ReadFrom(msg)
-			resultChan <- result
-		}()
-
 		select {
-		case result := <-resultChan:
-			if result.err != nil {
-				return 0, result.err
-			}
-			if e.remoteAddr == nil {
-				e.remoteAddr = result.recvAddr
-			}
-			if result.recvAddr.String() != e.remoteAddr.String() {
-				log.Printf("recived addr [%s] != remote addr [%s]\n", result.recvAddr.String(), e.remoteAddr.String())
-				log.Printf("Sending empty response ... ")
-				e.WriteTo([]byte(" "), result.recvAddr)
-				log.Printf("Sent\n")
-				continue
-			}
-			return result.readLen, result.err
-		case <-time.After(recvTimeoutDuration):
-			log.Printf("timout from read")
-			return 0, errors.New("Read timed out")
+		case msg = <-recvChan:
+			log.Printf("got msg from channel")
+			return int(maxMsgLen), nil
 		}
-
 	}
+
 }
 
 // Read and decrypt incomming message

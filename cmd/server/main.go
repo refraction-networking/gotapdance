@@ -221,6 +221,7 @@ func nextPacket(r *bytes.Reader) ([]byte, error) {
 }
 
 func handle(pconn net.PacketConn, msg string, privkey []byte) error {
+	encryption.ListenMessages(pconn)
 	for {
 		econn, err := encryption.NewServer(pconn, privkey)
 		if err != nil {
