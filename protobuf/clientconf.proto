@@ -1,0 +1,29 @@
+syntax = "proto2";
+
+package tapdance;
+
+option go_package = "tdproto";
+
+import "signalling.proto";
+
+message DeploymentConfig {
+    optional DecoyList decoy_list = 1;
+    optional uint32 generation = 2;
+    optional PubKey default_pubkey = 3;
+    optional PhantomSubnetsList phantom_subnets_list = 4;
+    optional PubKey conjure_pubkey = 5;
+    optional uint32 version_number = 6;
+    repeated TransportType suported_transports = 7;
+    optional Registrar supported_API_registrar = 8;
+    optional Registrar supported_decoy_registrar = 9;
+    repeated Registrar supported_other_registrars = 10;
+}
+
+message ClientConfig2 {
+    optional uint32 version_number = 1;
+    repeated DeploymentConfig deployment_configs = 2;
+}
+
+message Registrar {
+    optional string url = 1;
+}
