@@ -133,8 +133,10 @@ func (e *EncryptedPacketConn) recvMsg(msg []byte) (int, error) {
 				e.remoteAddr = result.recvAddr
 			}
 			if result.recvAddr.String() != e.remoteAddr.String() {
-				log.Printf("recived addr [%s] != remote addr [%s]", result.recvAddr.String(), e.remoteAddr.String())
+				log.Printf("recived addr [%s] != remote addr [%s]\n", result.recvAddr.String(), e.remoteAddr.String())
+				log.Printf("Sending empty response ... ")
 				e.WriteTo([]byte(" "), result.recvAddr)
+				log.Printf("Sent\n")
 				continue
 			}
 			return result.readLen, result.err
