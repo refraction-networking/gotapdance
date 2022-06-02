@@ -47,7 +47,7 @@ func NewRemoteMap(timeout time.Duration) *RemoteMap {
 	m := &RemoteMap{
 		inner: remoteMapInner{
 			byAge:  make([]*remoteRecord, 0),
-			byAddr: make(map[net.Addr]int),
+			byAddr: make(map[string]int),
 		},
 	}
 	if timeout > 0 {
@@ -80,7 +80,7 @@ func (m *RemoteMap) GetQueue(addr net.Addr) (chan []byte, bool) {
 // external synchonization.
 type remoteMapInner struct {
 	byAge  []*remoteRecord
-	byAddr map[net.Addr]int
+	byAddr map[string]int
 }
 
 // removeExpired removes all records whose LastSeen timestamp is more than
@@ -97,7 +97,7 @@ func (inner *remoteMapInner) removeExpired(now time.Time, timeout time.Duration)
 // record.
 func (inner *remoteMapInner) Lookup(addr net.Addr, now time.Time) (*remoteRecord, bool) {
 	var record *remoteRecord
-	i, ok := inner.byAddr[addr]
+	i, ok := inner.byAddr[addr.String()]
 	if ok {
 		// Found one, update its LastSeen.
 		record = inner.byAge[i]
@@ -131,17 +131,17 @@ func (inner *remoteMapInner) Less(i, j int) bool {
 
 func (inner *remoteMapInner) Swap(i, j int) {
 	inner.byAge[i], inner.byAge[j] = inner.byAge[j], inner.byAge[i]
-	inner.byAddr[inner.byAge[i].Addr] = i
-	inner.byAddr[inner.byAge[j].Addr] = j
+	inner.byAddr[inner.byAge[i].Addr.String()] = i
+	inner.byAddr[inner.byAge[j].Addr.String()] = j
 }
 
 func (inner *remoteMapInner) Push(x interface{}) {
 	record := x.(*remoteRecord)
-	if _, ok := inner.byAddr[record.Addr]; ok {
+	if _, ok := inner.byAddr[record.Addr.String()]; ok {
 		panic("duplicate address in remoteMap")
 	}
 	// Insert into byAddr map.
-	inner.byAddr[record.Addr] = len(inner.byAge)
+	inner.byAddr[record.Addr.String()] = len(inner.byAge)
 	// Insert into byAge slice.
 	inner.byAge = append(inner.byAge, record)
 }
@@ -153,6 +153,6 @@ func (inner *remoteMapInner) Pop() interface{} {
 	inner.byAge[n-1] = nil
 	inner.byAge = inner.byAge[:n-1]
 	// Remove from byAddr map.
-	delete(inner.byAddr, record.Addr)
+	delete(inner.byAddr, record.Addr.String())
 	return record
 }
