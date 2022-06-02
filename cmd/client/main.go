@@ -41,7 +41,7 @@ func handle(pconn net.PacketConn, remoteAddr net.Addr, msg string, pubkey []byte
 			continue
 		}
 
-		fmt.Printf("Sent: [%s]\n", msg)
+		log.Printf("Sent: [%s]\n", msg)
 
 		var responseBuf [maxMsgLen]byte
 		_, err = econn.Read(responseBuf[:])
@@ -56,7 +56,7 @@ func handle(pconn net.PacketConn, remoteAddr net.Addr, msg string, pubkey []byte
 			log.Printf("Error: %v", err)
 			continue
 		}
-		fmt.Printf("Response: [%s]\n", response)
+		log.Printf("Response: [%s]\n", response)
 		return nil
 	}
 
