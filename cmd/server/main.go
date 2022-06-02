@@ -221,36 +221,41 @@ func nextPacket(r *bytes.Reader) ([]byte, error) {
 }
 
 func handle(pconn net.PacketConn, msg string, privkey []byte) error {
-	encryption.ListenMessages(pconn)
+	newAddrChan := encryption.ListenMessages(pconn)
+	log.Println("start listening for new connections")
 	for {
-		econn, err := encryption.NewServer(pconn, privkey)
-		if err != nil {
-			log.Printf("Error: %v", err)
-			continue
+		select {
+		case recvAddr := <-newAddrChan:
+			econn, err := encryption.NewServer(pconn, recvAddr, privkey)
+			if err != nil {
+				log.Printf("Error: %v", err)
+				continue
+			}
+
+			var recvBuf [maxMsgLen]byte
+			_, err = econn.Read(recvBuf[:])
+			if err != nil {
+				log.Printf("Error: %v", err)
+				continue
+			}
+
+			received := string(recvBuf[:])
+			fmt.Printf("Recived: [%s]\n", received)
+
+			if err != nil {
+				log.Printf("Error: %v", err)
+				continue
+			}
+
+			_, err = econn.Write([]byte(msg))
+			if err != nil {
+				log.Printf("Error: %v", err)
+				continue
+			}
+
+			fmt.Printf("Sent: [%s]\n", msg)
+
 		}
-
-		var recvBuf [maxMsgLen]byte
-		_, err = econn.Read(recvBuf[:])
-		if err != nil {
-			log.Printf("Error: %v", err)
-			continue
-		}
-
-		received := string(recvBuf[:])
-		fmt.Printf("Recived: [%s]\n", received)
-
-		if err != nil {
-			log.Printf("Error: %v", err)
-			continue
-		}
-
-		_, err = econn.Write([]byte(msg))
-		if err != nil {
-			log.Printf("Error: %v", err)
-			continue
-		}
-
-		fmt.Printf("Sent: [%s]\n", msg)
 	}
 }
 

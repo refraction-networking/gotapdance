@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/flynn/noise"
-	"github.com/mingyech/conjure-dns-registrar/pkg/turbotunnel"
 	"golang.org/x/crypto/curve25519"
 )
 
@@ -27,17 +26,19 @@ const (
 // cipherSuite represents 25519_ChaChaPoly_BLAKE2s.
 var cipherSuite = noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, noise.HashBLAKE2s)
 
-var recvChanMap turbotunnel.RemoteMap = *turbotunnel.NewRemoteMap(2 * time.Minute)
+var recvChanMap RemoteMap = *NewRemoteMap(2 * time.Minute)
 
 // Provides an interface to send and recieve messages over encryption
 type EncryptedPacketConn struct {
 	remoteAddr net.Addr
 	sendCipher *noise.CipherState
 	recvCipher *noise.CipherState
+	recvChan   chan []byte
 	net.PacketConn
 }
 
-func ListenMessages(pconn net.PacketConn) {
+func ListenMessages(pconn net.PacketConn) chan net.Addr {
+	newAddrChan := make(chan net.Addr)
 	go func() {
 		for {
 			var msg [maxMsgLen]byte
@@ -45,10 +46,19 @@ func ListenMessages(pconn net.PacketConn) {
 			if err != nil {
 				log.Printf("listen message err: %v\n", err)
 			}
-			log.Printf("recieved msg from: [%s], pushing to corresponding recvChan\n", recvAddr.String())
-			recvChanMap.SendQueue(recvAddr) <- msg[:]
+			recvChan, isNewAddr := recvChanMap.GetQueue(recvAddr)
+			if isNewAddr {
+				log.Printf("pushing new addr [%s] to newAddrChan", recvAddr.String())
+				newAddrChan <- recvAddr
+				log.Printf("pushed new addr [%s] to newAddrChan", recvAddr.String())
+			}
+			log.Printf("recieved msg from: [%s], msg content: [%v] pushing to corresponding recvChan\n", recvAddr.String(), msg[:])
+			recvChan <- msg[:]
+			log.Printf("Pushed")
+
 		}
 	}()
+	return newAddrChan
 }
 
 // newConfig instantiates configuration settings that are common to clients and
@@ -128,11 +138,18 @@ func (e *EncryptedPacketConn) sendMsg(msg []byte) (int, error) {
 
 // Listen for msg only from remote addr
 func (e *EncryptedPacketConn) recvMsg(msg []byte) (int, error) {
-	recvChan := recvChanMap.SendQueue(e.remoteAddr)
+	// recvChan, isNewAddr := recvChanMap.GetQueue(e.remoteAddr)
+
+	// if isNewAddr {
+	// 	log.Println("Remote recvChan was not initialized!")
+	// }
+	// log.Printf("listening for msg from recvChan [%s]", e.remoteAddr.String())
 
 	for {
 		select {
-		case msg = <-recvChan:
+		case recvdMsg := <-e.recvChan:
+			copy(msg, recvdMsg)
+			log.Printf("recvMsg(): writing msg: [%v]", msg)
 			log.Printf("got msg from channel")
 			return int(maxMsgLen), nil
 		}
@@ -165,6 +182,8 @@ func (e *EncryptedPacketConn) handleReadMsg(decrypted []byte, encryptedResponse 
 
 // Put noise protocol over a PacketConn. Handle the initial handshake with server and provides Write and Read methods.
 func NewClient(pconn net.PacketConn, remote net.Addr, pubkey []byte) (*EncryptedPacketConn, error) {
+
+	newAddrChan := ListenMessages(pconn)
 
 	e := &EncryptedPacketConn{
 		PacketConn: pconn,
@@ -199,7 +218,31 @@ func NewClient(pconn net.PacketConn, remote net.Addr, pubkey []byte) (*Encrypted
 	log.Println("<- e, es")
 	var recvMsg [handshakeMsgLen]byte
 
-	e.recvMsg(recvMsg[:])
+L:
+	for {
+		select {
+		case recvdAddr := <-newAddrChan:
+			log.Printf("new connection from [%s]", recvdAddr.String())
+			e.recvChan, _ = recvChanMap.GetQueue(recvdAddr)
+			log.Printf("recvdAddr:%p", recvdAddr)
+			log.Printf("remote:%p", remote)
+			log.Printf("e.remoteAddr:%p", e.remoteAddr)
+			if recvdAddr != e.remoteAddr {
+				log.Printf("recvdAddr.String[%s], recvdAddr.Network[%s] != e.remoteAddr.String[%s], e.remoteAddr.Network[%s]", recvdAddr.String(), recvdAddr.Network(), e.remoteAddr.String(), e.remoteAddr.Network())
+				log.Println("recvdAddr.String() == e.remoteAddr.String()", recvdAddr.String() == e.remoteAddr.String())
+				log.Println("recvdAddr.Network() == e.remoteAddr.Network()", recvdAddr.Network() == e.remoteAddr.Network())
+			}
+			if recvdAddr != remote {
+				log.Printf("recvdAddr[%v] != remote[%v]", recvdAddr, remote)
+			}
+			if e.remoteAddr != remote {
+				log.Printf("e.remoteAddr[%v] != remote[%v]", e.remoteAddr, remote)
+			}
+			break L
+		}
+	}
+
+	_, err = e.recvMsg(recvMsg[:])
 
 	if err != nil {
 		return nil, err
@@ -222,10 +265,11 @@ func NewClient(pconn net.PacketConn, remote net.Addr, pubkey []byte) (*Encrypted
 }
 
 // Put noise protocol over a PacketConn. Handle the initial handshake with client and provides Write and Read methods.
-func NewServer(pconn net.PacketConn, privkey []byte) (*EncryptedPacketConn, error) {
+func NewServer(pconn net.PacketConn, recvAddr net.Addr, privkey []byte) (*EncryptedPacketConn, error) {
 
 	e := &EncryptedPacketConn{
 		PacketConn: pconn,
+		remoteAddr: recvAddr,
 	}
 	config := newConfig()
 	config.Initiator = false
@@ -245,7 +289,8 @@ func NewServer(pconn net.PacketConn, privkey []byte) (*EncryptedPacketConn, erro
 
 	var recvMsg [handshakeMsgLen]byte
 
-	_, e.remoteAddr, err = e.ReadFrom(recvMsg[:])
+	_, err = e.recvMsg(recvMsg[:])
+	log.Printf("Recieved msg from recvChan: [%v]", recvMsg)
 	if err != nil {
 		return nil, err
 	}

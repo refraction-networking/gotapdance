@@ -27,7 +27,6 @@ func readKeyFromFile(filename string) ([]byte, error) {
 }
 
 func handle(pconn net.PacketConn, remoteAddr net.Addr, msg string, pubkey []byte) error {
-
 	for {
 		econn, err := encryption.NewClient(pconn, remoteAddr, pubkey)
 		if err != nil {
@@ -62,7 +61,7 @@ func handle(pconn net.PacketConn, remoteAddr net.Addr, msg string, pubkey []byte
 
 }
 
-func run(domain dns.Name, remoteAddr *net.UDPAddr, pconn net.PacketConn, msg string, pubkey []byte) error {
+func run(domain dns.Name, remoteAddr net.Addr, pconn net.PacketConn, msg string, pubkey []byte) error {
 	defer pconn.Close()
 
 	err := handle(pconn, remoteAddr, msg, pubkey)

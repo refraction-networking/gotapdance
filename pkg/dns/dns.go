@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"strings"
 )
 
@@ -54,10 +55,10 @@ const (
 	ClassIN = 1
 
 	// https://tools.ietf.org/html/rfc1035#section-4.1.1
-	RcodeNoError         = 0  // a.k.a. NOERROR
-	RcodeFormatError     = 1  // a.k.a. FORMERR
-	RcodeNameError       = 3  // a.k.a. NXDOMAIN
-	RcodeNotImplemented  = 4  // a.k.a. NOTIMPL
+	RcodeNoError        = 0 // a.k.a. NOERROR
+	RcodeFormatError    = 1 // a.k.a. FORMERR
+	RcodeNameError      = 3 // a.k.a. NXDOMAIN
+	RcodeNotImplemented = 4 // a.k.a. NOTIMPL
 	// https://tools.ietf.org/html/rfc6891#section-9
 	ExtendedRcodeBadVers = 16 // a.k.a. BADVERS
 )
@@ -393,6 +394,7 @@ func MessageFromWireFormat(buf []byte) (Message, error) {
 		// Check for trailing bytes.
 		_, err = r.ReadByte()
 		if err == io.EOF {
+			log.Println("trailing bytes detected, err=nil")
 			err = nil
 		} else if err == nil {
 			err = ErrTrailingBytes
