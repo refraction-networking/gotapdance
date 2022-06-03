@@ -521,6 +521,7 @@ func sendLoop(dnsConn net.PacketConn, ttConn *turbotunnel.QueuePacketConn, ch <-
 		}
 
 		// Now we actually send the message as a UDP packet.
+		log.Printf("Answering: [%s] to : [%s], data: [%v]", rec.Resp.Question[0].Name.String(), rec.Addr.String(), rec.Resp.Answer[0].Data)
 		_, err = dnsConn.WriteTo(buf, rec.Addr)
 		if err != nil {
 			if err, ok := err.(net.Error); ok && err.Temporary() {
