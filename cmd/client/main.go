@@ -110,9 +110,9 @@ func main() {
 	var dohaddr string
 	var dotaddr string
 	var utlsDistribution string
-	flag.StringVar(&updaddr, "udpaddr", "", "address of UDP DNS resolver")
-	flag.StringVar(&dohaddr, "dohaddr", "", "address of DoH DNS resolver")
-	flag.StringVar(&dotaddr, "dotaddr", "", "address of DoT DNS resolver")
+	flag.StringVar(&updaddr, "udp", "", "address of UDP DNS resolver")
+	flag.StringVar(&dohaddr, "doh", "", "address of DoH DNS resolver")
+	flag.StringVar(&dotaddr, "dot", "", "address of DoT DNS resolver")
 	flag.StringVar(&domain, "domain", "", "base domain in requests")
 	flag.StringVar(&msg, "msg", "hi", "message to send")
 	flag.StringVar(&pubkeyFilename, "pubkey", "", "server public key")
@@ -140,11 +140,6 @@ func main() {
 
 	var pconn net.PacketConn
 	var remoteAddr net.Addr
-	utlsClientHelloID, err := sampleUTLSDistribution(utlsDistribution)
-	if utlsClientHelloID != nil {
-		log.Printf("uTLS fingerprint %s %s", utlsClientHelloID.Client, utlsClientHelloID.Version)
-	}
-
 	if updaddr != "" {
 		remoteAddr, err = net.ResolveUDPAddr("udp", updaddr)
 		if err != nil {
@@ -156,49 +151,65 @@ func main() {
 			log.Fatal(err)
 		}
 
-	} else if dohaddr != "" {
+	}
+	if dohaddr != "" || dotaddr != "" {
 		if pconn != nil {
-			fmt.Println("Only one of -udpadd, -dohaddr, -dotaddr may be provided")
+			fmt.Println("Only one of -udp, -doh, -dot may be provided")
 			flag.Usage()
 			os.Exit(2)
 		}
 
-		if err != nil {
-			log.Fatal(err)
+		utlsClientHelloID, err := sampleUTLSDistribution(utlsDistribution)
+		if utlsClientHelloID != nil {
+			log.Printf("uTLS fingerprint %s %s", utlsClientHelloID.Client, utlsClientHelloID.Version)
 		}
 
-		remoteAddr = turbotunnel.DummyAddr{}
-		var rt http.RoundTripper
-		if utlsClientHelloID == nil {
-			transport := http.DefaultTransport.(*http.Transport).Clone()
-			// Disable DefaultTransport's default Proxy =
-			// ProxyFromEnvironment setting, for conformity
-			// with utlsRoundTripper and with DoT mode,
-			// which do not take a proxy from the
-			// environment.
-			transport.Proxy = nil
-			rt = transport
-		} else {
-			rt = NewUTLSRoundTripper(nil, utlsClientHelloID)
-		}
-		pconn, err = NewHTTPPacketConn(rt, dohaddr, 32)
-		if err != nil {
-			log.Fatal(err)
-		}
-	} else if dotaddr != "" {
-		remoteAddr = turbotunnel.DummyAddr{}
-		var dialTLSContext func(ctx context.Context, network, addr string) (net.Conn, error)
-		if utlsClientHelloID == nil {
-			dialTLSContext = (&tls.Dialer{}).DialContext
-		} else {
-			dialTLSContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return utlsDialContext(ctx, network, addr, nil, utlsClientHelloID)
+		if dohaddr != "" {
+			remoteAddr = turbotunnel.DummyAddr{}
+			var rt http.RoundTripper
+			if utlsClientHelloID == nil {
+				transport := http.DefaultTransport.(*http.Transport).Clone()
+				// Disable DefaultTransport's default Proxy =
+				// ProxyFromEnvironment setting, for conformity
+				// with utlsRoundTripper and with DoT mode,
+				// which do not take a proxy from the
+				// environment.
+				transport.Proxy = nil
+				rt = transport
+			} else {
+				rt = NewUTLSRoundTripper(nil, utlsClientHelloID)
+			}
+			pconn, err = NewHTTPPacketConn(rt, dohaddr, 32)
+			if err != nil {
+				log.Fatal(err)
 			}
 		}
-		pconn, err = NewTLSPacketConn(dotaddr, dialTLSContext)
-		if err != nil {
-			log.Fatal(err)
+		if dotaddr != "" {
+			if pconn != nil {
+				fmt.Println("Only one of -udp, -doh, -dot may be provided")
+				flag.Usage()
+				os.Exit(2)
+			}
+
+			remoteAddr = turbotunnel.DummyAddr{}
+			var dialTLSContext func(ctx context.Context, network, addr string) (net.Conn, error)
+			if utlsClientHelloID == nil {
+				dialTLSContext = (&tls.Dialer{}).DialContext
+			} else {
+				dialTLSContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+					return utlsDialContext(ctx, network, addr, nil, utlsClientHelloID)
+				}
+			}
+			pconn, err = NewTLSPacketConn(dotaddr, dialTLSContext)
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
+	}
+	if pconn == nil {
+		fmt.Println("One of -udp, -doh, -dot must be provided")
+		flag.Usage()
+		os.Exit(2)
 	}
 
 	pubkey, err := readKeyFromFile(pubkeyFilename)
