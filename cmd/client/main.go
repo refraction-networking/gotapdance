@@ -141,6 +141,9 @@ func main() {
 	var pconn net.PacketConn
 	var remoteAddr net.Addr
 	utlsClientHelloID, err := sampleUTLSDistribution(utlsDistribution)
+	if utlsClientHelloID != nil {
+		log.Printf("uTLS fingerprint %s %s", utlsClientHelloID.Client, utlsClientHelloID.Version)
+	}
 
 	if updaddr != "" {
 		remoteAddr, err = net.ResolveUDPAddr("udp", updaddr)
@@ -153,7 +156,6 @@ func main() {
 			log.Fatal(err)
 		}
 
-		pconn = NewDNSPacketConn(pconn, remoteAddr, basename)
 	} else if dohaddr != "" {
 		if pconn != nil {
 			fmt.Println("Only one of -udpadd, -dohaddr, -dotaddr may be provided")
@@ -205,6 +207,7 @@ func main() {
 		log.Fatal(err)
 	}
 
+	pconn = NewDNSPacketConn(pconn, remoteAddr, basename)
 	err = run(basename, remoteAddr, pconn, msg, pubkey)
 	if err != nil {
 		log.Fatal(err)
