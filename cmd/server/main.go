@@ -500,7 +500,18 @@ func sendLoop(dnsConn net.PacketConn, ttConn *turbotunnel.QueuePacketConn, ch <-
 
 			var payload bytes.Buffer
 			outgoing := ttConn.OutgoingQueue(rec.ClientID)
-			p := <-outgoing
+			var p []byte
+		O:
+			for {
+				select {
+				case p = <-outgoing:
+					break O
+				case <-time.After(1 * time.Second):
+					fmt.Println("outgoing timeout")
+					break O
+				}
+
+			}
 			binary.Write(&payload, binary.BigEndian, uint16(len(p)))
 			payload.Write(p)
 
