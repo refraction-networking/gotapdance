@@ -48,7 +48,7 @@ func ListenMessages(pconn net.PacketConn) chan net.Addr {
 			if err != nil {
 				log.Printf("listen message err: %v\n", err)
 			}
-			recvChan, isNewAddr := recvChanMap.GetRecvChan(recvAddr)
+			recvChan, isNewAddr := recvChanMap.GetChan(recvAddr)
 			if isNewAddr {
 				log.Printf("pushing new addr [%s] to newAddrChan", recvAddr.String())
 				newAddrChan <- recvAddr
@@ -174,7 +174,7 @@ func (e *EncryptedPacketConn) handleReadMsg(decrypted []byte, encryptedResponse 
 // Put noise protocol over a PacketConn. Handle the initial handshake with server
 func NewClient(pconn net.PacketConn, remote net.Addr, pubkey []byte) (*EncryptedPacketConn, error) {
 
-	recvChan, _ := recvChanMap.GetRecvChan(remote)
+	recvChan, _ := recvChanMap.GetChan(remote)
 
 	e := &EncryptedPacketConn{
 		PacketConn: pconn,
@@ -235,7 +235,7 @@ func NewClient(pconn net.PacketConn, remote net.Addr, pubkey []byte) (*Encrypted
 // Put noise protocol over a PacketConn. Handle the initial handshake with client
 func NewServer(pconn net.PacketConn, recvAddr net.Addr, privkey []byte) (*EncryptedPacketConn, error) {
 
-	recvChan, _ := recvChanMap.GetRecvChan(recvAddr)
+	recvChan, _ := recvChanMap.GetChan(recvAddr)
 
 	e := &EncryptedPacketConn{
 		PacketConn: pconn,

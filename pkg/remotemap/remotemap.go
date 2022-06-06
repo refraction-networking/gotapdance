@@ -14,8 +14,7 @@ const QueueSize = 128
 type remoteRecord struct {
 	Addr     net.Addr
 	LastSeen time.Time
-	SendChan chan []byte
-	RecvChan chan []byte
+	Chan     chan []byte
 }
 
 // RemoteMap manages a mapping of live remote peers, keyed by address, to their
@@ -55,24 +54,16 @@ func NewRemoteMap(timeout time.Duration) *RemoteMap {
 }
 
 // Returns the send channel corresponding to addr and indicates whether it is a new channel
-func (m *RemoteMap) GetSendChan(addr net.Addr) (chan []byte, bool) {
+func (m *RemoteMap) GetChan(addr net.Addr) (chan []byte, bool) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	record, isNewAddr := m.inner.Lookup(addr, time.Now())
-	return record.SendChan, isNewAddr
+	return record.Chan, isNewAddr
 }
 
-func (m *RemoteMap) SendChan(addr net.Addr) chan []byte {
-	rv, _ := m.GetSendChan(addr)
+func (m *RemoteMap) Chan(addr net.Addr) chan []byte {
+	rv, _ := m.GetChan(addr)
 	return rv
-}
-
-// Returns the reveive channel corresponding to addr and indicates whether it is a new channel
-func (m *RemoteMap) GetRecvChan(addr net.Addr) (chan []byte, bool) {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-	record, isNewAddr := m.inner.Lookup(addr, time.Now())
-	return record.RecvChan, isNewAddr
 }
 
 // remoteMapInner is the inner type of RemoteMap, implementing heap.Interface.
@@ -90,8 +81,7 @@ type remoteMapInner struct {
 func (inner *remoteMapInner) removeExpired(now time.Time, timeout time.Duration) {
 	for len(inner.byAge) > 0 && now.Sub(inner.byAge[0].LastSeen) >= timeout {
 		record := heap.Pop(inner).(*remoteRecord)
-		close(record.SendChan)
-		close(record.RecvChan)
+		close(record.Chan)
 	}
 }
 
@@ -111,8 +101,7 @@ func (inner *remoteMapInner) Lookup(addr net.Addr, now time.Time) (*remoteRecord
 		record = &remoteRecord{
 			Addr:     addr,
 			LastSeen: now,
-			SendChan: make(chan []byte, QueueSize),
-			RecvChan: make(chan []byte, QueueSize),
+			Chan:     make(chan []byte, QueueSize),
 		}
 		heap.Push(inner, record)
 		return record, true

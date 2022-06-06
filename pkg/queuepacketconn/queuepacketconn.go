@@ -67,7 +67,7 @@ func (c *QueuePacketConn) QueueIncoming(p []byte, addr net.Addr) {
 // creating it if necessary. The contents of the queue will be packets that are
 // written to the address in question using WriteTo.
 func (c *QueuePacketConn) OutgoingQueue(addr net.Addr) <-chan []byte {
-	return c.remotes.SendChan(addr)
+	return c.remotes.Chan(addr)
 }
 
 // ReadFrom returns a packet and address previously stored by QueueIncoming.
@@ -97,7 +97,7 @@ func (c *QueuePacketConn) WriteTo(p []byte, addr net.Addr) (int, error) {
 	buf := make([]byte, len(p))
 	copy(buf, p)
 	select {
-	case c.remotes.SendChan(addr) <- buf:
+	case c.remotes.Chan(addr) <- buf:
 		return len(buf), nil
 	default:
 		// Drop the outgoing packet if the send queue is full.
