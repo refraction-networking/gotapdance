@@ -499,11 +499,14 @@ func sendLoop(dnsConn net.PacketConn, ttConn *turbotunnel.QueuePacketConn, ch <-
 			var payload bytes.Buffer
 			outgoing := ttConn.OutgoingQueue(rec.ClientID)
 			var p []byte
+
+			// wait 1s max for outgoing response
 			select {
 			case p = <-outgoing:
 			case <-time.After(1 * time.Second):
 				fmt.Println("outgoing timeout")
 			}
+
 			binary.Write(&payload, binary.BigEndian, uint16(len(p)))
 			payload.Write(p)
 
@@ -628,13 +631,6 @@ func computeMaxEncodedPayload(limit int) int {
 func run(domain dns.Name, dnsConn net.PacketConn, msg string, privkey []byte) error {
 	defer dnsConn.Close()
 
-	// We have a variable amount of room in which to encode downstream
-	// packets in each response, because each response must contain the
-	// query's Question section, which is of variable length. But we cannot
-	// give dynamic packet size limits to KCP; the best we can do is set a
-	// global maximum which no packet will exceed. We choose that maximum to
-	// keep the UDP payload size under maxUDPPayload, even in the worst case
-	// of a maximum-length name in the query's Question section.
 	maxEncodedPayload := computeMaxEncodedPayload(maxUDPPayload)
 	// 2 bytes accounts for a packet length prefix.
 	mtu := maxEncodedPayload - 2
@@ -680,7 +676,7 @@ func main() {
 	var privkeyFilenameOut string
 	var genKey bool
 
-	flag.StringVar(&udpAddr, "addr", "[::]:5300", "UDP address to listen on")
+	flag.StringVar(&udpAddr, "addr", "[::]:53", "UDP address to listen on")
 	flag.StringVar(&msg, "msg", "hey", "message to response with")
 	flag.StringVar(&domain, "domain", "", "base domain in requests")
 	flag.StringVar(&privkeyFilename, "privkey", "", "server private key filename")

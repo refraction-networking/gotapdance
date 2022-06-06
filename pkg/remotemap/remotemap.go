@@ -19,12 +19,8 @@ type remoteRecord struct {
 }
 
 // RemoteMap manages a mapping of live remote peers, keyed by address, to their
-// respective send queues. Each peer has two queues: a primary send queue, and a
-// "stash". The primary send queue is returned by the SendQueue method. The
-// stash is an auxiliary one-element queue accessed using the Stash and Unstash
-// methods. The stash is meant for use by callers that need to "unread" a packet
-// that's already been removed from the primary send queue.
-//
+// respective send queues. Each peer has two queues: a send queue, and a
+// receive queue.
 // RemoteMap's functions are safe to call from multiple goroutines.
 type RemoteMap struct {
 	// We use an inner structure to avoid exposing public heap.Interface
@@ -37,13 +33,6 @@ type RemoteMap struct {
 // NewRemoteMap creates a RemoteMap that expires peers after a timeout.
 //
 // If the timeout is 0, peers never expire.
-//
-// The timeout does not have to be kept in sync with smux's idle timeout. If a
-// peer is removed from the map while the smux session is still live, the worst
-// that can happen is a loss of whatever packets were in the send queue at the
-// time. If smux later decides to send more packets to the same peer, we'll
-// instantiate a new send queue, and if the peer is ever seen again with a
-// matching address, we'll deliver them.
 func NewRemoteMap(timeout time.Duration) *RemoteMap {
 	m := &RemoteMap{
 		inner: remoteMapInner{
@@ -65,8 +54,7 @@ func NewRemoteMap(timeout time.Duration) *RemoteMap {
 	return m
 }
 
-// GetQueue returns the send queue corresponding to addr, creating it if
-// necessary.
+// Returns the send channel corresponding to addr and indicates whether it is a new channel
 func (m *RemoteMap) GetSendChan(addr net.Addr) (chan []byte, bool) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
@@ -79,8 +67,7 @@ func (m *RemoteMap) SendChan(addr net.Addr) chan []byte {
 	return rv
 }
 
-// GetQueue returns the send queue corresponding to addr, creating it if
-// necessary.
+// Returns the reveive channel corresponding to addr and indicates whether it is a new channel
 func (m *RemoteMap) GetRecvChan(addr net.Addr) (chan []byte, bool) {
 	m.lock.Lock()
 	defer m.lock.Unlock()

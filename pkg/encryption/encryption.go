@@ -163,6 +163,7 @@ func (e *EncryptedPacketConn) Read(p []byte) (int, error) {
 	return e.handleReadMsg(p, encryptedResponse[:])
 }
 
+// Read the first byte as length of message, then try to decrypt it accordingly
 func (e *EncryptedPacketConn) handleReadMsg(decrypted []byte, encryptedResponse []byte) (int, error) {
 	length := uint8(encryptedResponse[0])
 	if 1+length > maxMsgLen {
@@ -176,7 +177,7 @@ func (e *EncryptedPacketConn) handleReadMsg(decrypted []byte, encryptedResponse 
 	return len(msg), nil
 }
 
-// Put noise protocol over a PacketConn. Handle the initial handshake with server and provides Write and Read methods.
+// Put noise protocol over a PacketConn. Handle the initial handshake with server
 func NewClient(pconn net.PacketConn, remote net.Addr, pubkey []byte) (*EncryptedPacketConn, error) {
 
 	recvChan, _ := recvChanMap.GetRecvChan(remote)
@@ -237,7 +238,7 @@ func NewClient(pconn net.PacketConn, remote net.Addr, pubkey []byte) (*Encrypted
 	return e, nil
 }
 
-// Put noise protocol over a PacketConn. Handle the initial handshake with client and provides Write and Read methods.
+// Put noise protocol over a PacketConn. Handle the initial handshake with client
 func NewServer(pconn net.PacketConn, recvAddr net.Addr, privkey []byte) (*EncryptedPacketConn, error) {
 
 	recvChan, _ := recvChanMap.GetRecvChan(recvAddr)
