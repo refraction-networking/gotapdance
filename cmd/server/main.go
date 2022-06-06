@@ -1,37 +1,3 @@
-// dnstt-server is the server end of a DNS tunnel.
-//
-// Usage:
-//     dnstt-server -gen-key [-privkey-file PRIVKEYFILE] [-pubkey-file PUBKEYFILE]
-//     dnstt-server -udp ADDR [-privkey PRIVKEY|-privkey-file PRIVKEYFILE] DOMAIN UPSTREAMADDR
-//
-// Example:
-//     dnstt-server -gen-key -privkey-file server.key -pubkey-file server.pub
-//     dnstt-server -udp :53 -privkey-file server.key t.example.com 127.0.0.1:8000
-//
-// To generate a persistent server private key, first run with the -gen-key
-// option. By default the generated private and public keys are printed to
-// standard output. To save them to files instead, use the -privkey-file and
-// -pubkey-file options.
-//     dnstt-server -gen-key
-//     dnstt-server -gen-key -privkey-file server.key -pubkey-file server.pub
-//
-// You can give the server's private key as a file or as a hex string.
-//     -privkey-file server.key
-//     -privkey 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-//
-// The -udp option controls the address that will listen for incoming DNS
-// queries.
-//
-// The -mtu option controls the maximum size of response UDP payloads.
-// Queries that do not advertise requester support for responses of at least
-// this size at least this size will be responded to with a FORMERR. The default
-// value is maxUDPPayload.
-//
-// DOMAIN is the root of the DNS zone reserved for the tunnel. See README for
-// instructions on setting it up.
-//
-// UPSTREAMADDR is the TCP address to which incoming tunnelled streams will be
-// forwarded.
 package main
 
 import (
@@ -53,7 +19,7 @@ import (
 )
 
 const (
-	// smux streams will be closed after this much time without receiving data.
+	// remotemap entry will be deleted after this much time without receiving data.
 	idleTimeout = 2 * time.Minute
 
 	// How to set the TTL field in Answer resource records.
@@ -408,7 +374,7 @@ func recvLoop(domain dns.Name, dnsConn net.PacketConn, ttConn *queuepacketconn.Q
 		var buf [4096]byte
 		n, addr, err := dnsConn.ReadFrom(buf[:])
 		if err != nil {
-			if err, ok := err.(net.Error); ok && err.Temporary() {
+			if err, ok := err.(net.Error); ok {
 				log.Printf("ReadFrom temporary error: %v", err)
 				continue
 			}
@@ -527,7 +493,7 @@ func sendLoop(dnsConn net.PacketConn, ttConn *queuepacketconn.QueuePacketConn, c
 		log.Printf("Answering: [%v] to : [%s]", rec.Resp, rec.Addr.String())
 		_, err = dnsConn.WriteTo(buf, rec.Addr)
 		if err != nil {
-			if err, ok := err.(net.Error); ok && err.Temporary() {
+			if err, ok := err.(net.Error); ok {
 				log.Printf("WriteTo temporary error: %v", err)
 				continue
 			}
