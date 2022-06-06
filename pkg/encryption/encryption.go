@@ -29,7 +29,7 @@ var cipherSuite = noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, no
 
 var recvChanMap remotemap.RemoteMap = *remotemap.NewRemoteMap(2 * time.Minute)
 
-// Provides an interface to send and recieve messages over encryption
+// Provides an interface to send and recieve messages over encryption through Write() and Read()
 type EncryptedPacketConn struct {
 	remoteAddr net.Addr
 	sendCipher *noise.CipherState
@@ -38,6 +38,7 @@ type EncryptedPacketConn struct {
 	net.PacketConn
 }
 
+// Listen for incomming messages from pconn, pushing to corresponding recvChan and new address to returned channel
 func ListenMessages(pconn net.PacketConn) chan net.Addr {
 	newAddrChan := make(chan net.Addr)
 	go func() {
@@ -142,24 +143,13 @@ func (e *EncryptedPacketConn) sendMsg(msg []byte) (int, error) {
 	return e.WriteTo(msg, e.remoteAddr)
 }
 
-// Listen for msg only from remote addr
+// Get msg from remote addr
 func (e *EncryptedPacketConn) recvMsg(msg []byte) (int, error) {
-	// recvChan, isNewAddr := recvChanMap.GetQueue(e.remoteAddr)
-
-	// if isNewAddr {
-	// 	log.Println("Remote recvChan was not initialized!")
-	// }
-	// log.Printf("listening for msg from recvChan [%s]", e.remoteAddr.String())
-
-	for {
-		select {
-		case recvdMsg := <-e.recvChan:
-			copy(msg, recvdMsg)
-			log.Printf("recvMsg(): writing msg: [%v]", msg)
-			log.Printf("got msg from channel")
-			return int(maxMsgLen), nil
-		}
-	}
+	recvdMsg := <-e.recvChan
+	copy(msg, recvdMsg)
+	log.Printf("recvMsg(): writing msg: [%v]", msg)
+	log.Printf("got msg from channel")
+	return int(maxMsgLen), nil
 
 }
 
