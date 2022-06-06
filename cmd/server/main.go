@@ -69,9 +69,6 @@ const (
 	// https://dnsencryption.info/imc19-doe.html Section 4.2, Finding 2.4
 	maxResponseDelay = 1 * time.Second
 
-	// How long to wait for a TCP connection to upstream to be established.
-	upstreamDialTimeout = 30 * time.Second
-
 	bufSize   = 4096
 	maxMsgLen = 140
 )
@@ -503,7 +500,7 @@ func sendLoop(dnsConn net.PacketConn, ttConn *queuepacketconn.QueuePacketConn, c
 			// wait 1s max for outgoing response
 			select {
 			case p = <-outgoing:
-			case <-time.After(1 * time.Second):
+			case <-time.After(maxResponseDelay):
 				fmt.Println("outgoing timeout")
 			}
 
