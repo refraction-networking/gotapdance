@@ -51,13 +51,8 @@ func ListenMessages(pconn net.PacketConn) chan net.Addr {
 			recvChan, isNewAddr := recvChanMap.GetRecvChan(recvAddr)
 			if isNewAddr {
 				log.Printf("pushing new addr [%s] to newAddrChan", recvAddr.String())
-				select {
-				case newAddrChan <- recvAddr:
-					log.Printf("pushed new addr [%s] to newAddrChan", recvAddr.String())
-				default:
-					log.Printf("no reciver for addr [%s]", recvAddr.String())
-
-				}
+				newAddrChan <- recvAddr
+				log.Printf("pushed new addr [%s] to newAddrChan", recvAddr.String())
 			}
 			log.Printf("recieved msg from: [%s], msg content: [%v] pushing to corresponding recvChan\n", recvAddr.String(), msg[:])
 			recvChan <- msg[:]
