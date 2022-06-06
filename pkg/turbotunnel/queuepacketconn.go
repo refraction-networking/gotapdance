@@ -23,17 +23,6 @@ type taggedPacket struct {
 // method inserts a packet into the incoming queue, to eventually be returned by
 // ReadFrom. WriteTo inserts a packet into an address-specific outgoing queue,
 // which can later by accessed through the OutgoingQueue method.
-//
-// Besides the outgoing queues, there is also a one-element "stash" for each
-// remote peer address. You can stash a packet using the Stash method, and get
-// it back later by receiving from the channel returned by Unstash. The stash is
-// meant as a convenient place to temporarily store a single packet, such as
-// when you've read one too many packets from the send queue and need to store
-// the extra packet to be processed first in the next pass. It's the caller's
-// responsibility to Unstash what they have Stashed. Calling Stash does not put
-// the packet at the head of the send queue; if there is the possibility that a
-// packet has been stashed, it must be checked for by calling Unstash in
-// addition to OutgoingQueue.
 type QueuePacketConn struct {
 	remotes   *remotemap.RemoteMap
 	localAddr net.Addr

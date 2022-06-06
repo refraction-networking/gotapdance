@@ -69,7 +69,6 @@ func newConfig() noise.Config {
 	return noise.Config{
 		CipherSuite: cipherSuite,
 		Pattern:     noise.HandshakeNK,
-		Prologue:    []byte("dnstt 2020-04-13"),
 	}
 }
 
