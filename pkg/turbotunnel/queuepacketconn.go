@@ -5,6 +5,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/mingyech/conjure-dns-registrar/pkg/remotemap"
 )
 
 // taggedPacket is a combination of a []byte and a net.Addr, encapsulating the
@@ -33,7 +35,7 @@ type taggedPacket struct {
 // packet has been stashed, it must be checked for by calling Unstash in
 // addition to OutgoingQueue.
 type QueuePacketConn struct {
-	remotes   *RemoteMap
+	remotes   *remotemap.RemoteMap
 	localAddr net.Addr
 	recvQueue chan taggedPacket
 	closeOnce sync.Once
@@ -46,7 +48,7 @@ type QueuePacketConn struct {
 // for at least a duration of timeout.
 func NewQueuePacketConn(localAddr net.Addr, timeout time.Duration) *QueuePacketConn {
 	return &QueuePacketConn{
-		remotes:   NewRemoteMap(timeout),
+		remotes:   remotemap.NewRemoteMap(timeout),
 		localAddr: localAddr,
 		recvQueue: make(chan taggedPacket, QueueSize),
 		closed:    make(chan struct{}),
@@ -76,7 +78,7 @@ func (c *QueuePacketConn) QueueIncoming(p []byte, addr net.Addr) {
 // creating it if necessary. The contents of the queue will be packets that are
 // written to the address in question using WriteTo.
 func (c *QueuePacketConn) OutgoingQueue(addr net.Addr) <-chan []byte {
-	return c.remotes.SendQueue(addr)
+	return c.remotes.SendChan(addr)
 }
 
 // ReadFrom returns a packet and address previously stored by QueueIncoming.
@@ -106,7 +108,7 @@ func (c *QueuePacketConn) WriteTo(p []byte, addr net.Addr) (int, error) {
 	buf := make([]byte, len(p))
 	copy(buf, p)
 	select {
-	case c.remotes.SendQueue(addr) <- buf:
+	case c.remotes.SendChan(addr) <- buf:
 		return len(buf), nil
 	default:
 		// Drop the outgoing packet if the send queue is full.

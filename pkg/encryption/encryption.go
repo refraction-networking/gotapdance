@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/flynn/noise"
+	"github.com/mingyech/conjure-dns-registrar/pkg/remotemap"
 	"golang.org/x/crypto/curve25519"
 )
 
@@ -26,7 +27,7 @@ const (
 // cipherSuite represents 25519_ChaChaPoly_BLAKE2s.
 var cipherSuite = noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, noise.HashBLAKE2s)
 
-var recvChanMap RemoteMap = *NewRemoteMap(2 * time.Minute)
+var recvChanMap remotemap.RemoteMap = *remotemap.NewRemoteMap(2 * time.Minute)
 
 // Provides an interface to send and recieve messages over encryption
 type EncryptedPacketConn struct {
@@ -46,7 +47,7 @@ func ListenMessages(pconn net.PacketConn) chan net.Addr {
 			if err != nil {
 				log.Printf("listen message err: %v\n", err)
 			}
-			recvChan, isNewAddr := recvChanMap.GetQueue(recvAddr)
+			recvChan, isNewAddr := recvChanMap.GetRecvChan(recvAddr)
 			if isNewAddr {
 				log.Printf("pushing new addr [%s] to newAddrChan", recvAddr.String())
 				select {
@@ -188,7 +189,7 @@ func (e *EncryptedPacketConn) handleReadMsg(decrypted []byte, encryptedResponse 
 // Put noise protocol over a PacketConn. Handle the initial handshake with server and provides Write and Read methods.
 func NewClient(pconn net.PacketConn, remote net.Addr, pubkey []byte) (*EncryptedPacketConn, error) {
 
-	recvChan, _ := recvChanMap.GetQueue(remote)
+	recvChan, _ := recvChanMap.GetRecvChan(remote)
 
 	e := &EncryptedPacketConn{
 		PacketConn: pconn,
@@ -249,7 +250,7 @@ func NewClient(pconn net.PacketConn, remote net.Addr, pubkey []byte) (*Encrypted
 // Put noise protocol over a PacketConn. Handle the initial handshake with client and provides Write and Read methods.
 func NewServer(pconn net.PacketConn, recvAddr net.Addr, privkey []byte) (*EncryptedPacketConn, error) {
 
-	recvChan, _ := recvChanMap.GetQueue(recvAddr)
+	recvChan, _ := recvChanMap.GetRecvChan(recvAddr)
 
 	e := &EncryptedPacketConn{
 		PacketConn: pconn,
