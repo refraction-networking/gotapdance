@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"strings"
 )
 
@@ -394,7 +393,6 @@ func MessageFromWireFormat(buf []byte) (Message, error) {
 		// Check for trailing bytes.
 		_, err = r.ReadByte()
 		if err == io.EOF {
-			log.Println("trailing bytes detected, err=nil")
 			err = nil
 		} else if err == nil {
 			err = ErrTrailingBytes
