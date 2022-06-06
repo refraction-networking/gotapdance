@@ -1,8 +1,8 @@
-// Package turbotunnel is facilities for embedding packet-based reliability
+// Package queuepacketconn is facilities for embedding packet-based reliability
 // protocols inside other protocols.
 //
 // https://github.com/net4people/bbs/issues/9
-package turbotunnel
+package queuepacketconn
 
 import "errors"
 

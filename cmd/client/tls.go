@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mingyech/conjure-dns-registrar/pkg/turbotunnel"
+	"github.com/mingyech/conjure-dns-registrar/pkg/queuepacketconn"
 )
 
 const dialTimeout = 30 * time.Second
@@ -29,7 +29,7 @@ type TLSPacketConn struct {
 	// QueuePacketConn is the direct receiver of ReadFrom and WriteTo calls.
 	// recvLoop and sendLoop take the messages out of the receive and send
 	// queues and actually put them on the network.
-	*turbotunnel.QueuePacketConn
+	*queuepacketconn.QueuePacketConn
 }
 
 // NewTLSPacketConn creates a new TLSPacketConn configured to use the TLS
@@ -51,7 +51,7 @@ func NewTLSPacketConn(addr string, dialTLSContext func(ctx context.Context, netw
 		return nil, err
 	}
 	c := &TLSPacketConn{
-		QueuePacketConn: turbotunnel.NewQueuePacketConn(turbotunnel.DummyAddr{}, 0),
+		QueuePacketConn: queuepacketconn.NewQueuePacketConn(queuepacketconn.DummyAddr{}, 0),
 	}
 	go func() {
 		defer c.Close()
@@ -104,7 +104,7 @@ func (c *TLSPacketConn) recvLoop(conn net.Conn) error {
 		if err != nil {
 			return err
 		}
-		c.QueuePacketConn.QueueIncoming(p, turbotunnel.DummyAddr{})
+		c.QueuePacketConn.QueueIncoming(p, queuepacketconn.DummyAddr{})
 	}
 }
 
@@ -112,7 +112,7 @@ func (c *TLSPacketConn) recvLoop(conn net.Conn) error {
 // length-prefixed, to conn.
 func (c *TLSPacketConn) sendLoop(conn net.Conn) error {
 	bw := bufio.NewWriter(conn)
-	for p := range c.QueuePacketConn.OutgoingQueue(turbotunnel.DummyAddr{}) {
+	for p := range c.QueuePacketConn.OutgoingQueue(queuepacketconn.DummyAddr{}) {
 		length := uint16(len(p))
 		if int(length) != len(p) {
 			panic(len(p))

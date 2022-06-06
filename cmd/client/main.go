@@ -12,7 +12,7 @@ import (
 
 	"github.com/mingyech/conjure-dns-registrar/pkg/dns"
 	"github.com/mingyech/conjure-dns-registrar/pkg/encryption"
-	"github.com/mingyech/conjure-dns-registrar/pkg/turbotunnel"
+	"github.com/mingyech/conjure-dns-registrar/pkg/queuepacketconn"
 	utls "github.com/refraction-networking/utls"
 )
 
@@ -165,7 +165,7 @@ func main() {
 		}
 
 		if dohaddr != "" {
-			remoteAddr = turbotunnel.DummyAddr{}
+			remoteAddr = queuepacketconn.DummyAddr{}
 			var rt http.RoundTripper
 			if utlsClientHelloID == nil {
 				transport := http.DefaultTransport.(*http.Transport).Clone()
@@ -191,7 +191,7 @@ func main() {
 				os.Exit(2)
 			}
 
-			remoteAddr = turbotunnel.DummyAddr{}
+			remoteAddr = queuepacketconn.DummyAddr{}
 			var dialTLSContext func(ctx context.Context, network, addr string) (net.Conn, error)
 			if utlsClientHelloID == nil {
 				dialTLSContext = (&tls.Dialer{}).DialContext

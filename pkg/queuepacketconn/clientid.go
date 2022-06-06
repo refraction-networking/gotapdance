@@ -1,4 +1,4 @@
-package turbotunnel
+package queuepacketconn
 
 import (
 	"crypto/rand"

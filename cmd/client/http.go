@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mingyech/conjure-dns-registrar/pkg/turbotunnel"
+	"github.com/mingyech/conjure-dns-registrar/pkg/queuepacketconn"
 )
 
 // A default Retry-After delay to use when there is no explicit Retry-After
@@ -51,7 +51,7 @@ type HTTPPacketConn struct {
 	// sendLoop, via send, removes messages from the outgoing queue that
 	// were placed there by WriteTo, and inserts messages into the incoming
 	// queue to be returned from ReadFrom.
-	*turbotunnel.QueuePacketConn
+	*queuepacketconn.QueuePacketConn
 }
 
 // NewHTTPPacketConn creates a new HTTPPacketConn configured to use the HTTP
@@ -66,7 +66,7 @@ func NewHTTPPacketConn(rt http.RoundTripper, urlString string, numSenders int) (
 			Timeout:   1 * time.Minute,
 		},
 		urlString:       urlString,
-		QueuePacketConn: turbotunnel.NewQueuePacketConn(turbotunnel.DummyAddr{}, 0),
+		QueuePacketConn: queuepacketconn.NewQueuePacketConn(queuepacketconn.DummyAddr{}, 0),
 	}
 	for i := 0; i < numSenders; i++ {
 		go c.sendLoop()
@@ -97,7 +97,7 @@ func (c *HTTPPacketConn) send(p []byte) error {
 		}
 		body, err := ioutil.ReadAll(io.LimitReader(resp.Body, 64000))
 		if err == nil {
-			c.QueuePacketConn.QueueIncoming(body, turbotunnel.DummyAddr{})
+			c.QueuePacketConn.QueueIncoming(body, queuepacketconn.DummyAddr{})
 		}
 		// Ignore err != nil; don't report an error if we at least
 		// managed to send.
@@ -142,7 +142,7 @@ func (c *HTTPPacketConn) send(p []byte) error {
 // sendLoop loops over the contents of the outgoing queue and passes them to
 // send. It drops packets while c.notBefore is in the future.
 func (c *HTTPPacketConn) sendLoop() {
-	for p := range c.QueuePacketConn.OutgoingQueue(turbotunnel.DummyAddr{}) {
+	for p := range c.QueuePacketConn.OutgoingQueue(queuepacketconn.DummyAddr{}) {
 		// Stop sending while we are rate-limiting ourselves (as a
 		// result of a Retry-After response header, for example).
 		c.notBeforeLock.RLock()

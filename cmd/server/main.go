@@ -49,7 +49,7 @@ import (
 
 	"github.com/mingyech/conjure-dns-registrar/pkg/dns"
 	"github.com/mingyech/conjure-dns-registrar/pkg/encryption"
-	"github.com/mingyech/conjure-dns-registrar/pkg/turbotunnel"
+	"github.com/mingyech/conjure-dns-registrar/pkg/queuepacketconn"
 )
 
 const (
@@ -399,14 +399,14 @@ func responseFor(query *dns.Message, domain dns.Name) (*dns.Message, []byte) {
 type record struct {
 	Resp     *dns.Message
 	Addr     net.Addr
-	ClientID turbotunnel.ClientID
+	ClientID queuepacketconn.ClientID
 }
 
 // recvLoop repeatedly calls dnsConn.ReadFrom, extracts the packets contained in
 // the incoming DNS queries, and puts them on ttConn's incoming queue. Whenever
 // a query calls for a response, constructs a partial response and passes it to
 // sendLoop over ch.
-func recvLoop(domain dns.Name, dnsConn net.PacketConn, ttConn *turbotunnel.QueuePacketConn, ch chan<- *record) error {
+func recvLoop(domain dns.Name, dnsConn net.PacketConn, ttConn *queuepacketconn.QueuePacketConn, ch chan<- *record) error {
 	for {
 		var buf [4096]byte
 		n, addr, err := dnsConn.ReadFrom(buf[:])
@@ -429,7 +429,7 @@ func recvLoop(domain dns.Name, dnsConn net.PacketConn, ttConn *turbotunnel.Queue
 
 		resp, payload := responseFor(&query, domain)
 		// Extract the ClientID from the payload.
-		var clientID turbotunnel.ClientID
+		var clientID queuepacketconn.ClientID
 		n = copy(clientID[:], payload)
 		payload = payload[n:]
 		if n == len(clientID) {
@@ -466,7 +466,7 @@ func recvLoop(domain dns.Name, dnsConn net.PacketConn, ttConn *turbotunnel.Queue
 // response, it sends on the network immediately. Those that represent a
 // response capable of carrying data, it packs full of as many packets as will
 // fit while keeping the total size under maxEncodedPayload, then sends it.
-func sendLoop(dnsConn net.PacketConn, ttConn *turbotunnel.QueuePacketConn, ch <-chan *record, maxEncodedPayload int) error {
+func sendLoop(dnsConn net.PacketConn, ttConn *queuepacketconn.QueuePacketConn, ch <-chan *record, maxEncodedPayload int) error {
 	var nextRec *record
 	for {
 		rec := nextRec
@@ -642,7 +642,7 @@ func run(domain dns.Name, dnsConn net.PacketConn, msg string, privkey []byte) er
 	}
 	log.Printf("effective MTU %d", mtu)
 
-	ttConn := turbotunnel.NewQueuePacketConn(turbotunnel.DummyAddr{}, idleTimeout*2)
+	ttConn := queuepacketconn.NewQueuePacketConn(queuepacketconn.DummyAddr{}, idleTimeout*2)
 	go func() {
 		err := handle(ttConn, msg, privkey)
 		if err != nil {

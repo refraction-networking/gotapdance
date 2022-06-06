@@ -11,7 +11,7 @@ import (
 	"net"
 
 	"github.com/mingyech/conjure-dns-registrar/pkg/dns"
-	"github.com/mingyech/conjure-dns-registrar/pkg/turbotunnel"
+	"github.com/mingyech/conjure-dns-registrar/pkg/queuepacketconn"
 )
 
 const (
@@ -41,12 +41,12 @@ var base32Encoding = base32.StdEncoding.WithPadding(base32.NoPadding)
 // be correlated. When sending a query, we generate a random ID, and when
 // receiving a response, we ignore the ID.
 type DNSPacketConn struct {
-	clientID turbotunnel.ClientID
+	clientID queuepacketconn.ClientID
 	domain   dns.Name
 	// QueuePacketConn is the direct receiver of ReadFrom and WriteTo calls.
 	// recvLoop and sendLoop take the messages out of the receive and send
 	// queues and actually put them on the network.
-	*turbotunnel.QueuePacketConn
+	*queuepacketconn.QueuePacketConn
 }
 
 // NewDNSPacketConn creates a new DNSPacketConn. transport, through its WriteTo
@@ -55,11 +55,11 @@ type DNSPacketConn struct {
 // transport.WriteTo whenever a message needs to be sent.
 func NewDNSPacketConn(transport net.PacketConn, addr net.Addr, domain dns.Name) *DNSPacketConn {
 	// Generate a new random ClientID.
-	clientID := turbotunnel.NewClientID()
+	clientID := queuepacketconn.NewClientID()
 	c := &DNSPacketConn{
 		clientID:        clientID,
 		domain:          domain,
-		QueuePacketConn: turbotunnel.NewQueuePacketConn(clientID, 0),
+		QueuePacketConn: queuepacketconn.NewQueuePacketConn(clientID, 0),
 	}
 	go func() {
 		err := c.recvLoop(transport)
