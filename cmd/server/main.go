@@ -13,6 +13,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/flynn/noise"
 	"github.com/mingyech/conjure-dns-registrar/pkg/dns"
 	"github.com/mingyech/conjure-dns-registrar/pkg/encryption"
 	"github.com/mingyech/conjure-dns-registrar/pkg/queuepacketconn"
@@ -184,42 +185,46 @@ func nextPacket(r *bytes.Reader) ([]byte, error) {
 }
 
 func handle(pconn net.PacketConn, msg string, privkey []byte) error {
-	newAddrChan := encryption.ListenMessages(pconn)
-	log.Println("start listening for new connections")
-	for {
-		recvAddr := <-newAddrChan
-		go func() {
-			econn, err := encryption.NewServer(pconn, recvAddr, privkey)
-			if err != nil {
-				log.Printf("Error: %v", err)
-				return
-			}
+	var recvMsg [140]byte
 
-			var recvBuf [maxMsgLen]byte
-			_, err = econn.Read(recvBuf[:])
-			if err != nil {
-				log.Printf("Error: %v", err)
-				return
-			}
+	_, recvAddr, err := pconn.ReadFrom(recvMsg[:])
 
-			received := string(recvBuf[:])
-			log.Printf("Recived: [%s]\n", received)
-
-			if err != nil {
-				log.Printf("Error: %v", err)
-				return
-			}
-
-			_, err = econn.Write([]byte(msg))
-			if err != nil {
-				log.Printf("Error: %v", err)
-				return
-			}
-
-			log.Printf("Sent: [%s]\n", msg)
-		}()
-
+	if err != nil {
+		return err
 	}
+
+	response, err := craftResponse(recvMsg[:], privkey)
+
+	_, err = pconn.WriteTo(response[:], recvAddr)
+
+	return err
+}
+
+func craftResponse(msg []byte, privkey []byte) ([]byte, error) {
+	config := encryption.NewConfig()
+	config.Initiator = false
+	config.StaticKeypair = noise.DHKey{
+		Private: privkey,
+		Public:  encryption.PubkeyFromPrivkey(privkey),
+	}
+	handshakeState, err := noise.NewHandshakeState(config)
+	if err != nil {
+		return nil, err
+	}
+	payload, sendCipher, _, err := handshakeState.ReadMessage(nil, msg[:])
+
+	if err != nil {
+		return nil, err
+	}
+
+	log.Printf("Received: [%s]", string(payload))
+
+	response, err := sendCipher.Encrypt(nil, nil, []byte("hey"))
+
+	log.Println("Sending response length", len(response))
+
+	return response, err
+
 }
 
 // responseFor constructs a response dns.Message that is appropriate for query.

@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/mingyech/conjure-dns-registrar/pkg/dns"
 	"github.com/mingyech/conjure-dns-registrar/pkg/encryption"
@@ -58,8 +59,9 @@ func sampleUTLSDistribution(spec string) (*utls.ClientHelloID, error) {
 
 func handle(pconn net.PacketConn, remoteAddr net.Addr, msg string, pubkey []byte) error {
 	encryption.ListenMessages(pconn)
-	for {
+	for i := 0; i < 1; i++ {
 		econn, err := encryption.NewClient(pconn, remoteAddr, pubkey)
+		time.Sleep(2 * time.Second)
 		if err != nil {
 			log.Printf("Error: %v", err)
 			continue
@@ -73,22 +75,24 @@ func handle(pconn net.PacketConn, remoteAddr net.Addr, msg string, pubkey []byte
 
 		log.Printf("Sent: [%s]\n", msg)
 
-		var responseBuf [maxMsgLen]byte
-		_, err = econn.Read(responseBuf[:])
+		time.Sleep(2 * time.Second)
+		// var responseBuf [maxMsgLen]byte
+		// _, err = econn.Read(responseBuf[:])
 
-		if err != nil {
-			log.Printf("Error: %v", err)
-			continue
-		}
+		// if err != nil {
+		// 	log.Printf("Error: %v", err)
+		// 	continue
+		// }
 
-		response := string(responseBuf[:])
-		if err != nil {
-			log.Printf("Error: %v", err)
-			continue
-		}
-		log.Printf("Response: [%s]\n", response)
+		// response := string(responseBuf[:])
+		// if err != nil {
+		// 	log.Printf("Error: %v", err)
+		// 	continue
+		// }
+		// log.Printf("Response: [%s]\n", response)
 		return nil
 	}
+	return nil
 
 }
 

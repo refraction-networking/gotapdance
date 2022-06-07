@@ -63,12 +63,12 @@ func ListenMessages(pconn net.PacketConn) chan net.Addr {
 	return newAddrChan
 }
 
-// newConfig instantiates configuration settings that are common to clients and
+// NewConfig instantiates configuration settings that are common to clients and
 // servers.
-func newConfig() noise.Config {
+func NewConfig() noise.Config {
 	return noise.Config{
 		CipherSuite: cipherSuite,
-		Pattern:     noise.HandshakeNK,
+		Pattern:     noise.HandshakeN,
 	}
 }
 
@@ -181,7 +181,7 @@ func NewClient(pconn net.PacketConn, remote net.Addr, pubkey []byte) (*Encrypted
 		remoteAddr: remote,
 		recvChan:   recvChan,
 	}
-	config := newConfig()
+	config := NewConfig()
 	serverPubkey := pubkey
 	config.Initiator = true
 	config.PeerStatic = serverPubkey
@@ -194,7 +194,13 @@ func NewClient(pconn net.PacketConn, remote net.Addr, pubkey []byte) (*Encrypted
 
 	log.Println("-> e, es")
 	// -> e, es
-	msgToSend, _, _, err := handshakeState.WriteMessage(nil, nil)
+
+	toSend := ""
+	for i := 0; i < 92; i++ {
+		toSend += "x"
+	}
+
+	msgToSend, recvCipher, sendCipher, err := handshakeState.WriteMessage(nil, []byte(toSend))
 
 	if err != nil {
 		return nil, err
@@ -206,24 +212,33 @@ func NewClient(pconn net.PacketConn, remote net.Addr, pubkey []byte) (*Encrypted
 		return nil, err
 	}
 
-	// <- e, es
-	log.Println("<- e, es")
-	var recvMsg [handshakeMsgLen]byte
-
-	_, err = e.recvMsg(recvMsg[:])
-
-	if err != nil {
-		return nil, err
+	toSend = ""
+	for i := 0; i < 92; i++ {
+		toSend += "x"
 	}
 
-	payload, sendCipher, recvCipher, err := handshakeState.ReadMessage(nil, recvMsg[:])
+	out, _ := sendCipher.Encrypt(nil, nil, []byte(toSend))
 
-	if err != nil {
-		return nil, err
-	}
-	if len(payload) != 0 {
-		return nil, errors.New("unexpected server payload")
-	}
+	log.Println("second: ", len(out))
+
+	// // <- e, es
+	// log.Println("<- e, es")
+	// var recvMsg [handshakeMsgLen]byte
+
+	// _, err = e.recvMsg(recvMsg[:])
+
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	// payload, sendCipher, recvCipher, err := handshakeState.ReadMessage(nil, recvMsg[:])
+
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// if len(payload) != 0 {
+	// 	return nil, errors.New("unexpected server payload")
+	// }
 
 	log.Println("noise handshake complete")
 
@@ -242,7 +257,7 @@ func NewServer(pconn net.PacketConn, recvAddr net.Addr, privkey []byte) (*Encryp
 		remoteAddr: recvAddr,
 		recvChan:   recvChan,
 	}
-	config := newConfig()
+	config := NewConfig()
 	config.Initiator = false
 	config.StaticKeypair = noise.DHKey{
 		Private: privkey,
@@ -258,7 +273,7 @@ func NewServer(pconn net.PacketConn, recvAddr net.Addr, privkey []byte) (*Encryp
 	log.Println("-> e, es")
 	// -> e, es
 
-	var recvMsg [handshakeMsgLen]byte
+	var recvMsg [140]byte
 
 	_, err = e.recvMsg(recvMsg[:])
 	log.Printf("Recieved msg from recvChan: [%v]", recvMsg)
@@ -266,29 +281,30 @@ func NewServer(pconn net.PacketConn, recvAddr net.Addr, privkey []byte) (*Encryp
 		return nil, err
 	}
 
-	payload, _, _, err := handshakeState.ReadMessage(nil, recvMsg[:])
+	payload, sendCipher, recvCipher, err := handshakeState.ReadMessage(nil, recvMsg[:])
 
 	if err != nil {
 		return nil, err
 	}
 
-	if len(payload) != 0 {
-		return nil, errors.New("unexpected server payload")
-	}
+	// if len(payload) != 0 {
+	// 	return nil, errors.New("unexpected server payload")
+	// }
+	log.Println(string(payload))
 
-	// <- e, es
-	log.Println("<- e, es")
-	msgToSend, recvCipher, sendCipher, err := handshakeState.WriteMessage(nil, nil)
+	// // <- e, es
+	// log.Println("<- e, es")
+	// msgToSend, recvCipher, sendCipher, err := handshakeState.WriteMessage(nil, nil)
 
-	if err != nil {
-		return nil, err
-	}
+	// if err != nil {
+	// 	return nil, err
+	// }
 
-	_, err = e.sendMsg(msgToSend)
+	// _, err = e.sendMsg(msgToSend)
 
-	if err != nil {
-		return nil, err
-	}
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	log.Println("noise handshake complete")
 
