@@ -380,57 +380,63 @@ func recvLoop(domain dns.Name, dnsConn net.PacketConn, ttConn *queuepacketconn.Q
 		n, addr, err := dnsConn.ReadFrom(buf[:])
 		if err != nil {
 			if err, ok := err.(net.Error); ok {
-				log.Printf("ReadFrom temporary error: %v", err)
+				log.Printf("ReadFrom error: %v", err)
 				continue
 			}
 			return err
 		}
 
-		// Got a UDP packet. Try to parse it as a DNS message.
-		query, err := dns.MessageFromWireFormat(buf[:n])
-		if err != nil {
-			log.Printf("cannot parse DNS query: %v", err)
-			continue
-		}
-
-		log.Println(query.Question)
-
-		resp, payload := responseFor(&query, domain)
-		// Extract the ClientID from the payload.
-		var clientID queuepacketconn.ClientID
-		n = copy(clientID[:], payload)
-		payload = payload[n:]
-		if n == len(clientID) {
-			// Discard padding and pull out the packets contained in
-			// the payload.
-			r := bytes.NewReader(payload)
-			for {
-				p, err := nextPacket(r)
-				if err != nil {
-					break
-				}
-
-				responseMsg, err := craftResponse(p, privkey)
-				if err != nil {
-					return err
-				}
-
-				responseBuf, err := dnsRespToUDPResp(resp, responseMsg)
-				if err != nil {
-					return err
-				}
-
-				log.Printf("Answering: [%s]", addr)
-				dnsConn.WriteTo(responseBuf, addr)
-
+		// Parse message and respond
+		go func() {
+			// Got a UDP packet. Try to parse it as a DNS message.
+			query, err := dns.MessageFromWireFormat(buf[:n])
+			if err != nil {
+				log.Printf("cannot parse DNS query: %v", err)
 			}
-		} else {
-			// Payload is not long enough to contain a ClientID.
-			if resp != nil && resp.Rcode() == dns.RcodeNoError {
-				resp.Flags |= dns.RcodeNameError
-				log.Printf("NXDOMAIN: %d bytes are too short to contain a ClientID", n)
+
+			log.Println(query.Question)
+
+			resp, payload := responseFor(&query, domain)
+			// Extract the ClientID from the payload.
+			var clientID queuepacketconn.ClientID
+			n = copy(clientID[:], payload)
+			payload = payload[n:]
+			if n == len(clientID) {
+				// Discard padding and pull out the packets contained in
+				// the payload.
+				r := bytes.NewReader(payload)
+				for {
+					p, err := nextPacket(r)
+					if err != nil {
+						break
+					}
+
+					responseMsg, err := craftResponse(p, privkey)
+					if err != nil {
+						log.Printf("craftResponse err: %v", err)
+						return
+					}
+
+					responseBuf, err := dnsRespToUDPResp(resp, responseMsg)
+					if err != nil {
+						log.Printf("dnsRespToUDPResp err: %v", err)
+						return
+					}
+
+					log.Printf("Answering: [%s]", addr)
+					_, err = dnsConn.WriteTo(responseBuf, addr)
+					if err != nil {
+						log.Printf("WriteTo err: %v", err)
+					}
+				}
+			} else {
+				// Payload is not long enough to contain a ClientID.
+				if resp != nil && resp.Rcode() == dns.RcodeNoError {
+					resp.Flags |= dns.RcodeNameError
+					log.Printf("NXDOMAIN: %d bytes are too short to contain a ClientID", n)
+				}
 			}
-		}
+		}()
 	}
 }
 
