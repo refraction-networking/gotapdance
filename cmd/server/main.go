@@ -221,7 +221,7 @@ func craftResponse(msg []byte, privkey []byte) ([]byte, error) {
 
 	response, err := sendCipher.Encrypt(nil, nil, []byte("hey"))
 
-	log.Println("Sending response length", len(response))
+	log.Println("Sending response length: ", len(response))
 
 	return response, err
 
@@ -374,7 +374,7 @@ type record struct {
 // the incoming DNS queries, and puts them on ttConn's incoming queue. Whenever
 // a query calls for a response, constructs a partial response and passes it to
 // sendLoop over ch.
-func recvLoop(domain dns.Name, dnsConn net.PacketConn, ttConn *queuepacketconn.QueuePacketConn, ch chan<- *record) error {
+func recvLoop(domain dns.Name, dnsConn net.PacketConn, ttConn *queuepacketconn.QueuePacketConn, ch chan<- *record, privkey []byte) error {
 	for {
 		var buf [4096]byte
 		n, addr, err := dnsConn.ReadFrom(buf[:])
@@ -410,21 +410,25 @@ func recvLoop(domain dns.Name, dnsConn net.PacketConn, ttConn *queuepacketconn.Q
 					break
 				}
 
-				// Feed the incoming packet to tt.
-				ttConn.QueueIncoming(p, clientID)
+				responseMsg, err := craftResponse(p, privkey)
+				if err != nil {
+					return err
+				}
+
+				responseBuf, err := recordToUDPResponse(&record{resp, addr, clientID}, responseMsg)
+				if err != nil {
+					return err
+				}
+
+				log.Printf("Answering: [%s]", addr)
+				dnsConn.WriteTo(responseBuf, addr)
+
 			}
 		} else {
 			// Payload is not long enough to contain a ClientID.
 			if resp != nil && resp.Rcode() == dns.RcodeNoError {
 				resp.Flags |= dns.RcodeNameError
 				log.Printf("NXDOMAIN: %d bytes are too short to contain a ClientID", n)
-			}
-		}
-		// If a response is called for, pass it to sendLoop via the channel.
-		if resp != nil {
-			select {
-			case ch <- &record{resp, addr, clientID}:
-			default:
 			}
 		}
 	}
@@ -506,6 +510,47 @@ func sendLoop(dnsConn net.PacketConn, ttConn *queuepacketconn.QueuePacketConn, c
 		}
 	}
 	return nil
+}
+
+func recordToUDPResponse(rec *record, response []byte) ([]byte, error) {
+	if rec.Resp.Rcode() == dns.RcodeNoError && len(rec.Resp.Question) == 1 {
+		// If it's a non-error response, we can fill the Answer
+		// section with downstream packets.
+
+		// Any changes to how responses are built need to happen
+		// also in computeMaxEncodedPayload.
+		rec.Resp.Answer = []dns.RR{
+			{
+				Name:  rec.Resp.Question[0].Name,
+				Type:  rec.Resp.Question[0].Type,
+				Class: rec.Resp.Question[0].Class,
+				TTL:   responseTTL,
+				Data:  nil, // will be filled in below
+			},
+		}
+
+		var payload bytes.Buffer
+
+		binary.Write(&payload, binary.BigEndian, uint16(len(response)))
+		payload.Write(response)
+
+		rec.Resp.Answer[0].Data = dns.EncodeRDataTXT(payload.Bytes())
+	}
+
+	buf, err := rec.Resp.WireFormat()
+	if err != nil {
+		log.Printf("resp WireFormat: %v", err)
+		return nil, err
+	}
+	// Truncate if necessary.
+	// https://tools.ietf.org/html/rfc1035#section-4.1.1
+	if len(buf) > maxUDPPayload {
+		log.Printf("truncating response of %d bytes to max of %d", len(buf), maxUDPPayload)
+		buf = buf[:maxUDPPayload]
+		buf[2] |= 0x02 // TC = 1
+	}
+
+	return buf, nil
 }
 
 // computeMaxEncodedPayload computes the maximum amount of downstream TXT RR
@@ -621,18 +666,7 @@ func run(domain dns.Name, dnsConn net.PacketConn, msg string, privkey []byte) er
 	ch := make(chan *record, 100)
 	defer close(ch)
 
-	// We could run multiple copies of sendLoop; that would allow more time
-	// for each response to collect downstream data before being evicted by
-	// another response that needs to be sent.
-
-	go func() {
-		err := sendLoop(dnsConn, ttConn, ch, maxEncodedPayload)
-		if err != nil {
-			log.Printf("sendLoop: %v", err)
-		}
-	}()
-
-	return recvLoop(domain, dnsConn, ttConn, ch)
+	return recvLoop(domain, dnsConn, ttConn, ch, privkey)
 }
 
 func main() {
