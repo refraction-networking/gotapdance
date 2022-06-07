@@ -415,7 +415,7 @@ func recvLoop(domain dns.Name, dnsConn net.PacketConn, ttConn *queuepacketconn.Q
 					return err
 				}
 
-				responseBuf, err := recordToUDPResponse(&record{resp, addr, clientID}, responseMsg)
+				responseBuf, err := dnsRespToUDPResp(resp, responseMsg)
 				if err != nil {
 					return err
 				}
@@ -434,96 +434,18 @@ func recvLoop(domain dns.Name, dnsConn net.PacketConn, ttConn *queuepacketconn.Q
 	}
 }
 
-// sendLoop repeatedly receives records from ch. Those that represent an error
-// response, it sends on the network immediately. Those that represent a
-// response capable of carrying data, it packs full of as many packets as will
-// fit while keeping the total size under maxEncodedPayload, then sends it.
-func sendLoop(dnsConn net.PacketConn, ttConn *queuepacketconn.QueuePacketConn, ch <-chan *record, maxEncodedPayload int) error {
-	var nextRec *record
-	for {
-		rec := nextRec
-		nextRec = nil
-
-		if rec == nil {
-			var ok bool
-			rec, ok = <-ch
-			if !ok {
-				break
-			}
-		}
-
-		if rec.Resp.Rcode() == dns.RcodeNoError && len(rec.Resp.Question) == 1 {
-			// If it's a non-error response, we can fill the Answer
-			// section with downstream packets.
-
-			// Any changes to how responses are built need to happen
-			// also in computeMaxEncodedPayload.
-			rec.Resp.Answer = []dns.RR{
-				{
-					Name:  rec.Resp.Question[0].Name,
-					Type:  rec.Resp.Question[0].Type,
-					Class: rec.Resp.Question[0].Class,
-					TTL:   responseTTL,
-					Data:  nil, // will be filled in below
-				},
-			}
-
-			var payload bytes.Buffer
-			outgoing := ttConn.OutgoingQueue(rec.ClientID)
-			var p []byte
-
-			// wait 1s max for outgoing response
-			select {
-			case p = <-outgoing:
-			case <-time.After(maxResponseDelay):
-				fmt.Println("outgoing timeout")
-			}
-
-			binary.Write(&payload, binary.BigEndian, uint16(len(p)))
-			payload.Write(p)
-
-			rec.Resp.Answer[0].Data = dns.EncodeRDataTXT(payload.Bytes())
-		}
-
-		buf, err := rec.Resp.WireFormat()
-		if err != nil {
-			log.Printf("resp WireFormat: %v", err)
-			continue
-		}
-		// Truncate if necessary.
-		// https://tools.ietf.org/html/rfc1035#section-4.1.1
-		if len(buf) > maxUDPPayload {
-			log.Printf("truncating response of %d bytes to max of %d", len(buf), maxUDPPayload)
-			buf = buf[:maxUDPPayload]
-			buf[2] |= 0x02 // TC = 1
-		}
-
-		// Now we actually send the message as a UDP packet.
-		log.Printf("Answering: [%v] to : [%s]", rec.Resp, rec.Addr.String())
-		_, err = dnsConn.WriteTo(buf, rec.Addr)
-		if err != nil {
-			if err, ok := err.(net.Error); ok {
-				log.Printf("WriteTo temporary error: %v", err)
-				continue
-			}
-			return err
-		}
-	}
-	return nil
-}
-
-func recordToUDPResponse(rec *record, response []byte) ([]byte, error) {
-	if rec.Resp.Rcode() == dns.RcodeNoError && len(rec.Resp.Question) == 1 {
+func dnsRespToUDPResp(resp *dns.Message, response []byte) ([]byte, error) {
+	if resp.Rcode() == dns.RcodeNoError && len(resp.Question) == 1 {
 		// If it's a non-error response, we can fill the Answer
 		// section with downstream packets.
 
 		// Any changes to how responses are built need to happen
 		// also in computeMaxEncodedPayload.
-		rec.Resp.Answer = []dns.RR{
+		resp.Answer = []dns.RR{
 			{
-				Name:  rec.Resp.Question[0].Name,
-				Type:  rec.Resp.Question[0].Type,
-				Class: rec.Resp.Question[0].Class,
+				Name:  resp.Question[0].Name,
+				Type:  resp.Question[0].Type,
+				Class: resp.Question[0].Class,
 				TTL:   responseTTL,
 				Data:  nil, // will be filled in below
 			},
@@ -534,10 +456,10 @@ func recordToUDPResponse(rec *record, response []byte) ([]byte, error) {
 		binary.Write(&payload, binary.BigEndian, uint16(len(response)))
 		payload.Write(response)
 
-		rec.Resp.Answer[0].Data = dns.EncodeRDataTXT(payload.Bytes())
+		resp.Answer[0].Data = dns.EncodeRDataTXT(payload.Bytes())
 	}
 
-	buf, err := rec.Resp.WireFormat()
+	buf, err := resp.WireFormat()
 	if err != nil {
 		log.Printf("resp WireFormat: %v", err)
 		return nil, err
