@@ -6,8 +6,6 @@ import (
 	"encoding/binary"
 	"flag"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -129,43 +127,6 @@ func readKeyFromFile(filename string) ([]byte, error) {
 	}
 	defer f.Close()
 	return encryption.ReadKey(f)
-}
-
-// nextPacket reads the next length-prefixed packet from r, ignoring padding. It
-// returns a nil error only when a packet was read successfully. It returns
-// io.EOF only when there were 0 bytes remaining to read from r. It returns
-// io.ErrUnexpectedEOF when EOF occurs in the middle of an encoded packet.
-//
-// The prefixing scheme is as follows. A length prefix L < 0xe0 means a data
-// packet of L bytes. A length prefix L >= 0xe0 means padding of L - 0xe0 bytes
-// (not counting the length of the length prefix itself).
-func nextPacket(r *bytes.Reader) ([]byte, error) {
-	// Convert io.EOF to io.ErrUnexpectedEOF.
-	eof := func(err error) error {
-		if err == io.EOF {
-			err = io.ErrUnexpectedEOF
-		}
-		return err
-	}
-
-	for {
-		prefix, err := r.ReadByte()
-		if err != nil {
-			// We may return a real io.EOF only here.
-			return nil, err
-		}
-		if prefix >= 224 {
-			paddingLen := prefix - 224
-			_, err := io.CopyN(ioutil.Discard, r, int64(paddingLen))
-			if err != nil {
-				return nil, eof(err)
-			}
-		} else {
-			p := make([]byte, int(prefix))
-			_, err = io.ReadFull(r, p)
-			return p, eof(err)
-		}
-	}
 }
 
 func craftResponse(msg []byte, privkey []byte) ([]byte, error) {
@@ -353,45 +314,35 @@ func recvLoop(domain dns.Name, dnsConn net.PacketConn, privkey []byte) error {
 
 			log.Println(query.Question)
 
-			resp, payload := responseFor(&query, domain)
-			// Discard padding and pull out the packets contained in
-			// the payload.
-			r := bytes.NewReader(payload)
-			for {
-				p, err := nextPacket(r)
-				if err != nil {
-					break
-				}
+			resp, p := responseFor(&query, domain)
+			p, err = msgformat.RemoveFormat(p)
+			if err != nil {
+				log.Printf("RemoveFormat err: %v", err)
+				return
+			}
 
-				p, err = msgformat.RemoveFormat(p)
-				if err != nil {
-					log.Printf("RemoveFormat err: %v", err)
-					return
-				}
+			responseMsg, err := craftResponse(p, privkey)
+			if err != nil {
+				log.Printf("craftResponse err: %v", err)
+				return
+			}
 
-				responseMsg, err := craftResponse(p, privkey)
-				if err != nil {
-					log.Printf("craftResponse err: %v", err)
-					return
-				}
+			responseMsg, err = msgformat.AddFormat(responseMsg)
+			if err != nil {
+				log.Printf("AddFormat err: %v", err)
+				return
+			}
 
-				responseMsg, err = msgformat.AddFormat(responseMsg)
-				if err != nil {
-					log.Printf("AddFormat err: %v", err)
-					return
-				}
+			responseBuf, err := dnsRespToUDPResp(resp, responseMsg)
+			if err != nil {
+				log.Printf("dnsRespToUDPResp err: %v", err)
+				return
+			}
 
-				responseBuf, err := dnsRespToUDPResp(resp, responseMsg)
-				if err != nil {
-					log.Printf("dnsRespToUDPResp err: %v", err)
-					return
-				}
-
-				log.Printf("Answering: [%s]", addr)
-				_, err = dnsConn.WriteTo(responseBuf, addr)
-				if err != nil {
-					log.Printf("WriteTo err: %v", err)
-				}
+			log.Printf("Answering: [%s]", addr)
+			_, err = dnsConn.WriteTo(responseBuf, addr)
+			if err != nil {
+				log.Printf("WriteTo err: %v", err)
 			}
 		}()
 	}

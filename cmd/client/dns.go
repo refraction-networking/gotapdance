@@ -238,18 +238,7 @@ func (c *DNSPacketConn) send(transport net.PacketConn, p []byte, addr net.Addr) 
 			return fmt.Errorf("too long")
 		}
 		var buf bytes.Buffer
-		n := numPadding
-		if len(p) == 0 {
-			n = numPaddingForPoll
-		}
-		// Padding / cache inhibition
-		buf.WriteByte(byte(224 + n))
-		io.CopyN(&buf, rand.Reader, int64(n))
-		// Packet contents
-		if len(p) > 0 {
-			buf.WriteByte(byte(len(p)))
-			buf.Write(p)
-		}
+		buf.Write(p)
 		decoded = buf.Bytes()
 	}
 
