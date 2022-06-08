@@ -2,11 +2,13 @@ package msgformat
 
 import (
 	"errors"
+	"log"
 )
 
 // Prefix length to message
 func AddFormat(p []byte) ([]byte, error) {
 	length := uint8(len(p))
+	log.Println("AddFormat(): len=", length)
 	prefixed := append([]byte{length}, p...)
 	return prefixed, nil
 }

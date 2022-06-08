@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/flynn/noise"
+	"github.com/mingyech/conjure-dns-registrar/pkg/msgformat"
 	"github.com/mingyech/conjure-dns-registrar/pkg/remotemap"
 	"golang.org/x/crypto/curve25519"
 )
@@ -196,11 +197,17 @@ func NewClient(pconn net.PacketConn, remote net.Addr, pubkey []byte) (*Encrypted
 	// -> e, es
 
 	toSend := ""
-	for i := 0; i < 92; i++ {
+	for i := 0; i < 9; i++ {
 		toSend += "x"
 	}
 
 	msgToSend, recvCipher, sendCipher, err := handshakeState.WriteMessage(nil, []byte(toSend))
+
+	if err != nil {
+		return nil, err
+	}
+
+	msgToSend, err = msgformat.AddFormat([]byte(msgToSend))
 
 	if err != nil {
 		return nil, err

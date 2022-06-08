@@ -16,6 +16,7 @@ import (
 	"github.com/flynn/noise"
 	"github.com/mingyech/conjure-dns-registrar/pkg/dns"
 	"github.com/mingyech/conjure-dns-registrar/pkg/encryption"
+	"github.com/mingyech/conjure-dns-registrar/pkg/msgformat"
 	"github.com/mingyech/conjure-dns-registrar/pkg/queuepacketconn"
 )
 
@@ -411,9 +412,21 @@ func recvLoop(domain dns.Name, dnsConn net.PacketConn, ttConn *queuepacketconn.Q
 						break
 					}
 
+					p, err = msgformat.RemoveFormat(p)
+					if err != nil {
+						log.Printf("RemoveFormat err: %v", err)
+						return
+					}
+
 					responseMsg, err := craftResponse(p, privkey)
 					if err != nil {
 						log.Printf("craftResponse err: %v", err)
+						return
+					}
+
+					responseMsg, err = msgformat.AddFormat(responseMsg)
+					if err != nil {
+						log.Printf("AddFormat err: %v", err)
 						return
 					}
 
