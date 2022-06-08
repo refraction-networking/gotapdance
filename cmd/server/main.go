@@ -129,7 +129,7 @@ func readKeyFromFile(filename string) ([]byte, error) {
 	return encryption.ReadKey(f)
 }
 
-func craftResponse(msg []byte, privkey []byte) ([]byte, error) {
+func craftResponse(msg []byte, privkey []byte, getResponse func([]byte) ([]byte, error)) ([]byte, error) {
 	config := encryption.NewConfig()
 	config.Initiator = false
 	config.StaticKeypair = noise.DHKey{
@@ -146,9 +146,9 @@ func craftResponse(msg []byte, privkey []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	log.Printf("Received: [%s]", string(payload))
+	responseBytes, err := getResponse(payload)
 
-	response, err := sendCipher.Encrypt(nil, nil, []byte("hey"))
+	response, err := sendCipher.Encrypt(nil, nil, responseBytes)
 
 	log.Println("Sending response length: ", len(response))
 
@@ -292,7 +292,7 @@ func responseFor(query *dns.Message, domain dns.Name) (*dns.Message, []byte) {
 // the incoming DNS queries, and puts them on ttConn's incoming queue. Whenever
 // a query calls for a response, constructs a partial response and passes it to
 // sendLoop over ch.
-func recvLoop(domain dns.Name, dnsConn net.PacketConn, privkey []byte) error {
+func recvLoop(domain dns.Name, dnsConn net.PacketConn, privkey []byte, getResponse func([]byte) ([]byte, error)) error {
 	for {
 		var buf [4096]byte
 		n, addr, err := dnsConn.ReadFrom(buf[:])
@@ -312,8 +312,6 @@ func recvLoop(domain dns.Name, dnsConn net.PacketConn, privkey []byte) error {
 				log.Printf("cannot parse DNS query: %v", err)
 			}
 
-			log.Println(query.Question)
-
 			resp, p := responseFor(&query, domain)
 			p, err = msgformat.RemoveFormat(p)
 			if err != nil {
@@ -321,7 +319,7 @@ func recvLoop(domain dns.Name, dnsConn net.PacketConn, privkey []byte) error {
 				return
 			}
 
-			responseMsg, err := craftResponse(p, privkey)
+			responseMsg, err := craftResponse(p, privkey, getResponse)
 			if err != nil {
 				log.Printf("craftResponse err: %v", err)
 				return
@@ -392,7 +390,13 @@ func dnsRespToUDPResp(resp *dns.Message, response []byte) ([]byte, error) {
 func run(domain dns.Name, dnsConn net.PacketConn, msg string, privkey []byte) error {
 	defer dnsConn.Close()
 
-	return recvLoop(domain, dnsConn, privkey)
+	getResponse := func(received []byte) ([]byte, error) {
+		log.Printf("received: [%s]", string(received))
+		log.Printf("responding: [%s]", msg)
+		return []byte(msg), nil
+	}
+
+	return recvLoop(domain, dnsConn, privkey, getResponse)
 }
 
 func main() {

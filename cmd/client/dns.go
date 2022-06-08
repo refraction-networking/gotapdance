@@ -14,15 +14,6 @@ import (
 	"github.com/mingyech/conjure-dns-registrar/pkg/queuepacketconn"
 )
 
-const (
-	// How many bytes of random padding to insert into queries.
-	numPadding = 3
-	// In an otherwise empty polling query, insert even more random padding,
-	// to reduce the chance of a cache hit. Cannot be greater than 31,
-	// because the prefix codes indicating padding start at 224.
-	numPaddingForPoll = 8
-)
-
 // base32Encoding is a base32 encoding without padding.
 var base32Encoding = base32.StdEncoding.WithPadding(base32.NoPadding)
 
@@ -54,10 +45,9 @@ type DNSPacketConn struct {
 // transport.WriteTo whenever a message needs to be sent.
 func NewDNSPacketConn(transport net.PacketConn, addr net.Addr, domain dns.Name) *DNSPacketConn {
 	// Generate a new random ClientID.
-	clientID := queuepacketconn.NewClientID()
 	c := &DNSPacketConn{
 		domain:          domain,
-		QueuePacketConn: queuepacketconn.NewQueuePacketConn(clientID, 0),
+		QueuePacketConn: queuepacketconn.NewQueuePacketConn(queuepacketconn.DummyAddr{}, 0),
 	}
 	go func() {
 		err := c.recvLoop(transport)
