@@ -3,16 +3,18 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"os"
-	"time"
 
+	"github.com/flynn/noise"
 	"github.com/mingyech/conjure-dns-registrar/pkg/dns"
 	"github.com/mingyech/conjure-dns-registrar/pkg/encryption"
+	"github.com/mingyech/conjure-dns-registrar/pkg/msgformat"
 	"github.com/mingyech/conjure-dns-registrar/pkg/queuepacketconn"
 	utls "github.com/refraction-networking/utls"
 )
@@ -20,6 +22,7 @@ import (
 const (
 	bufSize   = 4096
 	maxMsgLen = 140
+	numTries  = 1
 )
 
 // readKeyFromFile reads a key from a named file.
@@ -57,49 +60,72 @@ func sampleUTLSDistribution(spec string) (*utls.ClientHelloID, error) {
 	return ids[sampleWeighted(weights)], nil
 }
 
-func handle(pconn net.PacketConn, remoteAddr net.Addr, msg string, pubkey []byte) error {
-	encryption.ListenMessages(pconn)
-	for i := 0; i < 1; i++ {
-		econn, err := encryption.NewClient(pconn, remoteAddr, pubkey)
-		time.Sleep(2 * time.Second)
-		if err != nil {
-			log.Printf("Error: %v", err)
-			continue
-		}
+func sendHandshake(pconn net.PacketConn, remoteAddr net.Addr, pubkey []byte, payload []byte) (*noise.CipherState, *noise.CipherState, error) {
 
-		_, err = econn.Write([]byte(msg))
-		if err != nil {
-			log.Printf("Error: %v", err)
-			continue
-		}
-
-		log.Printf("Sent: [%s]\n", msg)
-
-		time.Sleep(2 * time.Second)
-		// var responseBuf [maxMsgLen]byte
-		// _, err = econn.Read(responseBuf[:])
-
-		// if err != nil {
-		// 	log.Printf("Error: %v", err)
-		// 	continue
-		// }
-
-		// response := string(responseBuf[:])
-		// if err != nil {
-		// 	log.Printf("Error: %v", err)
-		// 	continue
-		// }
-		// log.Printf("Response: [%s]\n", response)
-		return nil
+	config := encryption.NewConfig()
+	config.Initiator = true
+	config.PeerStatic = pubkey
+	handshakeState, err := noise.NewHandshakeState(config)
+	if err != nil {
+		return nil, nil, err
 	}
-	return nil
+	msgToSend, recvCipher, sendCipher, err := handshakeState.WriteMessage(nil, payload)
+	if err != nil {
+		return nil, nil, err
+	}
+	msgToSend, err = msgformat.AddFormat([]byte(msgToSend))
+	if err != nil {
+		return nil, nil, err
+	}
+	_, err = pconn.WriteTo(msgToSend, remoteAddr)
+	if err != nil {
+		return nil, nil, err
+	}
+	return recvCipher, sendCipher, nil
+}
+
+func handle(pconn net.PacketConn, remoteAddr net.Addr, pubkey []byte, sendBytes []byte, recvFunc func([]byte) error) error {
+	for i := 0; i < numTries; i++ {
+		recvCipher, _, err := sendHandshake(pconn, remoteAddr, pubkey, sendBytes)
+		if err != nil {
+			return err
+		}
+
+		var recvBuf [4096]byte
+		_, _, err = pconn.ReadFrom(recvBuf[:])
+		if err != nil {
+			return err
+		}
+
+		encryptedBuf, err := msgformat.RemoveFormat(recvBuf[:])
+		if err != nil {
+			return err
+		}
+
+		recvBytes, err := recvCipher.Decrypt(nil, nil, encryptedBuf)
+		if err != nil {
+			return err
+		}
+
+		err = recvFunc(recvBytes)
+
+		if err == nil {
+			return nil
+		}
+	}
+	return errors.New("max tries reached")
 
 }
 
 func run(domain dns.Name, remoteAddr net.Addr, pconn net.PacketConn, msg string, pubkey []byte) error {
 	defer pconn.Close()
 
-	err := handle(pconn, remoteAddr, msg, pubkey)
+	recvFunc := func(recvBytes []byte) error {
+		log.Printf("Received: [%s]", string(recvBytes))
+		return nil
+	}
+
+	err := handle(pconn, remoteAddr, pubkey, []byte(msg), recvFunc)
 	if err != nil {
 		log.Printf("handle: %v\n", err)
 	}

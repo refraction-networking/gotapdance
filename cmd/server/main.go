@@ -19,9 +19,6 @@ import (
 const (
 	// How to set the TTL field in Answer resource records.
 	responseTTL = 60
-
-	bufSize   = 4096
-	maxMsgLen = 140
 )
 
 var (
@@ -147,10 +144,11 @@ func craftResponse(msg []byte, privkey []byte, getResponse func([]byte) ([]byte,
 	}
 
 	responseBytes, err := getResponse(payload)
+	if err != nil {
+		return nil, err
+	}
 
 	response, err := sendCipher.Encrypt(nil, nil, responseBytes)
-
-	log.Println("Sending response length: ", len(response))
 
 	return response, err
 
@@ -337,7 +335,6 @@ func recvLoop(domain dns.Name, dnsConn net.PacketConn, privkey []byte, getRespon
 				return
 			}
 
-			log.Printf("Answering: [%s]", addr)
 			_, err = dnsConn.WriteTo(responseBuf, addr)
 			if err != nil {
 				log.Printf("WriteTo err: %v", err)
@@ -409,7 +406,7 @@ func main() {
 	var genKey bool
 
 	flag.StringVar(&udpAddr, "addr", "[::]:53", "UDP address to listen on")
-	flag.StringVar(&msg, "msg", "hey", "message to response with")
+	flag.StringVar(&msg, "msg", "it works", "message to response with")
 	flag.StringVar(&domain, "domain", "", "base domain in requests")
 	flag.StringVar(&privkeyFilename, "privkey", "", "server private key filename")
 	flag.StringVar(&pubkeyFilenameOut, "pubkeyFilename", "", "generated server public key filename (only used with -genKey)")
