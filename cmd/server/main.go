@@ -11,7 +11,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"time"
 
 	"github.com/flynn/noise"
 	"github.com/mingyech/conjure-dns-registrar/pkg/dns"
@@ -21,21 +20,8 @@ import (
 )
 
 const (
-	// remotemap entry will be deleted after this much time without receiving data.
-	idleTimeout = 2 * time.Minute
-
 	// How to set the TTL field in Answer resource records.
 	responseTTL = 60
-
-	// How long we may wait for downstream data before sending an empty
-	// response. If another query comes in while we are waiting, we'll send
-	// an empty response anyway and restart the delay timer for the next
-	// response.
-	//
-	// This number should be less than 2 seconds, which in 2019 was reported
-	// to be the query timeout of the Quad9 DoH server.
-	// https://dnsencryption.info/imc19-doe.html Section 4.2, Finding 2.4
-	maxResponseDelay = 1 * time.Second
 
 	bufSize   = 4096
 	maxMsgLen = 140
@@ -183,22 +169,6 @@ func nextPacket(r *bytes.Reader) ([]byte, error) {
 			return p, eof(err)
 		}
 	}
-}
-
-func handle(pconn net.PacketConn, msg string, privkey []byte) error {
-	var recvMsg [140]byte
-
-	_, recvAddr, err := pconn.ReadFrom(recvMsg[:])
-
-	if err != nil {
-		return err
-	}
-
-	response, err := craftResponse(recvMsg[:], privkey)
-
-	_, err = pconn.WriteTo(response[:], recvAddr)
-
-	return err
 }
 
 func craftResponse(msg []byte, privkey []byte) ([]byte, error) {
@@ -360,22 +330,11 @@ func responseFor(query *dns.Message, domain dns.Name) (*dns.Message, []byte) {
 	return resp, payload
 }
 
-// record represents a DNS message appropriate for a response to a previously
-// received query, along with metadata necessary for sending the response.
-// recvLoop sends instances of record to sendLoop via a channel. sendLoop
-// receives instances of record and may fill in the message's Answer section
-// before sending it.
-type record struct {
-	Resp     *dns.Message
-	Addr     net.Addr
-	ClientID queuepacketconn.ClientID
-}
-
 // recvLoop repeatedly calls dnsConn.ReadFrom, extracts the packets contained in
 // the incoming DNS queries, and puts them on ttConn's incoming queue. Whenever
 // a query calls for a response, constructs a partial response and passes it to
 // sendLoop over ch.
-func recvLoop(domain dns.Name, dnsConn net.PacketConn, ttConn *queuepacketconn.QueuePacketConn, ch chan<- *record, privkey []byte) error {
+func recvLoop(domain dns.Name, dnsConn net.PacketConn, privkey []byte) error {
 	for {
 		var buf [4096]byte
 		n, addr, err := dnsConn.ReadFrom(buf[:])
@@ -494,120 +453,10 @@ func dnsRespToUDPResp(resp *dns.Message, response []byte) ([]byte, error) {
 	return buf, nil
 }
 
-// computeMaxEncodedPayload computes the maximum amount of downstream TXT RR
-// data that keep the overall response size less than maxUDPPayload, in the
-// worst case when the response answers a query that has a maximum-length name
-// in its Question section. Returns 0 in the case that no amount of data makes
-// the overall response size small enough.
-//
-// This function needs to be kept in sync with sendLoop with regard to how it
-// builds candidate responses.
-func computeMaxEncodedPayload(limit int) int {
-	// 64+64+64+62 octets, needs to be base32-decodable.
-	maxLengthName, err := dns.NewName([][]byte{
-		[]byte("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
-		[]byte("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
-		[]byte("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
-		[]byte("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
-	})
-	if err != nil {
-		panic(err)
-	}
-	{
-		// Compute the encoded length of maxLengthName and that its
-		// length is actually at the maximum of 255 octets.
-		n := 0
-		for _, label := range maxLengthName {
-			n += len(label) + 1
-		}
-		n += 1 // For the terminating null label.
-		if n != 255 {
-			panic(fmt.Sprintf("max-length name is %d octets, should be %d %s", n, 255, maxLengthName))
-		}
-	}
-
-	queryLimit := uint16(limit)
-	if int(queryLimit) != limit {
-		queryLimit = 0xffff
-	}
-	query := &dns.Message{
-		Question: []dns.Question{
-			{
-				Name:  maxLengthName,
-				Type:  dns.RRTypeTXT,
-				Class: dns.RRTypeTXT,
-			},
-		},
-		// EDNS(0)
-		Additional: []dns.RR{
-			{
-				Name:  dns.Name{},
-				Type:  dns.RRTypeOPT,
-				Class: queryLimit, // requester's UDP payload size
-				TTL:   0,          // extended RCODE and flags
-				Data:  []byte{},
-			},
-		},
-	}
-	resp, _ := responseFor(query, dns.Name([][]byte{}))
-	// As in sendLoop.
-	resp.Answer = []dns.RR{
-		{
-			Name:  query.Question[0].Name,
-			Type:  query.Question[0].Type,
-			Class: query.Question[0].Class,
-			TTL:   responseTTL,
-			Data:  nil, // will be filled in below
-		},
-	}
-
-	// Binary search to find the maximum payload length that does not result
-	// in a wire-format message whose length exceeds the limit.
-	low := 0
-	high := 32768
-	for low+1 < high {
-		mid := (low + high) / 2
-		resp.Answer[0].Data = dns.EncodeRDataTXT(make([]byte, mid))
-		buf, err := resp.WireFormat()
-		if err != nil {
-			panic(err)
-		}
-		if len(buf) <= limit {
-			low = mid
-		} else {
-			high = mid
-		}
-	}
-
-	return low
-}
-
 func run(domain dns.Name, dnsConn net.PacketConn, msg string, privkey []byte) error {
 	defer dnsConn.Close()
 
-	maxEncodedPayload := computeMaxEncodedPayload(maxUDPPayload)
-	// 2 bytes accounts for a packet length prefix.
-	mtu := maxEncodedPayload - 2
-	if mtu < 80 {
-		if mtu < 0 {
-			mtu = 0
-		}
-		return fmt.Errorf("maximum UDP payload size of %d leaves only %d bytes for payload", maxUDPPayload, mtu)
-	}
-	log.Printf("effective MTU %d", mtu)
-
-	ttConn := queuepacketconn.NewQueuePacketConn(queuepacketconn.DummyAddr{}, idleTimeout*2)
-	go func() {
-		err := handle(ttConn, msg, privkey)
-		if err != nil {
-			log.Printf("handle: %v", err)
-		}
-	}()
-
-	ch := make(chan *record, 100)
-	defer close(ch)
-
-	return recvLoop(domain, dnsConn, ttConn, ch, privkey)
+	return recvLoop(domain, dnsConn, privkey)
 }
 
 func main() {
