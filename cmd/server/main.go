@@ -311,31 +311,39 @@ func recvLoop(domain dns.Name, dnsConn net.PacketConn, privkey []byte, getRespon
 			}
 
 			resp, p := responseFor(&query, domain)
-			p, err = msgformat.RemoveFormat(p)
-			if err != nil {
-				log.Printf("RemoveFormat err: %v", err)
+			if resp == nil {
 				return
 			}
 
-			responseMsg, err := craftResponse(p, privkey, getResponse)
-			if err != nil {
-				log.Printf("craftResponse err: %v", err)
-				return
+			var responseBuf []byte
+
+			if p != nil {
+				p, err = msgformat.RemoveFormat(p)
+				if err != nil {
+					log.Printf("RemoveFormat err: %v", err)
+					return
+				}
+
+				responseBuf, err = craftResponse(p, privkey, getResponse)
+				if err != nil {
+					log.Printf("craftResponse err: %v", err)
+					return
+				}
+
+				responseBuf, err = msgformat.AddFormat(responseBuf)
+				if err != nil {
+					log.Printf("AddFormat err: %v", err)
+					return
+				}
 			}
 
-			responseMsg, err = msgformat.AddFormat(responseMsg)
-			if err != nil {
-				log.Printf("AddFormat err: %v", err)
-				return
-			}
-
-			responseBuf, err := dnsRespToUDPResp(resp, responseMsg)
+			responsePayload, err := dnsRespToUDPResp(resp, responseBuf)
 			if err != nil {
 				log.Printf("dnsRespToUDPResp err: %v", err)
 				return
 			}
 
-			_, err = dnsConn.WriteTo(responseBuf, addr)
+			_, err = dnsConn.WriteTo(responsePayload, addr)
 			if err != nil {
 				log.Printf("WriteTo err: %v", err)
 			}
