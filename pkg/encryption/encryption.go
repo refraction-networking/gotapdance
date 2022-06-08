@@ -197,7 +197,7 @@ func NewClient(pconn net.PacketConn, remote net.Addr, pubkey []byte) (*Encrypted
 	// -> e, es
 
 	toSend := ""
-	for i := 0; i < 9; i++ {
+	for i := 0; i < 99; i++ {
 		toSend += "x"
 	}
 

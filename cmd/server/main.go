@@ -16,7 +16,6 @@ import (
 	"github.com/mingyech/conjure-dns-registrar/pkg/dns"
 	"github.com/mingyech/conjure-dns-registrar/pkg/encryption"
 	"github.com/mingyech/conjure-dns-registrar/pkg/msgformat"
-	"github.com/mingyech/conjure-dns-registrar/pkg/queuepacketconn"
 )
 
 const (
@@ -32,8 +31,6 @@ var (
 	// network-layer fragmentation. 1280 is the minimum IPv6 MTU, 40 bytes
 	// is the size of an IPv6 header (though without any extension headers),
 	// and 8 bytes is the size of a UDP header.
-	//
-	// Control this value with the -mtu command-line option.
 	//
 	// https://dnsflagday.net/2020/#message-size-considerations
 	// "An EDNS buffer size of 1232 bytes will avoid fragmentation on nearly
@@ -357,55 +354,43 @@ func recvLoop(domain dns.Name, dnsConn net.PacketConn, privkey []byte) error {
 			log.Println(query.Question)
 
 			resp, payload := responseFor(&query, domain)
-			// Extract the ClientID from the payload.
-			var clientID queuepacketconn.ClientID
-			n = copy(clientID[:], payload)
-			payload = payload[n:]
-			if n == len(clientID) {
-				// Discard padding and pull out the packets contained in
-				// the payload.
-				r := bytes.NewReader(payload)
-				for {
-					p, err := nextPacket(r)
-					if err != nil {
-						break
-					}
-
-					p, err = msgformat.RemoveFormat(p)
-					if err != nil {
-						log.Printf("RemoveFormat err: %v", err)
-						return
-					}
-
-					responseMsg, err := craftResponse(p, privkey)
-					if err != nil {
-						log.Printf("craftResponse err: %v", err)
-						return
-					}
-
-					responseMsg, err = msgformat.AddFormat(responseMsg)
-					if err != nil {
-						log.Printf("AddFormat err: %v", err)
-						return
-					}
-
-					responseBuf, err := dnsRespToUDPResp(resp, responseMsg)
-					if err != nil {
-						log.Printf("dnsRespToUDPResp err: %v", err)
-						return
-					}
-
-					log.Printf("Answering: [%s]", addr)
-					_, err = dnsConn.WriteTo(responseBuf, addr)
-					if err != nil {
-						log.Printf("WriteTo err: %v", err)
-					}
+			// Discard padding and pull out the packets contained in
+			// the payload.
+			r := bytes.NewReader(payload)
+			for {
+				p, err := nextPacket(r)
+				if err != nil {
+					break
 				}
-			} else {
-				// Payload is not long enough to contain a ClientID.
-				if resp != nil && resp.Rcode() == dns.RcodeNoError {
-					resp.Flags |= dns.RcodeNameError
-					log.Printf("NXDOMAIN: %d bytes are too short to contain a ClientID", n)
+
+				p, err = msgformat.RemoveFormat(p)
+				if err != nil {
+					log.Printf("RemoveFormat err: %v", err)
+					return
+				}
+
+				responseMsg, err := craftResponse(p, privkey)
+				if err != nil {
+					log.Printf("craftResponse err: %v", err)
+					return
+				}
+
+				responseMsg, err = msgformat.AddFormat(responseMsg)
+				if err != nil {
+					log.Printf("AddFormat err: %v", err)
+					return
+				}
+
+				responseBuf, err := dnsRespToUDPResp(resp, responseMsg)
+				if err != nil {
+					log.Printf("dnsRespToUDPResp err: %v", err)
+					return
+				}
+
+				log.Printf("Answering: [%s]", addr)
+				_, err = dnsConn.WriteTo(responseBuf, addr)
+				if err != nil {
+					log.Printf("WriteTo err: %v", err)
 				}
 			}
 		}()

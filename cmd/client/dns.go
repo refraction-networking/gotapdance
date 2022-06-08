@@ -41,8 +41,7 @@ var base32Encoding = base32.StdEncoding.WithPadding(base32.NoPadding)
 // be correlated. When sending a query, we generate a random ID, and when
 // receiving a response, we ignore the ID.
 type DNSPacketConn struct {
-	clientID queuepacketconn.ClientID
-	domain   dns.Name
+	domain dns.Name
 	// QueuePacketConn is the direct receiver of ReadFrom and WriteTo calls.
 	// recvLoop and sendLoop take the messages out of the receive and send
 	// queues and actually put them on the network.
@@ -57,7 +56,6 @@ func NewDNSPacketConn(transport net.PacketConn, addr net.Addr, domain dns.Name) 
 	// Generate a new random ClientID.
 	clientID := queuepacketconn.NewClientID()
 	c := &DNSPacketConn{
-		clientID:        clientID,
 		domain:          domain,
 		QueuePacketConn: queuepacketconn.NewQueuePacketConn(clientID, 0),
 	}
@@ -167,8 +165,8 @@ func (c *DNSPacketConn) recvLoop(transport net.PacketConn) error {
 		var buf [4096]byte
 		n, addr, err := transport.ReadFrom(buf[:])
 		if err != nil {
-			if err, ok := err.(net.Error); ok && err.Temporary() {
-				log.Printf("ReadFrom temporary error: %v", err)
+			if err, ok := err.(net.Error); ok {
+				log.Printf("ReadFrom error: %v", err)
 				continue
 			}
 			return err
@@ -240,8 +238,6 @@ func (c *DNSPacketConn) send(transport net.PacketConn, p []byte, addr net.Addr) 
 			return fmt.Errorf("too long")
 		}
 		var buf bytes.Buffer
-		// ClientID
-		buf.Write(c.clientID[:])
 		n := numPadding
 		if len(p) == 0 {
 			n = numPaddingForPoll
