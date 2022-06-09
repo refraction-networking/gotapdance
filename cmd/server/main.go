@@ -418,9 +418,9 @@ func main() {
 	flag.StringVar(&msg, "msg", "it works", "message to response with")
 	flag.StringVar(&domain, "domain", "", "base domain in requests")
 	flag.StringVar(&privkeyFilename, "privkey", "", "server private key filename")
-	flag.StringVar(&pubkeyFilenameOut, "pubkeyFilename", "", "generated server public key filename (only used with -genKey)")
-	flag.StringVar(&privkeyFilenameOut, "privkeyFilename", "", "generated server private key filename (only used with -genKey)")
-	flag.BoolVar(&genKey, "genKey", false, "generate a server keypair; print to stdout or save to files")
+	flag.StringVar(&pubkeyFilenameOut, "pubkeyfilename", "", "generated server public key filename (only used with -genKey)")
+	flag.StringVar(&privkeyFilenameOut, "privkeyfilename", "", "generated server private key filename (only used with -genKey)")
+	flag.BoolVar(&genKey, "genkey", false, "generate a server keypair; print to stdout or save to files")
 	flag.IntVar(&maxUDPPayload, "mtu", maxUDPPayload, "maximum size of DNS responses")
 	flag.Parse()
 
