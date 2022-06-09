@@ -18,12 +18,6 @@ import (
 	utls "github.com/refraction-networking/utls"
 )
 
-const (
-	bufSize   = 4096
-	maxMsgLen = 140
-	numTries  = 1
-)
-
 // readKeyFromFile reads a key from a named file.
 func readKeyFromFile(filename string) ([]byte, error) {
 	f, err := os.Open(filename)

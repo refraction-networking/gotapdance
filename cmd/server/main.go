@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/base32"
-	"encoding/binary"
 	"flag"
 	"fmt"
 	"log"
@@ -370,7 +369,7 @@ func dnsRespToUDPResp(resp *dns.Message, response []byte) ([]byte, error) {
 
 		var payload bytes.Buffer
 
-		binary.Write(&payload, binary.BigEndian, uint16(len(response)))
+		//binary.Write(&payload, binary.BigEndian, uint16(len(response)))
 		payload.Write(response)
 
 		resp.Answer[0].Data = dns.EncodeRDataTXT(payload.Bytes())

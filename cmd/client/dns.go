@@ -6,7 +6,6 @@ import (
 	"encoding/base32"
 	"encoding/binary"
 	"fmt"
-	"io"
 	"log"
 	"net"
 
@@ -99,28 +98,6 @@ func dnsResponsePayload(resp *dns.Message, domain dns.Name) []byte {
 	return payload
 }
 
-// nextPacket reads the next length-prefixed packet from r. It returns a nil
-// error only when a complete packet was read. It returns io.EOF only when there
-// were 0 bytes remaining to read from r. It returns io.ErrUnexpectedEOF when
-// EOF occurs in the middle of an encoded packet.
-func nextPacket(r *bytes.Reader) ([]byte, error) {
-	for {
-		var n uint16
-		err := binary.Read(r, binary.BigEndian, &n)
-		if err != nil {
-			// We may return a real io.EOF only here.
-			return nil, err
-		}
-		p := make([]byte, n)
-		_, err = io.ReadFull(r, p)
-		// Here we must change io.EOF to io.ErrUnexpectedEOF.
-		if err == io.EOF {
-			err = io.ErrUnexpectedEOF
-		}
-		return p, err
-	}
-}
-
 // recvLoop repeatedly calls transport.ReadFrom to receive a DNS message,
 // extracts its payload and breaks it into packets, and stores the packets in a
 // queue to be returned from a future call to c.ReadFrom.
@@ -171,15 +148,7 @@ func (c *DNSPacketConn) recvLoop(transport net.PacketConn) error {
 
 		payload := dnsResponsePayload(&resp, c.domain)
 
-		// Pull out the packets contained in the payload.
-		r := bytes.NewReader(payload)
-		for {
-			p, err := nextPacket(r)
-			if err != nil {
-				break
-			}
-			c.QueuePacketConn.QueueIncoming(p, addr)
-		}
+		c.QueuePacketConn.QueueIncoming(payload, addr)
 
 	}
 }
