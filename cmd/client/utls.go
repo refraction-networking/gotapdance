@@ -42,7 +42,7 @@ var utlsClientHelloIDMap = []struct {
 // case-insensitive label match, or nil if there is no match.
 func utlsLookup(label string) *utls.ClientHelloID {
 	for _, entry := range utlsClientHelloIDMap {
-		if strings.ToLower(label) == strings.ToLower(entry.Label) {
+		if strings.EqualFold(label, entry.Label) {
 			return entry.ID
 		}
 	}

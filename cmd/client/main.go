@@ -176,6 +176,9 @@ func main() {
 		}
 
 		utlsClientHelloID, err := sampleUTLSDistribution(utlsDistribution)
+		if err != nil {
+			log.Fatal(err)
+		}
 		if utlsClientHelloID != nil {
 			log.Printf("uTLS fingerprint %s %s", utlsClientHelloID.Client, utlsClientHelloID.Version)
 		}
