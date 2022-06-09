@@ -53,6 +53,7 @@ func sampleUTLSDistribution(spec string) (*utls.ClientHelloID, error) {
 	return ids[sampleWeighted(weights)], nil
 }
 
+// Send the payload together with noise handshake, returns noise recvCipher for decrypting response
 func sendHandshake(pconn net.PacketConn, remoteAddr net.Addr, pubkey []byte, payload []byte) (*noise.CipherState, *noise.CipherState, error) {
 
 	config := encryption.NewConfig()

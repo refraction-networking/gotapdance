@@ -127,7 +127,8 @@ func readKeyFromFile(filename string) ([]byte, error) {
 	return encryption.ReadKey(f)
 }
 
-func craftResponse(msg []byte, getResponse func([]byte) ([]byte, error)) ([]byte, error) {
+// Decrypt the message and pass it to processMsg, then encrypt and return the response.
+func craftResponse(msg []byte, processMsg func([]byte) ([]byte, error)) ([]byte, error) {
 	handshakeState, err := noise.NewHandshakeState(noiseConfig)
 	if err != nil {
 		return nil, err
@@ -138,7 +139,7 @@ func craftResponse(msg []byte, getResponse func([]byte) ([]byte, error)) ([]byte
 		return nil, err
 	}
 
-	responseBytes, err := getResponse(payload)
+	responseBytes, err := processMsg(payload)
 	if err != nil {
 		return nil, err
 	}
@@ -305,21 +306,22 @@ func recvLoop(domain dns.Name, dnsConn net.PacketConn, getResponse func([]byte) 
 				log.Printf("cannot parse DNS query: %v", err)
 			}
 
-			resp, p := responseFor(&query, domain)
+			resp, payload := responseFor(&query, domain)
 			if resp == nil {
 				return
 			}
 
 			var responseBuf []byte
 
-			if p != nil {
-				p, err = msgformat.RemoveRequestFormat(p)
+			// invalid msg if returned payload is empty, do not process
+			if payload != nil {
+				payload, err = msgformat.RemoveRequestFormat(payload)
 				if err != nil {
 					log.Printf("RemoveFormat err: %v", err)
 					return
 				}
 
-				responseBuf, err = craftResponse(p, getResponse)
+				responseBuf, err = craftResponse(payload, getResponse)
 				if err != nil {
 					log.Printf("craftResponse err: %v", err)
 					return
@@ -339,7 +341,7 @@ func recvLoop(domain dns.Name, dnsConn net.PacketConn, getResponse func([]byte) 
 			}
 
 			if len(responsePayload) > maxUDPPayload {
-				log.Printf("Response UDP payload length [%d] exceed maxUDPPayload size [%d], responding with empty response.", len(responsePayload), maxUDPPayload)
+				log.Printf("ERR: Response UDP payload length [%d] exceed maxUDPPayload size [%d], responding with empty response.", len(responsePayload), maxUDPPayload)
 				responsePayload, err = dnsRespToUDPResp(resp, []byte{})
 				if err != nil {
 					log.Printf("dnsRespToUDPResp err: %v", err)
@@ -355,6 +357,7 @@ func recvLoop(domain dns.Name, dnsConn net.PacketConn, getResponse func([]byte) 
 	}
 }
 
+// Put response payload into DNS answer ready to send
 func dnsRespToUDPResp(resp *dns.Message, response []byte) ([]byte, error) {
 	if resp.Rcode() == dns.RcodeNoError && len(resp.Question) == 1 {
 		// If it's a non-error response, we can fill the Answer
@@ -424,7 +427,7 @@ func main() {
 	if genKey {
 		if err := generateKeypair(privkeyFilenameOut, pubkeyFilenameOut); err != nil {
 			fmt.Fprintf(os.Stderr, "cannot generate keypair: %v\n", err)
-			os.Exit(1)
+			os.Exit(2)
 		}
 		return
 	}
@@ -445,14 +448,12 @@ func main() {
 
 	basename, err := dns.ParseName(domain)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "invalid domain %+q: %v\n", flag.Arg(0), err)
-		os.Exit(1)
+		log.Fatal(err)
 	}
 
 	dnsConn, err := net.ListenPacket("udp", udpAddr)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "opening UDP listener: %v\n", err)
-		os.Exit(1)
+		log.Fatal(err)
 	}
 
 	privkey, err := readKeyFromFile(privkeyFilename)

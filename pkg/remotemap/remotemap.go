@@ -61,6 +61,7 @@ func (m *RemoteMap) GetChan(addr net.Addr) (chan []byte, bool) {
 	return record.Chan, isNewAddr
 }
 
+// Get Channel corresponding to addr
 func (m *RemoteMap) Chan(addr net.Addr) chan []byte {
 	rv, _ := m.GetChan(addr)
 	return rv
