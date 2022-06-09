@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/base32"
 	"encoding/binary"
-	"fmt"
 	"log"
 	"net"
 
@@ -101,32 +100,6 @@ func dnsResponsePayload(resp *dns.Message, domain dns.Name) []byte {
 // recvLoop repeatedly calls transport.ReadFrom to receive a DNS message,
 // extracts its payload and breaks it into packets, and stores the packets in a
 // queue to be returned from a future call to c.ReadFrom.
-//
-// Whenever we receive a DNS response containing at least one data packet, we
-// send on c.pollChan to permit sendLoop to send an immediate polling queries.
-// KCP itself will also send an ACK packet for incoming data, which is
-// effectively a second poll. Therefore, each time we receive data, we send up
-// to 2 polling queries (or 1 + f polling queries, if KCP only ACKs an f
-// fraction of incoming data). We say "up to" because sendLoop will discard an
-// empty polling query if it has an organic non-empty packet to send (this goes
-// also for KCP's organic ACK packets).
-//
-// The intuition behind polling immediately after receiving is that if server
-// has just had something to send, it may have more to send, and in order for
-// the server to send anything, we must give it a query to respond to. The
-// intuition behind polling *2 times* (or 1 + f times) is similar to TCP slow
-// start: we want to maintain some number of queries "in flight", and the faster
-// the server is sending, the higher that number should be. If we polled only
-// once for each received packet, we would tend to have only one query in flight
-// at a time, ping-pong style. The first polling query replaces the in-flight
-// query that has just finished its duty in returning data to us; the second
-// grows the effective in-flight window proportional to the rate at which
-// data-carrying responses are being received. Compare to Eq. (2) of
-// https://tools.ietf.org/html/rfc5681#section-3.1. The differences are that we
-// count messages, not bytes, and we don't maintain an explicit window. If a
-// response comes back without data, or if a query or response is dropped by the
-// network, then we don't poll again, which decreases the effective in-flight
-// window.
 func (c *DNSPacketConn) recvLoop(transport net.PacketConn) error {
 	for {
 		var buf [4096]byte
@@ -149,7 +122,6 @@ func (c *DNSPacketConn) recvLoop(transport net.PacketConn) error {
 		payload := dnsResponsePayload(&resp, c.domain)
 
 		c.QueuePacketConn.QueueIncoming(payload, addr)
-
 	}
 }
 
@@ -171,31 +143,17 @@ func chunks(p []byte, n int) [][]byte {
 // send sends p as a single packet encoded into a DNS query, using
 // transport.WriteTo(query, addr). The length of p must be less than 224 bytes.
 //
-// Here is an example of how a packet is encoded into a DNS name, using
-//     p = "supercalifragilisticexpialidocious"
-//     c.clientID = "CLIENTID"
-//     domain = "t.example.com"
-//
 // 0. Start with the raw packet contents.
 //     supercalifragilisticexpialidocious
-// 1. Length-prefix the packet and add random padding. A length prefix L < 0xe0
-// means a data packet of L bytes. A length prefix L >= 0xe0 means padding of L -
-// 0xe0 bytes (not counting the length of the length prefix itself).
-//     \xe3\xd9\xa3\x15\x22supercalifragilisticexpialidocious
-// 2. Prefix the ClientID.
-//     CLIENTID\xe3\xd9\xa3\x15\x22supercalifragilisticexpialidocious
-// 3. Base32-encode, without padding and in lower case.
+// 1. Base32-encode, without padding and in lower case.
 //     ingesrkokreujy6zumkse43vobsxey3bnruwm4tbm5uwy2ltoruwgzlyobuwc3djmrxwg2lpovzq
-// 4. Break into labels of at most 63 octets.
+// 2. Break into labels of at most 63 octets.
 //     ingesrkokreujy6zumkse43vobsxey3bnruwm4tbm5uwy2ltoruwgzlyobuwc3d.jmrxwg2lpovzq
-// 5. Append the domain.
+// 3. Append the domain.
 //     ingesrkokreujy6zumkse43vobsxey3bnruwm4tbm5uwy2ltoruwgzlyobuwc3d.jmrxwg2lpovzq.t.example.com
 func (c *DNSPacketConn) send(transport net.PacketConn, p []byte, addr net.Addr) error {
 	var decoded []byte
 	{
-		if len(p) >= 224 {
-			return fmt.Errorf("too long")
-		}
 		var buf bytes.Buffer
 		buf.Write(p)
 		decoded = buf.Bytes()
