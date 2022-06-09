@@ -84,9 +84,14 @@ func handle(pconn net.PacketConn, remoteAddr net.Addr, pubkey []byte, sendBytes 
 	}
 
 	var recvBuf [4096]byte
-	_, _, err = pconn.ReadFrom(recvBuf[:])
-	if err != nil {
-		return nil, err
+	for {
+		_, recvAddr, err := pconn.ReadFrom(recvBuf[:])
+		if err != nil {
+			return nil, err
+		}
+		if recvAddr.String() == remoteAddr.String() {
+			break
+		}
 	}
 
 	encryptedBuf, err := msgformat.RemoveResponseFormat(recvBuf[:])
@@ -100,7 +105,6 @@ func handle(pconn net.PacketConn, remoteAddr net.Addr, pubkey []byte, sendBytes 
 	}
 
 	return recvBytes, nil
-
 }
 
 func run(domain dns.Name, remoteAddr net.Addr, pconn net.PacketConn, msg string, pubkey []byte) error {
