@@ -152,15 +152,8 @@ func chunks(p []byte, n int) [][]byte {
 // 3. Append the domain.
 //     ingesrkokreujy6zumkse43vobsxey3bnruwm4tbm5uwy2ltoruwgzlyobuwc3d.jmrxwg2lpovzq.t.example.com
 func (c *DNSPacketConn) send(transport net.PacketConn, p []byte, addr net.Addr) error {
-	var decoded []byte
-	{
-		var buf bytes.Buffer
-		buf.Write(p)
-		decoded = buf.Bytes()
-	}
-
-	encoded := make([]byte, base32Encoding.EncodedLen(len(decoded)))
-	base32Encoding.Encode(encoded, decoded)
+	encoded := make([]byte, base32Encoding.EncodedLen(len(p)))
+	base32Encoding.Encode(encoded, p)
 	encoded = bytes.ToLower(encoded)
 	labels := chunks(encoded, 63)
 	labels = append(labels, c.domain...)
