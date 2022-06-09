@@ -342,6 +342,15 @@ func recvLoop(domain dns.Name, dnsConn net.PacketConn, privkey []byte, getRespon
 				return
 			}
 
+			if len(responsePayload) > maxUDPPayload {
+				log.Printf("Response UDP payload length [%d] exceed maxUDPPayload size [%d], responding with empty response.", len(responsePayload), maxUDPPayload)
+				responsePayload, err = dnsRespToUDPResp(resp, []byte{})
+				if err != nil {
+					log.Printf("dnsRespToUDPResp err: %v", err)
+					return
+				}
+			}
+
 			_, err = dnsConn.WriteTo(responsePayload, addr)
 			if err != nil {
 				log.Printf("WriteTo err: %v", err)
@@ -367,25 +376,13 @@ func dnsRespToUDPResp(resp *dns.Message, response []byte) ([]byte, error) {
 			},
 		}
 
-		var payload bytes.Buffer
-
-		//binary.Write(&payload, binary.BigEndian, uint16(len(response)))
-		payload.Write(response)
-
-		resp.Answer[0].Data = dns.EncodeRDataTXT(payload.Bytes())
+		resp.Answer[0].Data = dns.EncodeRDataTXT(response)
 	}
 
 	buf, err := resp.WireFormat()
 	if err != nil {
 		log.Printf("resp WireFormat: %v", err)
 		return nil, err
-	}
-	// Truncate if necessary.
-	// https://tools.ietf.org/html/rfc1035#section-4.1.1
-	if len(buf) > maxUDPPayload {
-		log.Printf("truncating response of %d bytes to max of %d", len(buf), maxUDPPayload)
-		buf = buf[:maxUDPPayload]
-		buf[2] |= 0x02 // TC = 1
 	}
 
 	return buf, nil
@@ -419,6 +416,7 @@ func main() {
 	flag.StringVar(&pubkeyFilenameOut, "pubkeyFilename", "", "generated server public key filename (only used with -genKey)")
 	flag.StringVar(&privkeyFilenameOut, "privkeyFilename", "", "generated server private key filename (only used with -genKey)")
 	flag.BoolVar(&genKey, "genKey", false, "generate a server keypair; print to stdout or save to files")
+	flag.IntVar(&maxUDPPayload, "mtu", maxUDPPayload, "maximum size of DNS responses")
 	flag.Parse()
 
 	if genKey {
