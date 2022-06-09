@@ -24,11 +24,6 @@ var base32Encoding = base32.StdEncoding.WithPadding(base32.NoPadding)
 // encoded DNS messages. That is rather the responsibility of some other
 // net.PacketConn such as net.UDPConn, HTTPPacketConn, or TLSPacketConn, one of
 // which must be provided to NewDNSPacketConn.
-//
-// We don't have a need to match up a query and a response by ID. Queries and
-// responses are vehicles for carrying data and for our purposes don't need to
-// be correlated. When sending a query, we generate a random ID, and when
-// receiving a response, we ignore the ID.
 type DNSPacketConn struct {
 	domain dns.Name
 	// QueuePacketConn is the direct receiver of ReadFrom and WriteTo calls.
