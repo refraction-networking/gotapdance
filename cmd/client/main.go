@@ -66,7 +66,7 @@ func sendHandshake(pconn net.PacketConn, remoteAddr net.Addr, pubkey []byte, pay
 	if err != nil {
 		return nil, nil, err
 	}
-	msgToSend, err = msgformat.AddFormat([]byte(msgToSend))
+	msgToSend, err = msgformat.AddRequestFormat([]byte(msgToSend))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -89,7 +89,7 @@ func handle(pconn net.PacketConn, remoteAddr net.Addr, pubkey []byte, sendBytes 
 		return nil, err
 	}
 
-	encryptedBuf, err := msgformat.RemoveFormat(recvBuf[:])
+	encryptedBuf, err := msgformat.RemoveResponseFormat(recvBuf[:])
 	if err != nil {
 		return nil, err
 	}

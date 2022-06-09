@@ -207,7 +207,7 @@ func NewClient(pconn net.PacketConn, remote net.Addr, pubkey []byte) (*Encrypted
 		return nil, err
 	}
 
-	msgToSend, err = msgformat.AddFormat([]byte(msgToSend))
+	msgToSend, err = msgformat.AddRequestFormat([]byte(msgToSend))
 
 	if err != nil {
 		return nil, err

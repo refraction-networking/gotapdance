@@ -317,7 +317,7 @@ func recvLoop(domain dns.Name, dnsConn net.PacketConn, privkey []byte, getRespon
 			var responseBuf []byte
 
 			if p != nil {
-				p, err = msgformat.RemoveFormat(p)
+				p, err = msgformat.RemoveRequestFormat(p)
 				if err != nil {
 					log.Printf("RemoveFormat err: %v", err)
 					return
@@ -329,7 +329,7 @@ func recvLoop(domain dns.Name, dnsConn net.PacketConn, privkey []byte, getRespon
 					return
 				}
 
-				responseBuf, err = msgformat.AddFormat(responseBuf)
+				responseBuf, err = msgformat.AddResponseFormat(responseBuf)
 				if err != nil {
 					log.Printf("AddFormat err: %v", err)
 					return
