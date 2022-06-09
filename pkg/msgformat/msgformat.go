@@ -16,8 +16,8 @@ func RemoveFormat(p []byte) ([]byte, error) {
 	if len(p) < 1 {
 		return nil, errors.New("invalid message length")
 	}
-	length := uint8(p[0])
-	if int(1+length) > len(p) {
+	length := int(uint8(p[0]))
+	if 1+length >= len(p) {
 		return nil, errors.New("invalid message length")
 	}
 	return p[1 : 1+length], nil
