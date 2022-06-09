@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -84,51 +83,40 @@ func sendHandshake(pconn net.PacketConn, remoteAddr net.Addr, pubkey []byte, pay
 	return recvCipher, sendCipher, nil
 }
 
-func handle(pconn net.PacketConn, remoteAddr net.Addr, pubkey []byte, sendBytes []byte, recvFunc func([]byte) error) error {
-	for i := 0; i < numTries; i++ {
-		recvCipher, _, err := sendHandshake(pconn, remoteAddr, pubkey, sendBytes)
-		if err != nil {
-			return err
-		}
-
-		var recvBuf [4096]byte
-		_, _, err = pconn.ReadFrom(recvBuf[:])
-		if err != nil {
-			return err
-		}
-
-		encryptedBuf, err := msgformat.RemoveFormat(recvBuf[:])
-		if err != nil {
-			return err
-		}
-
-		recvBytes, err := recvCipher.Decrypt(nil, nil, encryptedBuf)
-		if err != nil {
-			return err
-		}
-
-		err = recvFunc(recvBytes)
-
-		if err == nil {
-			return nil
-		}
+func handle(pconn net.PacketConn, remoteAddr net.Addr, pubkey []byte, sendBytes []byte) ([]byte, error) {
+	recvCipher, _, err := sendHandshake(pconn, remoteAddr, pubkey, sendBytes)
+	if err != nil {
+		return nil, err
 	}
-	return errors.New("max tries reached")
+
+	var recvBuf [4096]byte
+	_, _, err = pconn.ReadFrom(recvBuf[:])
+	if err != nil {
+		return nil, err
+	}
+
+	encryptedBuf, err := msgformat.RemoveFormat(recvBuf[:])
+	if err != nil {
+		return nil, err
+	}
+
+	recvBytes, err := recvCipher.Decrypt(nil, nil, encryptedBuf)
+	if err != nil {
+		return nil, err
+	}
+
+	return recvBytes, nil
 
 }
 
 func run(domain dns.Name, remoteAddr net.Addr, pconn net.PacketConn, msg string, pubkey []byte) error {
 	defer pconn.Close()
 
-	recvFunc := func(recvBytes []byte) error {
-		log.Printf("Received: [%s]", string(recvBytes))
-		return nil
-	}
-
-	err := handle(pconn, remoteAddr, pubkey, []byte(msg), recvFunc)
+	recvBytes, err := handle(pconn, remoteAddr, pubkey, []byte(msg))
 	if err != nil {
 		log.Printf("handle: %v\n", err)
 	}
+	log.Printf("Received: [%s]", string(recvBytes))
 	return nil
 }
 
