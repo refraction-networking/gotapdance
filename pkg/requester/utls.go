@@ -1,4 +1,4 @@
-package main
+package requester
 
 // Support code for TLS camouflage using uTLS.
 

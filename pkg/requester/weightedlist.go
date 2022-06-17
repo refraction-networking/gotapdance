@@ -1,4 +1,4 @@
-package main
+package requester
 
 // Random selection from weighted distributions, and strings for specifying such
 // distributions.
