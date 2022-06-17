@@ -7,7 +7,6 @@ import (
 	"net"
 	"os"
 
-	"github.com/mingyech/conjure-dns-registrar/pkg/dns"
 	"github.com/mingyech/conjure-dns-registrar/pkg/encryption"
 	"github.com/mingyech/conjure-dns-registrar/pkg/requester"
 )
@@ -62,12 +61,6 @@ func main() {
 		os.Exit(2)
 	}
 
-	basename, err := dns.ParseName(domain)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	pubkey, err := readKeyFromFile(pubkeyFilename)
 
 	if err != nil {
@@ -80,7 +73,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		req, err = requester.NewUDPRequester(remoteAddr, basename, pubkey)
+		req, err = requester.NewUDPRequester(remoteAddr, domain, pubkey)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -94,7 +87,7 @@ func main() {
 		}
 
 		if dohaddr != "" {
-			req, err = requester.NewDoHRequester(dohaddr, basename, pubkey, utlsDistribution)
+			req, err = requester.NewDoHRequester(dohaddr, domain, pubkey, utlsDistribution)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -105,7 +98,7 @@ func main() {
 				flag.Usage()
 				os.Exit(2)
 			}
-			req, err = requester.NewDoTRequester(dotaddr, basename, pubkey, utlsDistribution)
+			req, err = requester.NewDoTRequester(dotaddr, domain, pubkey, utlsDistribution)
 			if err != nil {
 				log.Fatal(err)
 			}

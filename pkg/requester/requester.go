@@ -28,7 +28,12 @@ type Requester struct {
 }
 
 // New Requester using DoT as transport
-func NewDoTRequester(dotaddr string, domain dns.Name, pubkey []byte, utlsDistribution string) (*Requester, error) {
+func NewDoTRequester(dotaddr string, domain string, pubkey []byte, utlsDistribution string) (*Requester, error) {
+	basename, err := dns.ParseName(domain)
+	if err != nil {
+		return nil, err
+	}
+
 	utlsClientHelloID, err := sampleUTLSDistribution(utlsDistribution)
 	if err != nil {
 		return nil, err
@@ -48,7 +53,7 @@ func NewDoTRequester(dotaddr string, domain dns.Name, pubkey []byte, utlsDistrib
 		return nil, err
 	}
 
-	pconn := NewDNSPacketConn(dotconn, remoteAddr, domain)
+	pconn := NewDNSPacketConn(dotconn, remoteAddr, basename)
 
 	return &Requester{
 		transport:  pconn,
@@ -58,7 +63,12 @@ func NewDoTRequester(dotaddr string, domain dns.Name, pubkey []byte, utlsDistrib
 }
 
 // New Requester using DoH as transport
-func NewDoHRequester(dohurl string, domain dns.Name, pubkey []byte, utlsDistribution string) (*Requester, error) {
+func NewDoHRequester(dohurl string, domain string, pubkey []byte, utlsDistribution string) (*Requester, error) {
+	basename, err := dns.ParseName(domain)
+	if err != nil {
+		return nil, err
+	}
+
 	utlsClientHelloID, err := sampleUTLSDistribution(utlsDistribution)
 	if err != nil {
 		return nil, err
@@ -84,7 +94,7 @@ func NewDoHRequester(dohurl string, domain dns.Name, pubkey []byte, utlsDistribu
 		return nil, err
 	}
 
-	pconn := NewDNSPacketConn(dohconn, remoteAddr, domain)
+	pconn := NewDNSPacketConn(dohconn, remoteAddr, basename)
 
 	return &Requester{
 		transport:  pconn,
@@ -94,12 +104,17 @@ func NewDoHRequester(dohurl string, domain dns.Name, pubkey []byte, utlsDistribu
 }
 
 // New Requester using plain UDP as transport
-func NewUDPRequester(remoteAddr net.Addr, domain dns.Name, pubkey []byte) (*Requester, error) {
+func NewUDPRequester(remoteAddr net.Addr, domain string, pubkey []byte) (*Requester, error) {
+	basename, err := dns.ParseName(domain)
+	if err != nil {
+		return nil, err
+	}
+
 	udpconn, err := net.ListenUDP("udp", nil)
 	if err != nil {
 		return nil, err
 	}
-	pconn := NewDNSPacketConn(udpconn, remoteAddr, domain)
+	pconn := NewDNSPacketConn(udpconn, remoteAddr, basename)
 	return &Requester{
 		transport:  pconn,
 		remoteAddr: remoteAddr,
