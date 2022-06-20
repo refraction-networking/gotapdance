@@ -32,14 +32,14 @@ func run(requester *requester.Requester, msg string) error {
 }
 
 func main() {
-	var updaddr string
+	var udpaddr string
 	var domain string
 	var msg string
 	var pubkeyFilename string
 	var dohaddr string
 	var dotaddr string
 	var utlsDistribution string
-	flag.StringVar(&updaddr, "udp", "", "address of UDP DNS resolver")
+	flag.StringVar(&udpaddr, "udp", "", "address of UDP DNS resolver")
 	flag.StringVar(&dohaddr, "doh", "", "address of DoH DNS resolver")
 	flag.StringVar(&dotaddr, "dot", "", "address of DoT DNS resolver")
 	flag.StringVar(&domain, "domain", "", "base domain in requests")
@@ -68,8 +68,8 @@ func main() {
 	}
 
 	var req *requester.Requester
-	if updaddr != "" {
-		remoteAddr, err := net.ResolveUDPAddr("udp", updaddr)
+	if udpaddr != "" {
+		remoteAddr, err := net.ResolveUDPAddr("udp", udpaddr)
 		if err != nil {
 			log.Fatal(err)
 		}
