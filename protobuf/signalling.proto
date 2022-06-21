@@ -267,6 +267,7 @@ enum RegistrationSource {
 	API = 2;
   DetectorPrescan = 3;
   BidirectionalAPI = 4;
+  DNS = 5;
 }
 
 message C2SWrapper {
