@@ -87,10 +87,13 @@ message ClientConf {
     optional PubKey conjure_pubkey = 5;
 }
 
+// Configuration for DNS registrar
 message DNSRegConf {
+    // only use 1 out of the three following
     optional string udp_addr = 1;
     optional string dot_addr = 2;
     optional string doh_url = 3;
+
     required string domain = 4;
     required bytes pubkey = 5;
     optional string utls_distribution = 6;

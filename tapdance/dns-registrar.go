@@ -13,12 +13,12 @@ import (
 
 type DNSRegistrar struct {
 	req      *requester.Requester
-	numTries int
+	maxTries int
 }
 
-func NewDNSRegistrar(udpAddr string, dotAddr string, dohUrl string, domain string, pubkey []byte, utlsDistribution string, numTries int) (*DNSRegistrar, error) {
-	var r *DNSRegistrar
-	r.numTries = numTries
+func NewDNSRegistrar(udpAddr string, dotAddr string, dohUrl string, domain string, pubkey []byte, utlsDistribution string, maxTries int) (*DNSRegistrar, error) {
+	r := &DNSRegistrar{}
+	r.maxTries = maxTries
 	var err error
 	if utlsDistribution == "" {
 		utlsDistribution = "3*Firefox_65,1*Firefox_63,1*iOS_12_1"
@@ -102,7 +102,7 @@ func (r DNSRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (
 		return nil, err
 	}
 
-	for i := 0; i < r.numTries; i++ {
+	for i := 0; i < r.maxTries; i++ {
 		regResp := &pb.RegistrationResponse{}
 		response, err := r.req.RequestAndRecv(payload)
 		if err != nil {

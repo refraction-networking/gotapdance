@@ -23,6 +23,8 @@ type assets struct {
 
 	config *pb.ClientConf
 
+	dnsRegConf *pb.DNSRegConf
+
 	roots *x509.CertPool
 
 	filenameRoots      string
@@ -86,6 +88,12 @@ func getDefaultTapdanceKey() []byte {
 	return key
 }
 
+func getDefaultDNSRegKey() []byte {
+	keyStr := "637a315fbae8854e19e0145606c36b5a172c0a478fbca628b61abc26e8207b1a"
+	key, _ := hex.DecodeString(keyStr)
+	return key
+}
+
 func initAssets(path string) error {
 	var defaultDecoys = []*pb.TLSDecoySpec{
 		pb.InitTLSDecoySpec("192.122.190.104", "tapdance1.freeaeskey.xyz"),
@@ -109,9 +117,28 @@ func initAssets(path string) error {
 		Generation:    &defaultGeneration,
 	}
 
+	defaultDnsRegDomain := "t.mingye.ch"
+	defaultDnsRegUdpAddr := "1.1.1.1:53"
+	defaultDnsRegDotAddr := ""
+	defaultDnsRegDohUrl := ""
+	defaultDnsRegPubkey := getDefaultDNSRegKey()
+	defaultDnsRegMaxRetries := uint32(5)
+	defaultDnsRegUtlsDistribution := "3*Firefox_65,1*Firefox_63,1*iOS_12_1"
+
+	defaultDnsRegConf := pb.DNSRegConf{
+		UdpAddr:          &defaultDnsRegUdpAddr,
+		DotAddr:          &defaultDnsRegDotAddr,
+		DohUrl:           &defaultDnsRegDohUrl,
+		Domain:           &defaultDnsRegDomain,
+		Pubkey:           defaultDnsRegPubkey,
+		MaxTries:         &defaultDnsRegMaxRetries,
+		UtlsDistribution: &defaultDnsRegUtlsDistribution,
+	}
+
 	assetsInstance = &assets{
 		path:               path,
 		config:             &defaultClientConf,
+		dnsRegConf:         &defaultDnsRegConf,
 		filenameRoots:      "roots",
 		filenameClientConf: "ClientConf",
 		socksAddr:          "",
@@ -124,6 +151,12 @@ func (a *assets) GetAssetsDir() string {
 	a.RLock()
 	defer a.RUnlock()
 	return a.path
+}
+
+func (a *assets) GetDNSRegConf() pb.DNSRegConf {
+	a.RLock()
+	defer a.RUnlock()
+	return *a.dnsRegConf
 }
 
 func (a *assets) readConfigs() error {
