@@ -16,6 +16,18 @@ type DNSRegistrar struct {
 	maxTries int
 }
 
+func NewDNSRegistrarFromConf(conf pb.DnsRegConf) (*DNSRegistrar, error) {
+	switch *conf.DnsRegMethod {
+	case pb.DnsRegMethod_UDP:
+		return NewDNSRegistrar(*conf.UdpAddr, "", "", *conf.Domain, conf.Pubkey, *conf.UtlsDistribution, int(*conf.MaxTries))
+	case pb.DnsRegMethod_DOT:
+		return NewDNSRegistrar("", *conf.DotAddr, "", *conf.Domain, conf.Pubkey, *conf.UtlsDistribution, int(*conf.MaxTries))
+	case pb.DnsRegMethod_DOH:
+		return NewDNSRegistrar("", "", *conf.DohUrl, *conf.Domain, conf.Pubkey, *conf.UtlsDistribution, int(*conf.MaxTries))
+	}
+	return nil, errors.New("unkown reg method in conf")
+}
+
 func NewDNSRegistrar(udpAddr string, dotAddr string, dohUrl string, domain string, pubkey []byte, utlsDistribution string, maxTries int) (*DNSRegistrar, error) {
 	r := &DNSRegistrar{}
 	r.maxTries = maxTries

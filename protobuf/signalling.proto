@@ -88,16 +88,21 @@ message ClientConf {
 }
 
 // Configuration for DNS registrar
-message DNSRegConf {
-    // only use 1 out of the three following
-    optional string udp_addr = 1;
-    optional string dot_addr = 2;
-    optional string doh_url = 3;
+message DnsRegConf {
+    required DnsRegMethod dns_reg_method = 1;
+    optional string udp_addr = 2;
+    optional string dot_addr = 3;
+    optional string doh_url = 4;
+    required string domain = 5;
+    required bytes pubkey = 6;
+    optional string utls_distribution = 7;
+    optional uint32 max_tries = 8;
+}
 
-    required string domain = 4;
-    required bytes pubkey = 5;
-    optional string utls_distribution = 6;
-    optional uint32 max_tries = 7;
+enum DnsRegMethod {
+    UDP = 0;
+    DOT = 1;
+    DOH = 2;
 }
 
 message DecoyList {

@@ -23,7 +23,7 @@ type assets struct {
 
 	config *pb.ClientConf
 
-	dnsRegConf *pb.DNSRegConf
+	dnsRegConf *pb.DnsRegConf
 
 	roots *x509.CertPool
 
@@ -119,13 +119,15 @@ func initAssets(path string) error {
 
 	defaultDnsRegDomain := "t.mingye.ch"
 	defaultDnsRegUdpAddr := "1.1.1.1:53"
-	defaultDnsRegDotAddr := ""
-	defaultDnsRegDohUrl := ""
+	defaultDnsRegDotAddr := "1.1.1.1:853"
+	defaultDnsRegDohUrl := "https://1.1.1.1/dns-query"
 	defaultDnsRegPubkey := getDefaultDNSRegKey()
 	defaultDnsRegMaxRetries := uint32(5)
 	defaultDnsRegUtlsDistribution := "3*Firefox_65,1*Firefox_63,1*iOS_12_1"
+	defaultDnsRegMethod := pb.DnsRegMethod_DOT
 
-	defaultDnsRegConf := pb.DNSRegConf{
+	defaultDnsRegConf := pb.DnsRegConf{
+		DnsRegMethod:     &defaultDnsRegMethod,
 		UdpAddr:          &defaultDnsRegUdpAddr,
 		DotAddr:          &defaultDnsRegDotAddr,
 		DohUrl:           &defaultDnsRegDohUrl,
@@ -153,7 +155,7 @@ func (a *assets) GetAssetsDir() string {
 	return a.path
 }
 
-func (a *assets) GetDNSRegConf() pb.DNSRegConf {
+func (a *assets) GetDNSRegConf() pb.DnsRegConf {
 	a.RLock()
 	defer a.RUnlock()
 	return *a.dnsRegConf

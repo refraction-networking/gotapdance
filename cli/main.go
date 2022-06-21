@@ -148,7 +148,7 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connect_target
 		}
 	} else if registrar == "dns" {
 		dnsConf := tapdance.Assets().GetDNSRegConf()
-		tdDialer.DarkDecoyRegistrar, err = tapdance.NewDNSRegistrar(*dnsConf.UdpAddr, *dnsConf.DotAddr, *dnsConf.DohUrl, *dnsConf.Domain, dnsConf.Pubkey, *dnsConf.UtlsDistribution, int(*dnsConf.MaxTries))
+		tdDialer.DarkDecoyRegistrar, err = tapdance.NewDNSRegistrarFromConf(dnsConf)
 		if err != nil {
 			return fmt.Errorf("error creating DNS registrar: [%v]", err)
 		}
