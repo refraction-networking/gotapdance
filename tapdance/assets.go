@@ -117,14 +117,14 @@ func initAssets(path string) error {
 		Generation:    &defaultGeneration,
 	}
 
-	defaultDnsRegDomain := "t.mingye.ch"
+	defaultDnsRegDomain := "r.refraction.network"
 	defaultDnsRegUdpAddr := "1.1.1.1:53"
 	defaultDnsRegDotAddr := "1.1.1.1:853"
 	defaultDnsRegDohUrl := "https://1.1.1.1/dns-query"
 	defaultDnsRegPubkey := getDefaultDNSRegKey()
 	defaultDnsRegMaxRetries := uint32(5)
 	defaultDnsRegUtlsDistribution := "3*Firefox_65,1*Firefox_63,1*iOS_12_1"
-	defaultDnsRegMethod := pb.DnsRegMethod_DOT
+	defaultDnsRegMethod := pb.DnsRegMethod_UDP
 
 	defaultDnsRegConf := pb.DnsRegConf{
 		DnsRegMethod:     &defaultDnsRegMethod,
