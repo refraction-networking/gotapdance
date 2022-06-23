@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"io"
 	"net"
+	"net/http"
+	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mingyech/conjure-dns-registrar/pkg/requester"
@@ -14,6 +17,7 @@ import (
 type DNSRegistrar struct {
 	req      *requester.Requester
 	maxTries int
+	ip       []byte
 }
 
 func NewDNSRegistrarFromConf(conf pb.DnsRegConf) (*DNSRegistrar, error) {
@@ -75,25 +79,31 @@ func NewDNSRegistrar(udpAddr string, dotAddr string, dohUrl string, domain strin
 	if r.req == nil {
 		return nil, errors.New("one of udpAddr, dohUrl, dotAddr must be provided")
 	}
+
+	r.ip, err = getPublicIp()
+	if err != nil {
+		Logger().Errorf("Failed to get public IP: [%v]", err)
+		return nil, err
+	}
 	return r, nil
 }
 
 func (r DNSRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (*ConjureReg, error) {
 	Logger().Debugf("%v registering via DNSRegistrar", cjSession.IDString())
 
-	phantom4, phantom6, err := SelectPhantom(cjSession.Keys.ConjureSeed, cjSession.V6Support.include)
-	if err != nil {
-		Logger().Warnf("%v failed to select Phantom: %v", cjSession.IDString(), err)
-		return nil, err
-	}
+	// phantom4, phantom6, err := SelectPhantom(cjSession.Keys.ConjureSeed, cjSession.V6Support.include)
+	// if err != nil {
+	// Logger().Warnf("%v failed to select Phantom: %v", cjSession.IDString(), err)
+	// return nil, err
+	// }
 
 	// [reference] Prepare registration
 	reg := &ConjureReg{
-		sessionIDStr:   cjSession.IDString(),
-		keys:           cjSession.Keys,
-		stats:          &pb.SessionStats{},
-		phantom4:       phantom4,
-		phantom6:       phantom6,
+		sessionIDStr: cjSession.IDString(),
+		keys:         cjSession.Keys,
+		stats:        &pb.SessionStats{},
+		// phantom4:       phantom4,
+		// phantom6:       phantom6,
 		v6Support:      cjSession.V6Support.include,
 		covertAddress:  cjSession.CovertAddress,
 		transport:      cjSession.Transport,
@@ -106,6 +116,7 @@ func (r DNSRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (
 	protoPayload := pb.C2SWrapper{
 		SharedSecret:        cjSession.Keys.SharedSecret,
 		RegistrationPayload: c2s,
+		RegistrationAddress: r.ip,
 	}
 
 	payload, err := proto.Marshal(&protoPayload)
@@ -113,6 +124,8 @@ func (r DNSRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (
 		Logger().Warnf("%v failed to marshal ClientToStation payload: %v", cjSession.IDString(), err)
 		return nil, err
 	}
+
+	Logger().Debugf("Payload length: [%d]", len(payload))
 
 	for i := 0; i < r.maxTries; i++ {
 		regResp := &pb.RegistrationResponse{}
@@ -126,6 +139,8 @@ func (r DNSRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (
 			Logger().Warnf("error in storing Registrtion Response protobuf: %v", err)
 			continue
 		}
+		Logger().Debugf("%v DNS registration succeeded", cjSession.IDString())
+		sleepWithContext(ctx, 2*time.Second)
 		conjReg := r.unpackRegResp(reg, regResp)
 		return conjReg, nil
 	}
@@ -171,4 +186,26 @@ func (r DNSRegistrar) unpackRegResp(reg *ConjureReg, regResp *pb.RegistrationRes
 	}
 
 	return reg
+}
+
+func getPublicIp() ([]byte, error) {
+	resp, err := http.Get("https://api.ipify.org")
+	if err != nil {
+		return nil, err
+	}
+
+	ipBuf, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	ip := net.ParseIP(string(ipBuf))
+
+	if ip == nil {
+		return nil, errors.New("ip parsing failed: [" + string(ipBuf) + "]")
+	}
+
+	Logger().Debugf("Public IP is: [%s]", ip.String())
+
+	return ip.To4(), nil
 }
