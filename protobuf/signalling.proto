@@ -311,7 +311,7 @@ message StationToDetector {
     optional uint64 timeout_ns = 3;
 }
 
-// Adding message response from Station to Client for birdirectional API
+// Adding message response from Station to Client for bidirectional API
 message RegistrationResponse {
   optional fixed32 ipv4addr = 1;
   // The 128-bit ipv6 address, in network byte order
@@ -329,4 +329,11 @@ message RegistrationResponse {
 
   // ClientConf field (optional)
   optional ClientConf clientConf = 6;
+}
+
+// response from dns
+message DnsResponse {
+    optional bool success = 1;
+    optional bool clientconf_outdated = 2;
+    optional RegistrationResponse bidirectional_response = 3;
 }
