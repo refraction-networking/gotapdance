@@ -7,7 +7,7 @@ require (
 	github.com/golang/protobuf v1.5.2
 	github.com/jinzhu/copier v0.3.5
 	github.com/keltia/ripe-atlas v0.0.0-20211221125000-f6eb808d5dc6
-	github.com/mingyech/conjure-dns-registrar v0.0.0-20220617204823-1cba0fd9ab38
+	github.com/mingyech/conjure-dns-registrar v0.0.0-20220621214803-13e5f3f05c94
 	github.com/mroth/weightedrand v0.4.1
 	github.com/pelletier/go-toml v1.9.4
 	github.com/pkg/errors v0.9.1

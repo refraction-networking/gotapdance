@@ -273,6 +273,7 @@ enum RegistrationSource {
   DetectorPrescan = 3;
   BidirectionalAPI = 4;
   DNS = 5;
+  BidirectionalDNS = 6;
 }
 
 message C2SWrapper {
@@ -329,4 +330,3 @@ message RegistrationResponse {
   // ClientConf field (optional)
   optional ClientConf clientConf = 6;
 }
-

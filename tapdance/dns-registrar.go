@@ -15,26 +15,28 @@ import (
 )
 
 type DNSRegistrar struct {
-	req      *requester.Requester
-	maxTries int
-	ip       []byte
+	req           *requester.Requester
+	maxTries      int
+	bidirectional bool
+	ip            []byte
 }
 
-func NewDNSRegistrarFromConf(conf pb.DnsRegConf) (*DNSRegistrar, error) {
+func NewDNSRegistrarFromConf(conf pb.DnsRegConf, bidirectional bool) (*DNSRegistrar, error) {
 	switch *conf.DnsRegMethod {
 	case pb.DnsRegMethod_UDP:
-		return NewDNSRegistrar(*conf.UdpAddr, "", "", *conf.Domain, conf.Pubkey, *conf.UtlsDistribution, int(*conf.MaxTries))
+		return NewDNSRegistrar(*conf.UdpAddr, "", "", *conf.Domain, conf.Pubkey, *conf.UtlsDistribution, int(*conf.MaxTries), bidirectional)
 	case pb.DnsRegMethod_DOT:
-		return NewDNSRegistrar("", *conf.DotAddr, "", *conf.Domain, conf.Pubkey, *conf.UtlsDistribution, int(*conf.MaxTries))
+		return NewDNSRegistrar("", *conf.DotAddr, "", *conf.Domain, conf.Pubkey, *conf.UtlsDistribution, int(*conf.MaxTries), bidirectional)
 	case pb.DnsRegMethod_DOH:
-		return NewDNSRegistrar("", "", *conf.DohUrl, *conf.Domain, conf.Pubkey, *conf.UtlsDistribution, int(*conf.MaxTries))
+		return NewDNSRegistrar("", "", *conf.DohUrl, *conf.Domain, conf.Pubkey, *conf.UtlsDistribution, int(*conf.MaxTries), bidirectional)
 	}
 	return nil, errors.New("unkown reg method in conf")
 }
 
-func NewDNSRegistrar(udpAddr string, dotAddr string, dohUrl string, domain string, pubkey []byte, utlsDistribution string, maxTries int) (*DNSRegistrar, error) {
+func NewDNSRegistrar(udpAddr string, dotAddr string, dohUrl string, domain string, pubkey []byte, utlsDistribution string, maxTries int, bidirectional bool) (*DNSRegistrar, error) {
 	r := &DNSRegistrar{}
 	r.maxTries = maxTries
+	r.bidirectional = bidirectional
 	var err error
 	if utlsDistribution == "" {
 		utlsDistribution = "3*Firefox_65,1*Firefox_63,1*iOS_12_1"
@@ -91,24 +93,42 @@ func NewDNSRegistrar(udpAddr string, dotAddr string, dohUrl string, domain strin
 func (r DNSRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (*ConjureReg, error) {
 	Logger().Debugf("%v registering via DNSRegistrar", cjSession.IDString())
 
-	// phantom4, phantom6, err := SelectPhantom(cjSession.Keys.ConjureSeed, cjSession.V6Support.include)
-	// if err != nil {
-	// Logger().Warnf("%v failed to select Phantom: %v", cjSession.IDString(), err)
-	// return nil, err
-	// }
+	var reg *ConjureReg
 
-	// [reference] Prepare registration
-	reg := &ConjureReg{
-		sessionIDStr: cjSession.IDString(),
-		keys:         cjSession.Keys,
-		stats:        &pb.SessionStats{},
-		// phantom4:       phantom4,
-		// phantom6:       phantom6,
-		v6Support:      cjSession.V6Support.include,
-		covertAddress:  cjSession.CovertAddress,
-		transport:      cjSession.Transport,
-		TcpDialer:      cjSession.TcpDialer,
-		useProxyHeader: cjSession.UseProxyHeader,
+	if r.bidirectional {
+		reg = &ConjureReg{
+			sessionIDStr: cjSession.IDString(),
+			keys:         cjSession.Keys,
+			stats:        &pb.SessionStats{},
+			// phantom4:       phantom4,
+			// phantom6:       phantom6,
+			v6Support:      cjSession.V6Support.include,
+			covertAddress:  cjSession.CovertAddress,
+			transport:      cjSession.Transport,
+			TcpDialer:      cjSession.TcpDialer,
+			useProxyHeader: cjSession.UseProxyHeader,
+		}
+	} else {
+
+		phantom4, phantom6, err := SelectPhantom(cjSession.Keys.ConjureSeed, cjSession.V6Support.include)
+		if err != nil {
+			Logger().Warnf("%v failed to select Phantom: %v", cjSession.IDString(), err)
+			return nil, err
+		}
+
+		// [reference] Prepare registration
+		reg = &ConjureReg{
+			sessionIDStr:   cjSession.IDString(),
+			keys:           cjSession.Keys,
+			stats:          &pb.SessionStats{},
+			phantom4:       phantom4,
+			phantom6:       phantom6,
+			v6Support:      cjSession.V6Support.include,
+			covertAddress:  cjSession.CovertAddress,
+			transport:      cjSession.Transport,
+			TcpDialer:      cjSession.TcpDialer,
+			useProxyHeader: cjSession.UseProxyHeader,
+		}
 	}
 
 	c2s := reg.generateClientToStation()
@@ -117,6 +137,12 @@ func (r DNSRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (
 		SharedSecret:        cjSession.Keys.SharedSecret,
 		RegistrationPayload: c2s,
 		RegistrationAddress: r.ip,
+	}
+
+	if r.bidirectional {
+		protoPayload.RegistrationSource = pb.RegistrationSource_BidirectionalDNS.Enum()
+	} else {
+		protoPayload.RegistrationSource = pb.RegistrationSource_DNS.Enum()
 	}
 
 	payload, err := proto.Marshal(&protoPayload)
@@ -141,6 +167,9 @@ func (r DNSRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (
 		}
 		Logger().Debugf("%v DNS registration succeeded", cjSession.IDString())
 		sleepWithContext(ctx, 2*time.Second)
+		if !r.bidirectional {
+			return reg, nil
+		}
 		conjReg := r.unpackRegResp(reg, regResp)
 		return conjReg, nil
 	}

@@ -38,7 +38,7 @@ func main() {
 
 	var td = flag.Bool("td", false, "Enable tapdance cli mode for compatibility")
 	var APIRegistration = flag.String("api-endpoint", "", "If set, API endpoint to use when performing API registration. Defaults to https://registration.refraction.network/api/register (or register-bidirectional for bdapi)")
-	var registrar = flag.String("registrar", "decoy", "One of decoy, api, bdapi, dns.")
+	var registrar = flag.String("registrar", "decoy", "One of decoy, api, bdapi, dns, bddns.")
 	var transport = flag.String("transport", "min", `The transport to use for Conjure connections. Current values include "min" and "obfs4".`)
 
 	flag.Usage = func() {
@@ -148,11 +148,16 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connect_target
 		}
 	} else if registrar == "dns" {
 		dnsConf := tapdance.Assets().GetDNSRegConf()
-		tdDialer.DarkDecoyRegistrar, err = tapdance.NewDNSRegistrarFromConf(dnsConf)
+		tdDialer.DarkDecoyRegistrar, err = tapdance.NewDNSRegistrarFromConf(dnsConf, false)
 		if err != nil {
 			return fmt.Errorf("error creating DNS registrar: [%v]", err)
 		}
-
+	} else if registrar == "bddns" {
+		dnsConf := tapdance.Assets().GetDNSRegConf()
+		tdDialer.DarkDecoyRegistrar, err = tapdance.NewDNSRegistrarFromConf(dnsConf, true)
+		if err != nil {
+			return fmt.Errorf("error creating DNS registrar: [%v]", err)
+		}
 	} else if registrar == "decoy" {
 		// Done
 	} else {
