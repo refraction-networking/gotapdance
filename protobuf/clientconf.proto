@@ -2,10 +2,12 @@ syntax = "proto2";
 
 package tapdance;
 
-option go_package = "tdproto";
-
+import "google/protobuf/any.proto";
 import "signalling.proto";
 
+option go_package = "tdproto";
+
+// Represents an individual config
 message DeploymentConfig {
     optional DecoyList decoy_list = 1;
     optional uint32 generation = 2;
@@ -14,16 +16,23 @@ message DeploymentConfig {
     optional PubKey conjure_pubkey = 5;
     optional uint32 version_number = 6;
     repeated TransportType suported_transports = 7;
-    optional Registrar supported_API_registrar = 8;
-    optional Registrar supported_decoy_registrar = 9;
-    repeated Registrar supported_other_registrars = 10;
+    repeated Registrar registrars = 8;
 }
 
+// Houses multiple deployment configs
 message ClientConfig2 {
     optional uint32 version_number = 1;
     repeated DeploymentConfig deployment_configs = 2;
 }
 
+enum RegistrarType {
+    REGISTRAR_TYPE_NULL = 0;
+    REGISTRAR_TYPE_API = 1;
+    REGISTRAR_TYPE_DECOY = 2;
+    REGISTRAR_TYPE_OTHER = 3;
+}
+
 message Registrar {
-    optional string url = 1;
+    optional RegistrarType registrar_type = 1;
+    optional google.protobuf.Any registrar = 2;
 }
