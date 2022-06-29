@@ -4,6 +4,7 @@ go 1.16
 
 require (
 	git.torproject.org/pluggable-transports/goptlib.git v1.2.0
+	github.com/ccding/go-stun v0.1.5-0.20220419042218-44e89cab7805
 	github.com/golang/protobuf v1.5.2
 	github.com/jinzhu/copier v0.3.5
 	github.com/keltia/ripe-atlas v0.0.0-20211221125000-f6eb808d5dc6

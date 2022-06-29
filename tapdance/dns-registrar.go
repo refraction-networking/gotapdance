@@ -93,7 +93,7 @@ func NewDNSRegistrar(udpAddr string, dotAddr string, dohUrl string, domain strin
 	return r, nil
 }
 
-// Send the registration request.
+// Prepare and send the registration request.
 func (r DNSRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (*ConjureReg, error) {
 	Logger().Debugf("%v registering via DNSRegistrar", cjSession.IDString())
 
