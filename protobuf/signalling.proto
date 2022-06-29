@@ -96,7 +96,6 @@ message DnsRegConf {
     required string domain = 5;
     required bytes pubkey = 6;
     optional string utls_distribution = 7;
-    optional uint32 max_tries = 8;
 }
 
 enum DnsRegMethod {

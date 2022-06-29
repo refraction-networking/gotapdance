@@ -228,7 +228,7 @@ func (r APIRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (
 			Logger().Debugf("%v API registration succeeded", cjSession.IDString())
 			if r.ConnectionDelay != 0 {
 				Logger().Debugf("%v sleeping for %v", cjSession.IDString(), r.ConnectionDelay)
-				sleepWithContext(ctx, 2*time.Second)
+				sleepWithContext(ctx, r.ConnectionDelay)
 			}
 			return reg, nil
 		}

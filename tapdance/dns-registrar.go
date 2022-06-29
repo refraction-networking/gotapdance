@@ -15,30 +15,32 @@ import (
 )
 
 type DNSRegistrar struct {
-	req           *requester.Requester
-	maxTries      int
-	bidirectional bool
-	ip            []byte
+	req             *requester.Requester
+	maxTries        int
+	connectionDelay time.Duration
+	bidirectional   bool
+	ip              []byte
 }
 
 // Create a DNSRegistrar from DnsRegConf.
-func NewDNSRegistrarFromConf(conf *pb.DnsRegConf, bidirectional bool) (*DNSRegistrar, error) {
+func NewDNSRegistrarFromConf(conf *pb.DnsRegConf, bidirectional bool, delay time.Duration, maxTries int) (*DNSRegistrar, error) {
 	switch *conf.DnsRegMethod {
 	case pb.DnsRegMethod_UDP:
-		return NewDNSRegistrar(*conf.UdpAddr, "", "", *conf.Domain, conf.Pubkey, *conf.UtlsDistribution, int(*conf.MaxTries), bidirectional)
+		return NewDNSRegistrar(*conf.UdpAddr, "", "", *conf.Domain, conf.Pubkey, *conf.UtlsDistribution, maxTries, bidirectional, delay)
 	case pb.DnsRegMethod_DOT:
-		return NewDNSRegistrar("", *conf.DotAddr, "", *conf.Domain, conf.Pubkey, *conf.UtlsDistribution, int(*conf.MaxTries), bidirectional)
+		return NewDNSRegistrar("", *conf.DotAddr, "", *conf.Domain, conf.Pubkey, *conf.UtlsDistribution, maxTries, bidirectional, delay)
 	case pb.DnsRegMethod_DOH:
-		return NewDNSRegistrar("", "", *conf.DohUrl, *conf.Domain, conf.Pubkey, *conf.UtlsDistribution, int(*conf.MaxTries), bidirectional)
+		return NewDNSRegistrar("", "", *conf.DohUrl, *conf.Domain, conf.Pubkey, *conf.UtlsDistribution, maxTries, bidirectional, delay)
 	}
 	return nil, errors.New("unkown reg method in conf")
 }
 
 // Create a DNSRegistrar. Exactly one of udpAddr, dotAddr, and dohUrl should be provided.
-func NewDNSRegistrar(udpAddr string, dotAddr string, dohUrl string, domain string, pubkey []byte, utlsDistribution string, maxTries int, bidirectional bool) (*DNSRegistrar, error) {
+func NewDNSRegistrar(udpAddr string, dotAddr string, dohUrl string, domain string, pubkey []byte, utlsDistribution string, maxTries int, bidirectional bool, delay time.Duration) (*DNSRegistrar, error) {
 	r := &DNSRegistrar{}
 	r.maxTries = maxTries
 	r.bidirectional = bidirectional
+	r.connectionDelay = delay
 	var err error
 	if utlsDistribution == "" {
 		utlsDistribution = "3*Firefox_65,1*Firefox_63,1*iOS_12_1"

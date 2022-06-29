@@ -122,7 +122,6 @@ func initAssets(path string) error {
 	defaultDnsRegDotAddr := "1.1.1.1:853"
 	defaultDnsRegDohUrl := "https://1.1.1.1/dns-query"
 	defaultDnsRegPubkey := getDefaultDNSRegKey()
-	defaultDnsRegMaxRetries := uint32(5)
 	defaultDnsRegUtlsDistribution := "3*Firefox_65,1*Firefox_63,1*iOS_12_1"
 	defaultDnsRegMethod := pb.DnsRegMethod_UDP
 
@@ -133,7 +132,6 @@ func initAssets(path string) error {
 		DohUrl:           &defaultDnsRegDohUrl,
 		Domain:           &defaultDnsRegDomain,
 		Pubkey:           defaultDnsRegPubkey,
-		MaxTries:         &defaultDnsRegMaxRetries,
 		UtlsDistribution: &defaultDnsRegUtlsDistribution,
 	}
 
