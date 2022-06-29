@@ -96,6 +96,7 @@ message DnsRegConf {
     required string domain = 5;
     required bytes pubkey = 6;
     optional string utls_distribution = 7;
+    optional string stun_server = 8;
 }
 
 enum DnsRegMethod {

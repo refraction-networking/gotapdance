@@ -4,11 +4,10 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
-	"io"
 	"net"
-	"net/http"
 	"time"
 
+	"github.com/ccding/go-stun/stun"
 	"github.com/golang/protobuf/proto"
 	"github.com/mingyech/conjure-dns-registrar/pkg/requester"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
@@ -26,17 +25,17 @@ type DNSRegistrar struct {
 func NewDNSRegistrarFromConf(conf *pb.DnsRegConf, bidirectional bool, delay time.Duration, maxTries int) (*DNSRegistrar, error) {
 	switch *conf.DnsRegMethod {
 	case pb.DnsRegMethod_UDP:
-		return NewDNSRegistrar(*conf.UdpAddr, "", "", *conf.Domain, conf.Pubkey, *conf.UtlsDistribution, maxTries, bidirectional, delay)
+		return NewDNSRegistrar(*conf.UdpAddr, "", "", *conf.Domain, conf.Pubkey, *conf.UtlsDistribution, maxTries, bidirectional, delay, *conf.StunServer)
 	case pb.DnsRegMethod_DOT:
-		return NewDNSRegistrar("", *conf.DotAddr, "", *conf.Domain, conf.Pubkey, *conf.UtlsDistribution, maxTries, bidirectional, delay)
+		return NewDNSRegistrar("", *conf.DotAddr, "", *conf.Domain, conf.Pubkey, *conf.UtlsDistribution, maxTries, bidirectional, delay, *conf.StunServer)
 	case pb.DnsRegMethod_DOH:
-		return NewDNSRegistrar("", "", *conf.DohUrl, *conf.Domain, conf.Pubkey, *conf.UtlsDistribution, maxTries, bidirectional, delay)
+		return NewDNSRegistrar("", "", *conf.DohUrl, *conf.Domain, conf.Pubkey, *conf.UtlsDistribution, maxTries, bidirectional, delay, *conf.StunServer)
 	}
 	return nil, errors.New("unkown reg method in conf")
 }
 
 // Create a DNSRegistrar. Exactly one of udpAddr, dotAddr, and dohUrl should be provided.
-func NewDNSRegistrar(udpAddr string, dotAddr string, dohUrl string, domain string, pubkey []byte, utlsDistribution string, maxTries int, bidirectional bool, delay time.Duration) (*DNSRegistrar, error) {
+func NewDNSRegistrar(udpAddr string, dotAddr string, dohUrl string, domain string, pubkey []byte, utlsDistribution string, maxTries int, bidirectional bool, delay time.Duration, stun_server string) (*DNSRegistrar, error) {
 	r := &DNSRegistrar{}
 	r.maxTries = maxTries
 	r.bidirectional = bidirectional
@@ -86,7 +85,7 @@ func NewDNSRegistrar(udpAddr string, dotAddr string, dohUrl string, domain strin
 		return nil, errors.New("one of udpAddr, dohUrl, dotAddr must be provided")
 	}
 
-	r.ip, err = getPublicIp()
+	r.ip, err = getPublicIp(stun_server)
 	if err != nil {
 		Logger().Errorf("Failed to get public IP: [%v]", err)
 		return nil, err
@@ -234,21 +233,16 @@ func (r DNSRegistrar) unpackRegResp(reg *ConjureReg, regResp *pb.RegistrationRes
 	return reg
 }
 
-func getPublicIp() ([]byte, error) {
-	resp, err := http.Get("https://api.ipify.org")
-	if err != nil {
-		return nil, err
-	}
+func getPublicIp(server string) ([]byte, error) {
 
-	ipBuf, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
+	client := stun.NewClient()
 
-	ip := net.ParseIP(string(ipBuf))
+	client.SetServerAddr(server)
 
+	_, host, _ := client.Discover()
+	ip := net.ParseIP(host.IP())
 	if ip == nil {
-		return nil, errors.New("ip parsing failed: [" + string(ipBuf) + "]")
+		return nil, errors.New("ip parsing failed: [" + host.IP() + "]")
 	}
 
 	Logger().Debugf("Public IP is: [%s]", ip.String())
