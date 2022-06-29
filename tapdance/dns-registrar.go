@@ -21,6 +21,7 @@ type DNSRegistrar struct {
 	ip            []byte
 }
 
+// Create a DNSRegistrar from DnsRegConf.
 func NewDNSRegistrarFromConf(conf *pb.DnsRegConf, bidirectional bool) (*DNSRegistrar, error) {
 	switch *conf.DnsRegMethod {
 	case pb.DnsRegMethod_UDP:
@@ -33,6 +34,7 @@ func NewDNSRegistrarFromConf(conf *pb.DnsRegConf, bidirectional bool) (*DNSRegis
 	return nil, errors.New("unkown reg method in conf")
 }
 
+// Create a DNSRegistrar. Exactly one of udpAddr, dotAddr, and dohUrl should be provided.
 func NewDNSRegistrar(udpAddr string, dotAddr string, dohUrl string, domain string, pubkey []byte, utlsDistribution string, maxTries int, bidirectional bool) (*DNSRegistrar, error) {
 	r := &DNSRegistrar{}
 	r.maxTries = maxTries
@@ -90,6 +92,7 @@ func NewDNSRegistrar(udpAddr string, dotAddr string, dohUrl string, domain strin
 	return r, nil
 }
 
+// Send the registration request.
 func (r DNSRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (*ConjureReg, error) {
 	Logger().Debugf("%v registering via DNSRegistrar", cjSession.IDString())
 
