@@ -157,12 +157,18 @@ func (r DNSRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (
 	Logger().Debugf("Payload length: [%d]", len(payload))
 
 	for i := 0; i < r.maxTries; i++ {
-		dnsResp := &pb.DnsResponse{}
 		response, err := r.req.RequestAndRecv(payload)
 		if err != nil {
 			Logger().Warnf("error in sending request to DNS registrar: %v", err)
 			continue
 		}
+
+		// If unidirectional, do no check response
+		if !r.bidirectional {
+			return reg, nil
+		}
+
+		dnsResp := &pb.DnsResponse{}
 		err = proto.Unmarshal(response, dnsResp)
 		if err != nil {
 			Logger().Warnf("error in storing Registrtion Response protobuf: %v", err)
@@ -175,9 +181,6 @@ func (r DNSRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (
 		Logger().Debugf("%v DNS registration succeeded", cjSession.IDString())
 		sleepWithContext(ctx, 2*time.Second)
 
-		if !r.bidirectional {
-			return reg, nil
-		}
 		if dnsResp.GetClientconfOutdated() {
 			Logger().Warnf("Registrar indicates that ClinetConf is outdated")
 		}
