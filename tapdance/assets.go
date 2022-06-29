@@ -155,10 +155,10 @@ func (a *assets) GetAssetsDir() string {
 	return a.path
 }
 
-func (a *assets) GetDNSRegConf() pb.DnsRegConf {
+func (a *assets) GetDNSRegConf() *pb.DnsRegConf {
 	a.RLock()
 	defer a.RUnlock()
-	return *a.dnsRegConf
+	return a.dnsRegConf
 }
 
 func (a *assets) readConfigs() error {
@@ -170,7 +170,7 @@ func (a *assets) readConfigs() error {
 		roots := x509.NewCertPool()
 		ok := roots.AppendCertsFromPEM(rootCerts)
 		if !ok {
-			return errors.New("Failed to parse root certificates")
+			return errors.New("failed to parse root certificates")
 		}
 		a.roots = roots
 		return nil

@@ -21,7 +21,7 @@ type DNSRegistrar struct {
 	ip            []byte
 }
 
-func NewDNSRegistrarFromConf(conf pb.DnsRegConf, bidirectional bool) (*DNSRegistrar, error) {
+func NewDNSRegistrarFromConf(conf *pb.DnsRegConf, bidirectional bool) (*DNSRegistrar, error) {
 	switch *conf.DnsRegMethod {
 	case pb.DnsRegMethod_UDP:
 		return NewDNSRegistrar(*conf.UdpAddr, "", "", *conf.Domain, conf.Pubkey, *conf.UtlsDistribution, int(*conf.MaxTries), bidirectional)
