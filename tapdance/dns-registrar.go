@@ -156,35 +156,36 @@ func (r DNSRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (
 		return nil, err
 	}
 
-	Logger().Debugf("Payload length: [%d]", len(payload))
+	Logger().Debugf("%v DNS payload length: [%d]", cjSession.IDString(), len(payload))
 
 	for i := 0; i < r.maxTries; i++ {
 		response, err := r.req.RequestAndRecv(payload)
 		if err != nil {
-			Logger().Warnf("error in sending request to DNS registrar: %v", err)
+			Logger().Warnf("%v error in sending request to DNS registrar: %v", cjSession.IDString(), err)
 			continue
 		}
 
 		// If unidirectional, do no check response
 		if !r.bidirectional {
+			sleepWithContext(ctx, r.connectionDelay)
 			return reg, nil
 		}
 
 		dnsResp := &pb.DnsResponse{}
 		err = proto.Unmarshal(response, dnsResp)
 		if err != nil {
-			Logger().Warnf("error in storing Registrtion Response protobuf: %v", err)
+			Logger().Warnf("%v error in storing Registrtion Response protobuf: %v", cjSession.IDString(), err)
 			continue
 		}
 		if !dnsResp.GetSuccess() {
-			Logger().Warnf("Registrar indicates that registration failed")
+			Logger().Warnf("%v Registrar indicates that registration failed", cjSession.IDString())
 			continue
 		}
 		Logger().Debugf("%v DNS registration succeeded", cjSession.IDString())
-		sleepWithContext(ctx, 2*time.Second)
+		sleepWithContext(ctx, r.connectionDelay)
 
 		if dnsResp.GetClientconfOutdated() {
-			Logger().Warnf("Registrar indicates that ClinetConf is outdated")
+			Logger().Warnf("%v Registrar indicates that ClinetConf is outdated", cjSession.IDString())
 		}
 		conjReg := r.unpackRegResp(reg, dnsResp.GetBidirectionalResponse())
 		return conjReg, nil
