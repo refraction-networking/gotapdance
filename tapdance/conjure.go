@@ -27,6 +27,21 @@ import (
 	"golang.org/x/crypto/hkdf"
 )
 
+// CurrentClientLibraryVersion returns the current client library version used
+// for feature compatibility support between client and server. Currently I
+// don't intend to connect this to the library tag version in any way.
+//
+// When adding new client versions comment out older versions and add new
+// version below with a description of the reason for the new version.
+func currentClientLibraryVersion() uint32 {
+	// Initial inclusion of client version - added due to update in phantom
+	// selection algorithm that is not backwards compatible to older clients.
+	return 1
+
+	// // No client version indicates any client before this change.
+	// return 0
+}
+
 // V6 - Struct to track V6 support and cache result across sessions
 type V6 struct {
 	support bool
@@ -753,8 +768,10 @@ func (reg *ConjureReg) generateClientToStation() *pb.ClientToStation {
 	//[reference] Generate ClientToStation protobuf
 	// transition := pb.C2S_Transition_C2S_SESSION_INIT
 	currentGen := Assets().GetGeneration()
+	currentLibVer := currentClientLibraryVersion()
 	transport := reg.getPbTransport()
 	initProto := &pb.ClientToStation{
+		ClientLibVersion:    &currentLibVer,
 		CovertAddress:       covert,
 		DecoyListGeneration: &currentGen,
 		V6Support:           reg.getV6Support(),

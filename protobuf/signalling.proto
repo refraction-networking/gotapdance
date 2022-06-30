@@ -230,6 +230,9 @@ message ClientToStation {
     // YIELD=>ACQUIRE switchover is happening.
     optional uint64 upload_sync = 4;
 
+    // High level client library version used for indicating feature support, or
+    // lack therof.
+    optional uint32 client_lib_version = 5;
 
     // List of decoys that client have unsuccessfully tried in current session.
     // Could be sent in chunks
@@ -260,7 +263,7 @@ message ClientToStation {
 
     // Transport Extensions
     optional WebRTCSignal webrtc_signal = 31;
-    
+
     // Random-sized junk to defeat packet size fingerprinting.
     optional bytes padding = 100;
 }
