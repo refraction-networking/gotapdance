@@ -34,12 +34,12 @@ import (
 // When adding new client versions comment out older versions and add new
 // version below with a description of the reason for the new version.
 func currentClientLibraryVersion() uint32 {
-
 	// Initial inclusion of client version - added due to update in phantom
 	// selection algorithm that is not backwards compatible to older clients.
 	return 1
 
-	// No client version indicates any client before this change.
+	// // No client version indicates any client before this change.
+	// return 0
 }
 
 // V6 - Struct to track V6 support and cache result across sessions
