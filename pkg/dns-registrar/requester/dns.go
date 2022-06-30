@@ -8,8 +8,8 @@ import (
 	"log"
 	"net"
 
-	"github.com/mingyech/conjure-dns-registrar/pkg/dns"
-	"github.com/mingyech/conjure-dns-registrar/pkg/queuepacketconn"
+	"github.com/refraction-networking/gotapdance/pkg/dns-registrar/dns"
+	"github.com/refraction-networking/gotapdance/pkg/dns-registrar/queuepacketconn"
 )
 
 // base32Encoding is a base32 encoding without padding.

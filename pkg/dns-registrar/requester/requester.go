@@ -8,10 +8,10 @@ import (
 	"net/http"
 
 	"github.com/flynn/noise"
-	"github.com/mingyech/conjure-dns-registrar/pkg/dns"
-	"github.com/mingyech/conjure-dns-registrar/pkg/encryption"
-	"github.com/mingyech/conjure-dns-registrar/pkg/msgformat"
-	"github.com/mingyech/conjure-dns-registrar/pkg/queuepacketconn"
+	"github.com/refraction-networking/gotapdance/pkg/dns-registrar/dns"
+	"github.com/refraction-networking/gotapdance/pkg/dns-registrar/encryption"
+	"github.com/refraction-networking/gotapdance/pkg/dns-registrar/msgformat"
+	"github.com/refraction-networking/gotapdance/pkg/dns-registrar/queuepacketconn"
 	utls "github.com/refraction-networking/utls"
 )
 

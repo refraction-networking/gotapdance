@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mingyech/conjure-dns-registrar/pkg/queuepacketconn"
+	"github.com/refraction-networking/gotapdance/pkg/dns-registrar/queuepacketconn"
 )
 
 const dialTimeout = 30 * time.Second

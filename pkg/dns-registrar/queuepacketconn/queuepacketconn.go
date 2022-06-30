@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/mingyech/conjure-dns-registrar/pkg/remotemap"
+	"github.com/refraction-networking/gotapdance/pkg/dns-registrar/remotemap"
 )
 
 // taggedPacket is a combination of a []byte and a net.Addr, encapsulating the

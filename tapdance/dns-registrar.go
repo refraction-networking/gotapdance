@@ -9,7 +9,7 @@ import (
 
 	"github.com/ccding/go-stun/stun"
 	"github.com/golang/protobuf/proto"
-	"github.com/mingyech/conjure-dns-registrar/pkg/requester"
+	"github.com/refraction-networking/gotapdance/pkg/dns-registrar/requester"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 )
 

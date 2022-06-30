@@ -7,9 +7,9 @@ import (
 	"net"
 
 	"github.com/flynn/noise"
-	"github.com/mingyech/conjure-dns-registrar/pkg/dns"
-	"github.com/mingyech/conjure-dns-registrar/pkg/encryption"
-	"github.com/mingyech/conjure-dns-registrar/pkg/msgformat"
+	"github.com/refraction-networking/gotapdance/pkg/dns-registrar/dns"
+	"github.com/refraction-networking/gotapdance/pkg/dns-registrar/encryption"
+	"github.com/refraction-networking/gotapdance/pkg/dns-registrar/msgformat"
 )
 
 const (

@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mingyech/conjure-dns-registrar/pkg/queuepacketconn"
+	"github.com/refraction-networking/gotapdance/pkg/dns-registrar/queuepacketconn"
 )
 
 // A default Retry-After delay to use when there is no explicit Retry-After
