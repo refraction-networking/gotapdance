@@ -171,10 +171,9 @@ func SelectAddrFromSubnet(seed []byte, net1 *net.IPNet) (net.IP, error) {
 // bound between the global min and max of that set. This ensures that
 // addresses are chosen based on the number of addresses in the subnet.
 func selectIPAddr(seed []byte, subnets []*net.IPNet) (*net.IP, error) {
-
 	type idNet struct {
 		min, max big.Int
-		net      *net.IPNet
+		net      net.IPNet
 	}
 	var idNets []idNet
 
@@ -188,14 +187,14 @@ func selectIPAddr(seed []byte, subnets []*net.IPNet) (*net.IP, error) {
 			_idNet.min.Set(addressTotal)
 			addressTotal.Add(addressTotal, big.NewInt(2).Exp(big.NewInt(2), big.NewInt(int64(32-netMaskOnes)), nil))
 			_idNet.max.Sub(addressTotal, big.NewInt(1))
-			_idNet.net = _net
+			_idNet.net = *_net
 			idNets = append(idNets, _idNet)
 		} else if ipv6net := _net.IP.To16(); ipv6net != nil {
 			_idNet := idNet{}
 			_idNet.min.Set(addressTotal)
 			addressTotal.Add(addressTotal, big.NewInt(2).Exp(big.NewInt(2), big.NewInt(int64(128-netMaskOnes)), nil))
 			_idNet.max.Sub(addressTotal, big.NewInt(1))
-			_idNet.net = _net
+			_idNet.net = *_net
 			idNets = append(idNets, _idNet)
 		} else {
 			return nil, fmt.Errorf("failed to parse %v", _net)
@@ -215,16 +214,22 @@ func selectIPAddr(seed []byte, subnets []*net.IPNet) (*net.IP, error) {
 		id.Mod(id, addressTotal)
 	}
 
+	// Find the network (ID net) that contains our random value and select a
+	// random address from that subnet.
+	// min >= id%total >= max
 	var result net.IP
 	var err error
 	for _, _idNet := range idNets {
+		// fmt.Printf("tot:%s, seed%%tot:%s     id cmp max: %d,  id cmp min: %d %s\n", addressTotal.String(), id, _idNet.max.Cmp(id), _idNet.min.Cmp(id), _idNet.net.String())
 		if _idNet.max.Cmp(id) >= 0 && _idNet.min.Cmp(id) <= 0 {
-			result, err = SelectAddrFromSubnet(seed, _idNet.net)
+			result, err = SelectAddrFromSubnet(seed, &_idNet.net)
 			if err != nil {
 				return nil, fmt.Errorf("failed to chose IP address: %v", err)
 			}
 		}
 	}
+
+	// We want to make it so this CANNOT happen
 	if result == nil {
 		return nil, errors.New("nil result should not be possible")
 	}
