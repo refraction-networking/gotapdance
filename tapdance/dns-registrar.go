@@ -22,14 +22,18 @@ type DNSRegistrar struct {
 }
 
 // Create a DNSRegistrar from DnsRegConf.
-func NewDNSRegistrarFromConf(conf *pb.DnsRegConf, bidirectional bool, delay time.Duration, maxTries int) (*DNSRegistrar, error) {
+func NewDNSRegistrarFromConf(conf *pb.DnsRegConf, bidirectional bool, delay time.Duration, maxTries int, stationKey []byte) (*DNSRegistrar, error) {
+	pubkey := conf.Pubkey
+	if pubkey == nil {
+		pubkey = stationKey
+	}
 	switch *conf.DnsRegMethod {
 	case pb.DnsRegMethod_UDP:
-		return NewDNSRegistrar(*conf.UdpAddr, "", "", *conf.Domain, conf.Pubkey, *conf.UtlsDistribution, maxTries, bidirectional, delay, *conf.StunServer)
+		return NewDNSRegistrar(*conf.UdpAddr, "", "", *conf.Domain, pubkey, *conf.UtlsDistribution, maxTries, bidirectional, delay, *conf.StunServer)
 	case pb.DnsRegMethod_DOT:
-		return NewDNSRegistrar("", *conf.DotAddr, "", *conf.Domain, conf.Pubkey, *conf.UtlsDistribution, maxTries, bidirectional, delay, *conf.StunServer)
+		return NewDNSRegistrar("", *conf.DotAddr, "", *conf.Domain, pubkey, *conf.UtlsDistribution, maxTries, bidirectional, delay, *conf.StunServer)
 	case pb.DnsRegMethod_DOH:
-		return NewDNSRegistrar("", "", *conf.DohUrl, *conf.Domain, conf.Pubkey, *conf.UtlsDistribution, maxTries, bidirectional, delay, *conf.StunServer)
+		return NewDNSRegistrar("", "", *conf.DohUrl, *conf.Domain, pubkey, *conf.UtlsDistribution, maxTries, bidirectional, delay, *conf.StunServer)
 	}
 	return nil, errors.New("unkown reg method in conf")
 }

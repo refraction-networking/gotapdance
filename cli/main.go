@@ -148,13 +148,13 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connect_target
 		}
 	} else if registrar == "dns" {
 		dnsConf := tapdance.Assets().GetDNSRegConf()
-		tdDialer.DarkDecoyRegistrar, err = tapdance.NewDNSRegistrarFromConf(dnsConf, false, 750*time.Millisecond, 3)
+		tdDialer.DarkDecoyRegistrar, err = tapdance.NewDNSRegistrarFromConf(dnsConf, false, 750*time.Millisecond, 3, tapdance.Assets().GetConjurePubkey()[:])
 		if err != nil {
 			return fmt.Errorf("error creating DNS registrar: [%v]", err)
 		}
 	} else if registrar == "bddns" {
 		dnsConf := tapdance.Assets().GetDNSRegConf()
-		tdDialer.DarkDecoyRegistrar, err = tapdance.NewDNSRegistrarFromConf(dnsConf, true, 750*time.Millisecond, 3)
+		tdDialer.DarkDecoyRegistrar, err = tapdance.NewDNSRegistrarFromConf(dnsConf, true, 750*time.Millisecond, 3, tapdance.Assets().GetConjurePubkey()[:])
 		if err != nil {
 			return fmt.Errorf("error creating DNS registrar: [%v]", err)
 		}

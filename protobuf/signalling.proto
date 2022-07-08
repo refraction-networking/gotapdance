@@ -94,7 +94,7 @@ message DnsRegConf {
     optional string dot_addr = 3;
     optional string doh_url = 4;
     required string domain = 5;
-    required bytes pubkey = 6;
+    optional bytes pubkey = 6;
     optional string utls_distribution = 7;
     optional string stun_server = 8;
 }
