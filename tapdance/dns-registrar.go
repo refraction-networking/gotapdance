@@ -22,20 +22,24 @@ type DNSRegistrar struct {
 }
 
 // Create a DNSRegistrar from DnsRegConf.
-func NewDNSRegistrarFromConf(conf *pb.DnsRegConf, bidirectional bool, delay time.Duration, maxTries int, stationKey []byte) (*DNSRegistrar, error) {
+// Uses the pubkey in conf as default. If it is not supplied (nil), uses fallbackKey instead.
+func NewDNSRegistrarFromConf(conf *pb.DnsRegConf, bidirectional bool, delay time.Duration, maxTries int, fallbackKey []byte) (*DNSRegistrar, error) {
 	pubkey := conf.Pubkey
 	if pubkey == nil {
-		pubkey = stationKey
+		pubkey = fallbackKey
 	}
+	udpAddr, dotAddr, dohUrl := "", "", ""
 	switch *conf.DnsRegMethod {
 	case pb.DnsRegMethod_UDP:
-		return NewDNSRegistrar(*conf.UdpAddr, "", "", *conf.Domain, pubkey, *conf.UtlsDistribution, maxTries, bidirectional, delay, *conf.StunServer)
+		udpAddr = *conf.UdpAddr
 	case pb.DnsRegMethod_DOT:
-		return NewDNSRegistrar("", *conf.DotAddr, "", *conf.Domain, pubkey, *conf.UtlsDistribution, maxTries, bidirectional, delay, *conf.StunServer)
+		dotAddr = *conf.DotAddr
 	case pb.DnsRegMethod_DOH:
-		return NewDNSRegistrar("", "", *conf.DohUrl, *conf.Domain, pubkey, *conf.UtlsDistribution, maxTries, bidirectional, delay, *conf.StunServer)
+		dohUrl = *conf.DohUrl
+	default:
+		return nil, errors.New("unkown reg method in conf")
 	}
-	return nil, errors.New("unkown reg method in conf")
+	return NewDNSRegistrar(udpAddr, dotAddr, dohUrl, *conf.Domain, pubkey, *conf.UtlsDistribution, maxTries, bidirectional, delay, *conf.StunServer)
 }
 
 // Create a DNSRegistrar. Exactly one of udpAddr, dotAddr, and dohUrl should be provided.
