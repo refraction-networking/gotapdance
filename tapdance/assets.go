@@ -118,13 +118,15 @@ func initAssets(path string) error {
 	}
 
 	defaultDnsRegDomain := "r.refraction.network"
+	//defaultDnsRegUdpAddr := "192.168.122.2:53"
 	defaultDnsRegUdpAddr := "1.1.1.1:53"
 	defaultDnsRegDotAddr := "1.1.1.1:853"
 	defaultDnsRegDohUrl := "https://1.1.1.1/dns-query"
+	//defaultStunServer := "192.168.122.2:3478"
 	defaultStunServer := "stun.voip.blackberry.com:3478"
 	defaultDnsRegPubkey := getDefaultDNSRegKey()
 	defaultDnsRegUtlsDistribution := "3*Firefox_65,1*Firefox_63,1*iOS_12_1"
-	defaultDnsRegMethod := pb.DnsRegMethod_UDP
+	defaultDnsRegMethod := pb.DnsRegMethod_DOH
 
 	defaultDnsRegConf := pb.DnsRegConf{
 		DnsRegMethod:     &defaultDnsRegMethod,
