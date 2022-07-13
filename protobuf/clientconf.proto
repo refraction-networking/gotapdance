@@ -2,7 +2,6 @@ syntax = "proto2";
 
 package tapdance;
 
-import "google/protobuf/any.proto";
 import "signalling.proto";
 
 option go_package = "tdproto";
@@ -25,14 +24,44 @@ message ClientConfig2 {
     repeated DeploymentConfig deployment_configs = 2;
 }
 
-enum RegistrarType {
-    REGISTRAR_TYPE_NULL = 0;
-    REGISTRAR_TYPE_API = 1;
-    REGISTRAR_TYPE_DECOY = 2;
-    REGISTRAR_TYPE_OTHER = 3;
-}
-
 message Registrar {
     optional RegistrarType registrar_type = 1;
-    optional google.protobuf.Any registrar = 2;
+    optional bool bidirectional = 2;    // Expect response from registrar or not
+    
+    optional DNSRegConf dns_reg_conf_params = 10;
+
+    optional APIRegConf api_reg_conf_params = 20;
+
+    optional DecoyRegConf decoy_reg_conf_params = 30;
 }
+
+enum RegistrarType {
+    REGISTRAR_TYPE_UNKNOWN = 0;
+    REGISTRAR_TYPE_API = 1;
+    REGISTRAR_TYPE_DECOY = 2;
+    REGISTRAR_TYPE_DNS = 3;
+}
+
+enum RegistrarDNSProtocol {
+    REGISTRAR_DNS_PROTOCOL_UNKNOWN = 0;
+    REGISTRAR_DNS_PROTOCOL_UDP = 1;
+    REGISTRAR_DNS_PROTOCOL_DOH = 2;
+    REGISTRAR_DNS_PROTOCOL_DOT = 3;
+}
+
+message DNSRegConf {
+    required RegistrarDNSProtocol dns_reg_method = 1;
+    optional string udp_addr = 2;
+    optional string dot_addr = 3;
+    optional string doh_url = 4;
+    required string domain = 5;
+    required bytes pubkey = 6;
+    optional string utls_distribution = 7;
+    optional string stun_server = 8;
+}
+
+message APIRegConf {
+    optional string api_url = 1;
+}
+
+message DecoyRegConf {}
