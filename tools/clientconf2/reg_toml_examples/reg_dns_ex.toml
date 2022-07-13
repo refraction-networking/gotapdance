@@ -1,0 +1,8 @@
+DnsRegMethod = "udp"  # required
+UdpAddr = "192.168.1.2"
+#DotAddr = "192.168.1.3"
+#DohUrl = "dohurl.com"
+Domain = "cooldomainna.me"    # required
+Pubkey = "103ebf3d7d501aa202c78b7016ffccd51079c4c00137500100ef5bd1cac47e16" # required
+UtlsDistribution = "utls"
+StunServer = "stun"
