@@ -17,9 +17,9 @@ import (
 
 // Track all cmdline parameters in struct
 type flagValues struct {
-	fname, out_fname, pubkey, cjPubkey, host, ip, add_subnets, subnet_file, registrar_type, registrar_host                          string
+	fname, out_fname, pubkey, cjPubkey, host, ip, add_subnets, subnet_file, registrar_type, registrar_host, registrar_file          string
 	generation, del_decoy, update_decoy, update_config, del_config, timeout, tcpwin, delete_subnet, update_registrar, del_registrar int
-	delpubkey, add_decoy, add_config, all_decoys, add_registrar, noout                                                              bool
+	delpubkey, add_decoy, add_config, all_decoys, add_registrar, reg_bidir, noout                                                   bool
 	weight                                                                                                                          uint
 }
 
@@ -55,8 +55,9 @@ func parseCmdLineFlags() *flagValues {
 	var add_registrar = flag.Bool("add-registrar", false, "If set, adds a registrar, requires -registrar-type and -registrar-host")
 	var update_registrar = flag.Int("update-registrar", -1, "Specifies `index` of registrar to update")
 	var del_registrar = flag.Int("del-registrar", -1, "Specifies `index` of registrar to remove")
-	var registrar_type = flag.String("registrar-type", "", "Set registrar type `<a | d | o>` to API, decoy, or other")
-	var registrar_host = flag.String("registrar-host", "", "Specifies registrar host")
+	var registrar_type = flag.String("registrar-type", "", "Set registrar type `<unknown | api | dns | decoy>`")
+	var reg_bidir = flag.Bool("registrar-bidir", false, "Specifies whether registrar is bidirectional")
+	var registrar_file = flag.String("registrar-file", "", "Path to TOML file containing DNS/API/Decoy parameters")
 
 	var noout = flag.Bool("noout", false, "Don't print ClientConf")
 
@@ -89,7 +90,8 @@ func parseCmdLineFlags() *flagValues {
 		update_registrar: *update_registrar,
 		del_registrar:    *del_registrar,
 		registrar_type:   *registrar_type,
-		registrar_host:   *registrar_host,
+		reg_bidir:        *reg_bidir,
+		registrar_file:   *registrar_file,
 	}
 }
 
@@ -101,7 +103,7 @@ func printClientConf(clientConf *pb.ClientConfig2) {
 		fmt.Println()
 		decoyHeader := fmt.Sprintf("Deployment Config %d", i)
 		fmt.Println(decoyHeader)
-		fmt.Println(strings.Repeat("=", len(decoyHeader)))
+		fmt.Println(strings.Repeat("=", 80)) // 80 = std terminal width
 		fmt.Println()
 		printDeployConf(conf)
 	}
@@ -145,6 +147,81 @@ func printDeployConf(deployConf *pb.DeploymentConfig) {
 			for _, subnet := range block.GetSubnets() {
 				fmt.Printf(" %d: %s\n", index, subnet)
 				index++
+			}
+		}
+	}
+
+	registrars := deployConf.GetRegistrars()
+	if registrars != nil {
+		fmt.Printf("\nRegistrars:\n")
+		for i, reg := range registrars {
+			fmt.Printf("%d:\n", i)
+			fmt.Printf("  Bidirectional: %t\n", reg.GetBidirectional())
+
+			var reg_type string
+			switch reg.GetRegistrarType() {
+			case pb.RegistrarType_REGISTRAR_TYPE_UNKNOWN:
+				reg_type = "unknown"
+			case pb.RegistrarType_REGISTRAR_TYPE_API:
+				reg_type = "api"
+			case pb.RegistrarType_REGISTRAR_TYPE_DECOY:
+				reg_type = "decoy"
+			case pb.RegistrarType_REGISTRAR_TYPE_DNS:
+				reg_type = "dns"
+			default:
+				log.Fatalf("unknown DNS protocol type %s", reg_type)
+			}
+			fmt.Printf("  Type: %s\n", reg_type)
+
+			api_params := reg.GetApiRegConfParams()
+			if api_params != nil && api_params.GetApiUrl() != "" {
+				fmt.Printf("  %s params:\n", reg_type)
+				fmt.Printf("    API URL: %s\n", api_params.GetApiUrl())
+			}
+
+			// Decoy message empty, nothing to do
+			//decoy_params := reg.GetDecoyRegConfParams()
+			//if decoy_params != nil {
+			//	// pass
+			//}
+
+			dns_params := reg.GetDnsRegConfParams()
+			if dns_params != nil {
+				fmt.Printf("  %s params:\n", reg_type)
+				var dns_reg_method string
+				switch dns_params.GetDnsRegMethod() {
+				case pb.RegistrarDNSProtocol_REGISTRAR_DNS_PROTOCOL_UNKNOWN:
+					dns_reg_method = "unknown"
+				case pb.RegistrarDNSProtocol_REGISTRAR_DNS_PROTOCOL_UDP:
+					dns_reg_method = "udp"
+				case pb.RegistrarDNSProtocol_REGISTRAR_DNS_PROTOCOL_DOH:
+					dns_reg_method = "doh"
+				case pb.RegistrarDNSProtocol_REGISTRAR_DNS_PROTOCOL_DOT:
+					dns_reg_method = "dot"
+				}
+				fmt.Printf("    DnsRegMethod: %s\n", dns_reg_method)
+				if dns_params.GetUdpAddr() != "" {
+					fmt.Printf("    UDP Addr: %s\n", dns_params.GetUdpAddr())
+				}
+				if dns_params.GetDotAddr() != "" {
+					fmt.Printf("    DoT Addr: %s\n", dns_params.GetDotAddr())
+				}
+				if dns_params.GetDohUrl() != "" {
+					fmt.Printf("    DoH URL: %s\n", dns_params.GetDohUrl())
+				}
+				fmt.Printf("    Domain: %s\n", dns_params.GetDomain())
+				fmt.Printf("    Pubkey: %s\n", hex.EncodeToString(dns_params.GetPubkey()))
+				if dns_params.GetUtlsDistribution() != "" {
+					fmt.Printf("    Utls Distribution: %s\n", dns_params.GetUtlsDistribution())
+				}
+				if dns_params.GetStunServer() != "" {
+					fmt.Printf("    STUN Server: %s\n", dns_params.GetStunServer())
+				}
+			}
+
+			decoy_params := reg.GetDecoyRegConfParams()
+			if decoy_params != nil {
+				// pass
 			}
 		}
 	}
@@ -232,21 +309,43 @@ func updateDeployConf(deployConf *pb.DeploymentConfig, params *flagValues) {
 	if params.update_registrar != -1 {
 		if params.update_registrar < 0 || params.update_registrar >= len(deployConf.GetRegistrars()) {
 			log.Fatalf("Error: Index %d provided to -update-registrar is out of range", params.update_registrar)
-		}
-
-		if params.registrar_host == "" || params.registrar_type == "" {
+		} else if params.registrar_host == "" || params.registrar_type == "" {
 			log.Fatalf("Error: -update-registrar requires -registrar-host and -registrar-type")
 		}
+		// TODO
 	}
 
 	// Delete registrar
 	if params.del_registrar != -1 {
+		if params.del_registrar >= len(deployConf.GetRegistrars()) {
+			log.Fatalf("Error: Index %d provided to -del-registrar is out of range", params.del_registrar)
+		}
 		// TODO
 	}
 
 	// Add registrar
 	if params.add_registrar {
-		// TODO
+		var reg_type_val pb.RegistrarType
+		switch strings.ToLower(params.registrar_type) {
+		case "unknown":
+			reg_type_val = pb.RegistrarType_REGISTRAR_TYPE_UNKNOWN
+		case "api":
+			reg_type_val = pb.RegistrarType_REGISTRAR_TYPE_API
+		case "decoy":
+			reg_type_val = pb.RegistrarType_REGISTRAR_TYPE_DECOY
+		case "dns":
+			reg_type_val = pb.RegistrarType_REGISTRAR_TYPE_DNS
+		default:
+			log.Fatalf("error: invalid/empty input %s passed to -registrar-type", params.registrar_type)
+		}
+		new_reg := &pb.Registrar{
+			RegistrarType: &reg_type_val,
+			Bidirectional: &params.reg_bidir,
+		}
+		if params.registrar_file != "" {
+			parseRegistrarConf(params.registrar_file, new_reg)
+		}
+		deployConf.Registrars = append(deployConf.Registrars, new_reg)
 	}
 
 	// Update all decoys
@@ -381,6 +480,80 @@ func deleteSubnet(index int, deployConf *pb.DeploymentConfig) {
 		}
 	}
 	log.Fatal("Error: Index " + fmt.Sprint(index) + " provided to -delete-subnet is out of range")
+}
+
+func parseRegistrarConf(file string, reg *pb.Registrar) {
+	tree, err := toml.LoadFile(file)
+	if err != nil {
+		log.Fatalf("error opening configuration file: %v", err.Error())
+	}
+
+	switch reg.GetRegistrarType() {
+	case pb.RegistrarType_REGISTRAR_TYPE_UNKNOWN:
+		// pass
+	case pb.RegistrarType_REGISTRAR_TYPE_API:
+		setRegParamsApi(reg, tree)
+	case pb.RegistrarType_REGISTRAR_TYPE_DECOY:
+		setRegParamsDecoy(reg, tree)
+	case pb.RegistrarType_REGISTRAR_TYPE_DNS:
+		setRegParamsDns(reg, tree)
+	default:
+		log.Fatalf("unknown registrar type: %s", reg.GetRegistrarType())
+	}
+}
+
+func setRegParamsApi(reg *pb.Registrar, tree *toml.Tree) {
+	api_params := &pb.APIRegConf{}
+	err := tree.Unmarshal(api_params)
+	if err != nil {
+		log.Fatalf("error unmarshalling tree: %v", err)
+	}
+	reg.ApiRegConfParams = api_params
+}
+
+func setRegParamsDecoy(reg *pb.Registrar, tree *toml.Tree) {
+	decoy_params := &pb.DecoyRegConf{}
+	err := tree.Unmarshal(decoy_params)
+	if err != nil {
+		log.Fatalf("error unmarshalling tree: %v", err)
+	}
+	reg.DecoyRegConfParams = decoy_params
+}
+
+func setRegParamsDns(reg *pb.Registrar, tree *toml.Tree) {
+	// Assert required fields (required in proto)
+	if !tree.Has("DnsRegMethod") || !tree.Has("Domain") || !tree.Has("Pubkey") {
+		log.Fatalf("DNSRegConf requires DnsRegMethod, Domain, and Pubkey")
+	}
+
+	// Convert fields with diff type than proto
+	if tree.Has("DnsRegMethod") {
+		dns_method_str := strings.ToLower(tree.Get("DnsRegMethod").(string))
+		switch dns_method_str {
+		case "unknown":
+			tree.Set("DnsRegMethod", pb.RegistrarDNSProtocol_REGISTRAR_DNS_PROTOCOL_UNKNOWN)
+		case "udp":
+			tree.Set("DnsRegMethod", pb.RegistrarDNSProtocol_REGISTRAR_DNS_PROTOCOL_UDP)
+		case "doh":
+			tree.Set("DnsRegMethod", pb.RegistrarDNSProtocol_REGISTRAR_DNS_PROTOCOL_DOH)
+		case "dot":
+			tree.Set("DnsRegMethod", pb.RegistrarDNSProtocol_REGISTRAR_DNS_PROTOCOL_DOT)
+		default:
+			log.Fatalf("unknown DNS protocol type %s", dns_method_str)
+		}
+	}
+
+	if tree.Has("Pubkey") {
+		pubkey_str := tree.Get("Pubkey").(string)
+		tree.Set("Pubkey", parsePubkey(pubkey_str))
+	}
+
+	dns_params := &pb.DNSRegConf{}
+	err := tree.Unmarshal(dns_params)
+	if err != nil {
+		log.Fatalf("error unmarshalling tree: %v", err)
+	}
+	reg.DnsRegConfParams = dns_params
 }
 
 func main() {
