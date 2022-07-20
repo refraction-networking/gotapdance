@@ -88,12 +88,6 @@ func getDefaultTapdanceKey() []byte {
 	return key
 }
 
-func getDefaultDNSRegKey() []byte {
-	keyStr := "637a315fbae8854e19e0145606c36b5a172c0a478fbca628b61abc26e8207b1a"
-	key, _ := hex.DecodeString(keyStr)
-	return key
-}
-
 func initAssets(path string) error {
 	var defaultDecoys = []*pb.TLSDecoySpec{
 		pb.InitTLSDecoySpec("192.122.190.104", "tapdance1.freeaeskey.xyz"),
@@ -124,7 +118,7 @@ func initAssets(path string) error {
 	defaultDnsRegDohUrl := "https://1.1.1.1/dns-query"
 	//defaultStunServer := "192.168.122.2:3478"
 	defaultStunServer := "stun.voip.blackberry.com:3478"
-	defaultDnsRegPubkey := getDefaultDNSRegKey()
+	defaultDnsRegPubkey := getDefaultKey()
 	defaultDnsRegUtlsDistribution := "3*Firefox_65,1*Firefox_63,1*iOS_12_1"
 	defaultDnsRegMethod := pb.DnsRegMethod_DOH
 
