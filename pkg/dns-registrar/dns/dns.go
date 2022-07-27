@@ -25,7 +25,7 @@ var (
 
 	// ErrNameTooLong is the error returned for names whose encoded
 	// representation is longer than 255 octets.
-	ErrNameTooLong = errors.New("name is longer than 255 octets")
+	ErrNameTooLong = errors.New("name is longer than 255 octets (try using a shorter base domain?)")
 
 	// ErrReservedLabelType is the error returned when reading a label type
 	// prefix whose two most significant bits are not 00 or 11.
