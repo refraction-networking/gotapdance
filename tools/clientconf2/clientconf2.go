@@ -317,10 +317,12 @@ func updateDeployConf(deployConf *pb.DeploymentConfig, params *flagValues) {
 
 	// Delete registrar
 	if params.del_registrar != -1 {
-		if params.del_registrar >= len(deployConf.GetRegistrars()) {
-			log.Fatalf("Error: Index %d provided to -del-registrar is out of range", params.del_registrar)
+		idx := params.del_registrar
+		if idx >= len(deployConf.GetRegistrars()) {
+			log.Fatalf("Error: Index %d provided to -del-registrar is out of range", idx)
 		}
-		// TODO
+		registrars := deployConf.GetRegistrars()
+		deployConf.Registrars = append(registrars[:idx], registrars[idx+1:]...)
 	}
 
 	// Add registrar
