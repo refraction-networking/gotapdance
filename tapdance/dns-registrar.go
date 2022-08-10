@@ -21,8 +21,7 @@ type DNSRegistrar struct {
 	ip              []byte
 }
 
-// Create a DNSRegistrar from DnsRegConf.
-// Uses the pubkey in conf as default. If it is not supplied (nil), uses fallbackKey instead.
+// NewDNSRegistrarFromConf creates a DNSRegistrar from DnsRegConf protobuf. Uses the pubkey in conf as default. If it is not supplied (nil), uses fallbackKey instead.
 func NewDNSRegistrarFromConf(conf *pb.DnsRegConf, bidirectional bool, delay time.Duration, maxTries int, fallbackKey []byte) (*DNSRegistrar, error) {
 	pubkey := conf.Pubkey
 	if pubkey == nil {
@@ -42,7 +41,7 @@ func NewDNSRegistrarFromConf(conf *pb.DnsRegConf, bidirectional bool, delay time
 	return NewDNSRegistrar(udpAddr, dotAddr, dohUrl, *conf.Domain, pubkey, *conf.UtlsDistribution, maxTries, bidirectional, delay, *conf.StunServer)
 }
 
-// Create a DNSRegistrar. Exactly one of udpAddr, dotAddr, and dohUrl should be provided.
+// NewDNSRegistrar creates a DNSRegistrar. Exactly one of udpAddr, dotAddr, and dohUrl should be provided.
 func NewDNSRegistrar(udpAddr string, dotAddr string, dohUrl string, domain string, pubkey []byte, utlsDistribution string, maxTries int, bidirectional bool, delay time.Duration, stun_server string) (*DNSRegistrar, error) {
 	r := &DNSRegistrar{}
 	r.maxTries = maxTries
@@ -50,7 +49,7 @@ func NewDNSRegistrar(udpAddr string, dotAddr string, dohUrl string, domain strin
 	r.connectionDelay = delay
 	var err error
 	if utlsDistribution == "" {
-		utlsDistribution = "3*Firefox_65,1*Firefox_63,1*iOS_12_1"
+		return nil, errors.New("utlsDistribution must be specified")
 	}
 	if domain == "" {
 		return nil, errors.New("domain must be specified")
@@ -101,7 +100,7 @@ func NewDNSRegistrar(udpAddr string, dotAddr string, dohUrl string, domain strin
 	return r, nil
 }
 
-// Prepare and send the registration request.
+// Register prepares and sends the registration request.
 func (r DNSRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (*ConjureReg, error) {
 	Logger().Debugf("%v registering via DNSRegistrar", cjSession.IDString())
 
