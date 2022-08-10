@@ -27,22 +27,22 @@ func NewDNSRegistrarFromConf(conf *pb.DnsRegConf, bidirectional bool, delay time
 	if pubkey == nil {
 		pubkey = fallbackKey
 	}
-	udpAddr, dotAddr, dohUrl := "", "", ""
+	target := ""
 	switch *conf.DnsRegMethod {
 	case pb.DnsRegMethod_UDP:
-		udpAddr = *conf.UdpAddr
+		target = *conf.UdpAddr
 	case pb.DnsRegMethod_DOT:
-		dotAddr = *conf.DotAddr
+		target = *conf.DotAddr
 	case pb.DnsRegMethod_DOH:
-		dohUrl = *conf.DohUrl
+		target = *conf.DohUrl
 	default:
 		return nil, errors.New("unkown reg method in conf")
 	}
-	return NewDNSRegistrar(udpAddr, dotAddr, dohUrl, *conf.Domain, pubkey, *conf.UtlsDistribution, maxTries, bidirectional, delay, *conf.StunServer)
+	return NewDNSRegistrar(*conf.DnsRegMethod, target, *conf.Domain, pubkey, *conf.UtlsDistribution, maxTries, bidirectional, delay, *conf.StunServer)
 }
 
-// NewDNSRegistrar creates a DNSRegistrar. Exactly one of udpAddr, dotAddr, and dohUrl should be provided.
-func NewDNSRegistrar(udpAddr string, dotAddr string, dohUrl string, domain string, pubkey []byte, utlsDistribution string, maxTries int, bidirectional bool, delay time.Duration, stun_server string) (*DNSRegistrar, error) {
+// NewDNSRegistrar creates a DNSRegistrar.
+func NewDNSRegistrar(regType pb.DnsRegMethod, target string, domain string, pubkey []byte, utlsDistribution string, maxTries int, bidirectional bool, delay time.Duration, stun_server string) (*DNSRegistrar, error) {
 	r := &DNSRegistrar{}
 	r.maxTries = maxTries
 	r.bidirectional = bidirectional
@@ -57,8 +57,10 @@ func NewDNSRegistrar(udpAddr string, dotAddr string, dohUrl string, domain strin
 	if pubkey == nil {
 		return nil, errors.New("server public key must be provided")
 	}
-	if udpAddr != "" {
-		remoteAddr, err := net.ResolveUDPAddr("udp", udpAddr)
+
+	switch regType {
+	case pb.DnsRegMethod_UDP:
+		remoteAddr, err := net.ResolveUDPAddr("udp", target)
 		if err != nil {
 			return nil, err
 		}
@@ -66,30 +68,18 @@ func NewDNSRegistrar(udpAddr string, dotAddr string, dohUrl string, domain strin
 		if err != nil {
 			return nil, err
 		}
-	}
-	if dohUrl != "" || dotAddr != "" {
-		if r.req != nil {
-			return nil, errors.New("only one of udpAddr, dohUrl, dotAddr may be provided")
+	case pb.DnsRegMethod_DOT:
+		r.req, err = requester.NewDoTRequester(target, domain, pubkey, utlsDistribution)
+		if err != nil {
+			return nil, err
 		}
-
-		if dohUrl != "" {
-			r.req, err = requester.NewDoHRequester(dohUrl, domain, pubkey, utlsDistribution)
-			if err != nil {
-				return nil, err
-			}
+	case pb.DnsRegMethod_DOH:
+		r.req, err = requester.NewDoHRequester(target, domain, pubkey, utlsDistribution)
+		if err != nil {
+			return nil, err
 		}
-		if dotAddr != "" {
-			if r.req != nil {
-				return nil, errors.New("only one of udpAddr, dohUrl, dotAddr may be provided")
-			}
-			r.req, err = requester.NewDoTRequester(dotAddr, domain, pubkey, utlsDistribution)
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-	if r.req == nil {
-		return nil, errors.New("one of udpAddr, dohUrl, dotAddr must be provided")
+	default:
+		return nil, errors.New("unkown reg method")
 	}
 
 	r.ip, err = getPublicIp(stun_server)
