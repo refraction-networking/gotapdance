@@ -23,6 +23,8 @@ type assets struct {
 
 	config *pb.ClientConf
 
+	dnsRegConf *pb.DnsRegConf
+
 	roots *x509.CertPool
 
 	filenameRoots      string
@@ -109,9 +111,32 @@ func initAssets(path string) error {
 		Generation:    &defaultGeneration,
 	}
 
+	defaultDnsRegDomain := "r.refraction.network"
+	//defaultDnsRegUdpAddr := "192.168.122.2:53"
+	defaultDnsRegUdpAddr := "1.1.1.1:53"
+	defaultDnsRegDotAddr := "1.1.1.1:853"
+	defaultDnsRegDohUrl := "https://1.1.1.1/dns-query"
+	//defaultStunServer := "192.168.122.2:3478"
+	defaultStunServer := "stun.voip.blackberry.com:3478"
+	defaultDnsRegPubkey := getDefaultKey()
+	defaultDnsRegUtlsDistribution := "3*Firefox_65,1*Firefox_63,1*iOS_12_1"
+	defaultDnsRegMethod := pb.DnsRegMethod_DOH
+
+	defaultDnsRegConf := pb.DnsRegConf{
+		DnsRegMethod:     &defaultDnsRegMethod,
+		UdpAddr:          &defaultDnsRegUdpAddr,
+		DotAddr:          &defaultDnsRegDotAddr,
+		DohUrl:           &defaultDnsRegDohUrl,
+		Domain:           &defaultDnsRegDomain,
+		Pubkey:           defaultDnsRegPubkey,
+		UtlsDistribution: &defaultDnsRegUtlsDistribution,
+		StunServer:       &defaultStunServer,
+	}
+
 	assetsInstance = &assets{
 		path:               path,
 		config:             &defaultClientConf,
+		dnsRegConf:         &defaultDnsRegConf,
 		filenameRoots:      "roots",
 		filenameClientConf: "ClientConf",
 		socksAddr:          "",
@@ -126,6 +151,12 @@ func (a *assets) GetAssetsDir() string {
 	return a.path
 }
 
+func (a *assets) GetDNSRegConf() *pb.DnsRegConf {
+	a.RLock()
+	defer a.RUnlock()
+	return a.dnsRegConf
+}
+
 func (a *assets) readConfigs() error {
 	readRoots := func(filename string) error {
 		rootCerts, err := ioutil.ReadFile(filename)
@@ -135,7 +166,7 @@ func (a *assets) readConfigs() error {
 		roots := x509.NewCertPool()
 		ok := roots.AppendCertsFromPEM(rootCerts)
 		if !ok {
-			return errors.New("Failed to parse root certificates")
+			return errors.New("failed to parse root certificates")
 		}
 		a.roots = roots
 		return nil
