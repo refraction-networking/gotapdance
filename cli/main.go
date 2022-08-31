@@ -38,7 +38,7 @@ func main() {
 
 	var td = flag.Bool("td", false, "Enable tapdance cli mode for compatibility")
 	var APIRegistration = flag.String("api-endpoint", "", "If set, API endpoint to use when performing API registration. Defaults to https://registration.refraction.network/api/register (or register-bidirectional for bdapi)")
-	var registrar = flag.String("registrar", "decoy", "One of decoy, api, bdapi, dns, bddns.")
+	var registrar = flag.String("registrar", "auto", "One of auto, decoy, api, bdapi, dns, bddns.")
 	var transport = flag.String("transport", "min", `The transport to use for Conjure connections. Current values include "min" and "obfs4".`)
 
 	flag.Usage = func() {
@@ -125,7 +125,16 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connect_target
 		Transport:          getTransportFromName(transport),
 	}
 
-	if registrar == "api" {
+	switch registrar {
+	case "auto":
+		autoRegistrar, err := tapdance.NewAutoRegistrar()
+		if err != nil {
+			return fmt.Errorf("error creating auto registrar: %w", err)
+		}
+		tdDialer.DarkDecoyRegistrar = autoRegistrar
+	case "decoy":
+		tdDialer.DarkDecoyRegistrar = tapdance.DecoyRegistrar{}
+	case "api":
 		if apiEndpoint == "" {
 			apiEndpoint = "https://registration.refraction.network/api/register"
 		}
@@ -135,7 +144,7 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connect_target
 			MaxRetries:         3,
 			SecondaryRegistrar: tapdance.DecoyRegistrar{},
 		}
-	} else if registrar == "bdapi" {
+	case "bdapi":
 		if apiEndpoint == "" {
 			apiEndpoint = "https://registration.refraction.network/api/register-bidirectional"
 		}
@@ -146,36 +155,20 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connect_target
 			MaxRetries:         3,
 			SecondaryRegistrar: tapdance.DecoyRegistrar{},
 		}
-	} else if registrar == "dns" {
+	case "dns":
 		dnsConf := tapdance.Assets().GetDNSRegConf()
 		tdDialer.DarkDecoyRegistrar, err = tapdance.NewDNSRegistrarFromConf(dnsConf, false, 750*time.Millisecond, 3, tapdance.Assets().GetConjurePubkey()[:])
 		if err != nil {
 			return fmt.Errorf("error creating DNS registrar: [%v]", err)
 		}
-	} else if registrar == "bddns" {
+	case "bddns":
 		dnsConf := tapdance.Assets().GetDNSRegConf()
 		tdDialer.DarkDecoyRegistrar, err = tapdance.NewDNSRegistrarFromConf(dnsConf, true, 750*time.Millisecond, 3, tapdance.Assets().GetConjurePubkey()[:])
 		if err != nil {
 			return fmt.Errorf("error creating DNS registrar: [%v]", err)
 		}
-	} else if registrar == "auto" {
-		autoRegistrar, err := tapdance.NewAutoRegistrar()
-		if err != nil {
-			return fmt.Errorf("error creating auto registrar: %w", err)
-		}
-
-		tdDialer.DarkDecoyRegistrar = autoRegistrar
-	} else if registrar == "bdauto" {
-		autoRegistrar, err := tapdance.NewBdAutoRegistrar()
-		if err != nil {
-			return fmt.Errorf("error creating auto registrar: %w", err)
-		}
-
-		tdDialer.DarkDecoyRegistrar = autoRegistrar
-	} else if registrar == "decoy" {
-		// Done
-	} else {
-		return fmt.Errorf("Unknown registrar %v", registrar)
+	default:
+		return fmt.Errorf("unknown registrar %v", registrar)
 	}
 
 	for {
