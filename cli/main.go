@@ -158,6 +158,20 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connect_target
 		if err != nil {
 			return fmt.Errorf("error creating DNS registrar: [%v]", err)
 		}
+	} else if registrar == "auto" {
+		autoRegistrar, err := tapdance.NewAutoRegistrar()
+		if err != nil {
+			return fmt.Errorf("error creating auto registrar: %w", err)
+		}
+
+		tdDialer.DarkDecoyRegistrar = autoRegistrar
+	} else if registrar == "bdauto" {
+		autoRegistrar, err := tapdance.NewBdAutoRegistrar()
+		if err != nil {
+			return fmt.Errorf("error creating auto registrar: %w", err)
+		}
+
+		tdDialer.DarkDecoyRegistrar = autoRegistrar
 	} else if registrar == "decoy" {
 		// Done
 	} else {
