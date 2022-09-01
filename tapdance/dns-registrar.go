@@ -7,8 +7,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/ccding/go-stun/stun"
 	"github.com/golang/protobuf/proto"
+	"github.com/pion/stun"
 	"github.com/refraction-networking/gotapdance/pkg/dns-registrar/requester"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 )
@@ -18,7 +18,7 @@ type DNSRegistrar struct {
 	maxTries        int
 	connectionDelay time.Duration
 	bidirectional   bool
-	ip              []byte
+	stunServer      string
 }
 
 // NewDNSRegistrarFromConf creates a DNSRegistrar from DnsRegConf protobuf. Uses the pubkey in conf as default. If it is not supplied (nil), uses fallbackKey instead.
@@ -82,11 +82,8 @@ func NewDNSRegistrar(regType pb.DnsRegMethod, target string, domain string, pubk
 		return nil, errors.New("unkown reg method")
 	}
 
-	r.ip, err = getPublicIp(stun_server)
-	if err != nil {
-		Logger().Errorf("Failed to get public IP: [%v]", err)
-		return nil, err
-	}
+	r.stunServer = stun_server
+
 	return r, nil
 }
 
@@ -134,10 +131,16 @@ func (r DNSRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (
 
 	c2s := reg.generateClientToStation()
 
+	clientIP, err := getPublicIp(r.stunServer)
+	if err != nil {
+		Logger().Errorf("Failed to get public IP: [%v]", err)
+		return nil, err
+	}
+
 	protoPayload := pb.C2SWrapper{
 		SharedSecret:        cjSession.Keys.SharedSecret,
 		RegistrationPayload: c2s,
-		RegistrationAddress: r.ip,
+		RegistrationAddress: clientIP,
 	}
 
 	if r.bidirectional {
@@ -232,14 +235,31 @@ func (r DNSRegistrar) unpackRegResp(reg *ConjureReg, regResp *pb.RegistrationRes
 
 func getPublicIp(server string) ([]byte, error) {
 
-	client := stun.NewClient()
+	c, err := stun.Dial("udp4", server)
+	if err != nil {
+		return nil, errors.New("Failed to connect to STUN server: " + err.Error())
+	}
 
-	client.SetServerAddr(server)
+	message := stun.MustBuild(stun.TransactionID, stun.BindingRequest)
 
-	_, host, _ := client.Discover()
-	ip := net.ParseIP(host.IP())
-	if ip == nil {
-		return nil, errors.New("ip parsing failed: [" + host.IP() + "]")
+	ip := net.IP{}
+
+	err = c.Do(message, func(res stun.Event) {
+		if res.Error != nil {
+			err = res.Error
+		}
+
+		var xorAddr stun.XORMappedAddress
+		err = xorAddr.GetFrom(res.Message)
+		if err != nil {
+			return
+		}
+
+		ip = xorAddr.IP
+	})
+
+	if err != nil {
+		err = errors.New("Failed to get IP address from STUN: " + err.Error())
 	}
 
 	Logger().Debugf("Public IP is: [%s]", ip.String())
