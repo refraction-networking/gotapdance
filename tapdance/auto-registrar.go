@@ -44,14 +44,14 @@ func NewAutoRegistrar() (*AutoRegistrar, error) {
 		MaxRetries:      retriesPerRegistrar,
 	})
 
+	registrars = append(registrars, DecoyRegistrar{})
+
 	dnsRegistrar, err := NewDNSRegistrarFromConf(dnsConf, false, connectionDelay, retriesPerRegistrar, dnsConf.GetPubkey())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create DNS registrar: %w", err)
 	}
 
 	registrars = append(registrars, dnsRegistrar)
-
-	registrars = append(registrars, DecoyRegistrar{})
 
 	return &AutoRegistrar{
 		registrars: registrars,
