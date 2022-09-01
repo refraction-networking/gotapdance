@@ -18,7 +18,7 @@ type DNSRegistrar struct {
 	maxTries        int
 	connectionDelay time.Duration
 	bidirectional   bool
-	stunServer      string
+	ip              []byte
 }
 
 // NewDNSRegistrarFromConf creates a DNSRegistrar from DnsRegConf protobuf. Uses the pubkey in conf as default. If it is not supplied (nil), uses fallbackKey instead.
@@ -82,7 +82,11 @@ func NewDNSRegistrar(regType pb.DnsRegMethod, target string, domain string, pubk
 		return nil, errors.New("unkown reg method")
 	}
 
-	r.stunServer = stun_server
+	r.ip, err = getPublicIp(stun_server)
+	if err != nil {
+		Logger().Errorf("Failed to get public IP: [%v]", err)
+		return nil, err
+	}
 
 	return r, nil
 }
@@ -131,16 +135,10 @@ func (r DNSRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (
 
 	c2s := reg.generateClientToStation()
 
-	clientIP, err := getPublicIp(r.stunServer)
-	if err != nil {
-		Logger().Errorf("Failed to get public IP: [%v]", err)
-		return nil, err
-	}
-
 	protoPayload := pb.C2SWrapper{
 		SharedSecret:        cjSession.Keys.SharedSecret,
 		RegistrationPayload: c2s,
-		RegistrationAddress: clientIP,
+		RegistrationAddress: r.ip,
 	}
 
 	if r.bidirectional {
