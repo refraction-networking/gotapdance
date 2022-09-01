@@ -245,6 +245,7 @@ func getPublicIp(server string) ([]byte, error) {
 	err = c.Do(message, func(res stun.Event) {
 		if res.Error != nil {
 			err = res.Error
+			return
 		}
 
 		var xorAddr stun.XORMappedAddress
