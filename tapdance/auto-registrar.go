@@ -23,13 +23,6 @@ type AutoRegistrar struct {
 // NewAutoRegistrar creates an AutoRegistrar from configuration stored in assets
 func NewAutoRegistrar() (*AutoRegistrar, error) {
 	registrars := []Registrar{}
-	registrars = append(registrars, DecoyRegistrar{})
-
-	registrars = append(registrars, APIRegistrarBidirectional{
-		Endpoint:        bdApiEndpoint,
-		ConnectionDelay: connectionDelay,
-		MaxRetries:      retriesPerRegistrar,
-	})
 
 	dnsConf := Assets().GetDNSRegConf()
 	bdDnsRegistrar, err := NewDNSRegistrarFromConf(dnsConf, true, connectionDelay, retriesPerRegistrar, dnsConf.GetPubkey())
@@ -39,11 +32,19 @@ func NewAutoRegistrar() (*AutoRegistrar, error) {
 
 	registrars = append(registrars, bdDnsRegistrar)
 
+	registrars = append(registrars, APIRegistrarBidirectional{
+		Endpoint:        bdApiEndpoint,
+		ConnectionDelay: connectionDelay,
+		MaxRetries:      retriesPerRegistrar,
+	})
+
 	registrars = append(registrars, APIRegistrar{
 		Endpoint:        apiEndpoint,
 		ConnectionDelay: connectionDelay,
 		MaxRetries:      retriesPerRegistrar,
 	})
+
+	registrars = append(registrars, DecoyRegistrar{})
 
 	dnsRegistrar, err := NewDNSRegistrarFromConf(dnsConf, false, connectionDelay, retriesPerRegistrar, dnsConf.GetPubkey())
 	if err != nil {
