@@ -24,6 +24,13 @@ func NewDecoyRegistrar() *DecoyRegistrar {
 	}
 }
 
+func NewDecoyRegistrarWithDialer(dialer func(context.Context, string, string) (net.Conn, error)) *DecoyRegistrar {
+	return &DecoyRegistrar{
+		tcpDialer: dialer,
+		logger:    tapdance.Logger(),
+	}
+}
+
 func (r DecoyRegistrar) Register(cjSession *tapdance.ConjureSession, ctx context.Context) (*tapdance.ConjureReg, error) {
 	logger := r.logger.WithFields(logrus.Fields{"type": "unidirectional", "sessionID": cjSession.IDString()})
 
