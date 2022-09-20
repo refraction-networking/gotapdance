@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/pkg/profile"
+	"github.com/refraction-networking/gotapdance/pkg/registration"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	"github.com/refraction-networking/gotapdance/tapdance"
 	"github.com/refraction-networking/gotapdance/tdproxy"
@@ -38,7 +39,7 @@ func main() {
 
 	var td = flag.Bool("td", false, "Enable tapdance cli mode for compatibility")
 	var APIRegistration = flag.String("api-endpoint", "", "If set, API endpoint to use when performing API registration. Defaults to https://registration.refraction.network/api/register (or register-bidirectional for bdapi)")
-	var registrar = flag.String("registrar", "auto", "One of auto, decoy, api, bdapi, dns, bddns.")
+	var registrar = flag.String("registrar", "decoy", "One of decoy, api, bdapi, dns, bddns.")
 	var transport = flag.String("transport", "min", `The transport to use for Conjure connections. Current values include "min" and "obfs4".`)
 
 	flag.Usage = func() {
@@ -118,7 +119,7 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connect_target
 
 	tdDialer := tapdance.Dialer{
 		DarkDecoy:          !td,
-		DarkDecoyRegistrar: tapdance.DecoyRegistrar{},
+		DarkDecoyRegistrar: registration.NewDecoyRegistrar(),
 		UseProxyHeader:     proxyHeader,
 		V6Support:          v6Support,
 		Width:              width,
@@ -126,44 +127,42 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connect_target
 	}
 
 	switch registrar {
-	case "auto":
-		autoRegistrar, err := tapdance.NewAutoRegistrar()
-		if err != nil {
-			return fmt.Errorf("error creating auto registrar: %w", err)
-		}
-		tdDialer.DarkDecoyRegistrar = autoRegistrar
 	case "decoy":
-		tdDialer.DarkDecoyRegistrar = tapdance.DecoyRegistrar{}
+		tdDialer.DarkDecoyRegistrar = registration.NewDecoyRegistrar()
 	case "api":
 		if apiEndpoint == "" {
 			apiEndpoint = "https://registration.refraction.network/api/register"
 		}
-		tdDialer.DarkDecoyRegistrar = tapdance.APIRegistrar{
+		tdDialer.DarkDecoyRegistrar = registration.APIRegistrar{
 			Endpoint:           apiEndpoint,
 			ConnectionDelay:    750 * time.Millisecond,
 			MaxRetries:         3,
-			SecondaryRegistrar: tapdance.DecoyRegistrar{},
+			Bidirectional:      false,
+			SecondaryRegistrar: registration.NewDecoyRegistrar(),
+			Logger:             tapdance.Logger().WithField("registrar", "API"),
 		}
 	case "bdapi":
 		if apiEndpoint == "" {
 			apiEndpoint = "https://registration.refraction.network/api/register-bidirectional"
 		}
 
-		tdDialer.DarkDecoyRegistrar = tapdance.APIRegistrarBidirectional{
+		tdDialer.DarkDecoyRegistrar = registration.APIRegistrar{
 			Endpoint:           apiEndpoint,
 			ConnectionDelay:    750 * time.Millisecond,
 			MaxRetries:         3,
-			SecondaryRegistrar: tapdance.DecoyRegistrar{},
+			Bidirectional:      false,
+			SecondaryRegistrar: registration.NewDecoyRegistrar(),
+			Logger:             tapdance.Logger().WithField("registrar", "API"),
 		}
 	case "dns":
 		dnsConf := tapdance.Assets().GetDNSRegConf()
-		tdDialer.DarkDecoyRegistrar, err = tapdance.NewDNSRegistrarFromConf(dnsConf, false, 750*time.Millisecond, 3, tapdance.Assets().GetConjurePubkey()[:])
+		tdDialer.DarkDecoyRegistrar, err = registration.NewDNSRegistrarFromConf(dnsConf, false, 750*time.Millisecond, 3, tapdance.Assets().GetConjurePubkey()[:], tapdance.Logger().WithField("registrar", "DNS"))
 		if err != nil {
 			return fmt.Errorf("error creating DNS registrar: [%v]", err)
 		}
 	case "bddns":
 		dnsConf := tapdance.Assets().GetDNSRegConf()
-		tdDialer.DarkDecoyRegistrar, err = tapdance.NewDNSRegistrarFromConf(dnsConf, true, 750*time.Millisecond, 3, tapdance.Assets().GetConjurePubkey()[:])
+		tdDialer.DarkDecoyRegistrar, err = registration.NewDNSRegistrarFromConf(dnsConf, true, 750*time.Millisecond, 3, tapdance.Assets().GetConjurePubkey()[:], tapdance.Logger().WithField("registrar", "DNS"))
 		if err != nil {
 			return fmt.Errorf("error creating DNS registrar: [%v]", err)
 		}
