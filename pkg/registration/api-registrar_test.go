@@ -46,10 +46,10 @@ func TestAPIRegistrar(t *testing.T) {
 	}))
 
 	registrar := APIRegistrar{
-		Endpoint:      server.URL,
-		Client:        server.Client(),
-		Bidirectional: false,
-		Logger:        logrus.New(),
+		endpoint:      server.URL,
+		client:        server.Client(),
+		bidirectional: false,
+		logger:        logrus.New(),
 	}
 
 	registrar.Register(session, context.TODO())
@@ -106,10 +106,10 @@ func TestAPIRegistrarBidirectional(t *testing.T) {
 	}))
 
 	registrar := APIRegistrar{
-		Endpoint:      server.URL,
-		Client:        server.Client(),
-		Bidirectional: true,
-		Logger:        logrus.New(),
+		endpoint:      server.URL,
+		client:        server.Client(),
+		bidirectional: true,
+		logger:        logrus.New(),
 	}
 
 	response := &tapdance.ConjureReg{}

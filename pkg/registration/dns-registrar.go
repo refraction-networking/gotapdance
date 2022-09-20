@@ -3,6 +3,7 @@ package registration
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"strconv"
 	"time"
@@ -29,7 +30,7 @@ type DNSRegistrar struct {
 }
 
 // NewDNSRegistrarFromConf creates a DNSRegistrar from DnsRegConf protobuf. Uses the pubkey in conf as default. If it is not supplied (nil), uses fallbackKey instead.
-func NewDNSRegistrarFromConf(conf *pb.DnsRegConf, bidirectional bool, delay time.Duration, maxTries int, fallbackKey []byte, logger logrus.FieldLogger) (*DNSRegistrar, error) {
+func NewDNSRegistrarFromConf(conf *pb.DnsRegConf, bidirectional bool, delay time.Duration, maxTries int, fallbackKey []byte) (*DNSRegistrar, error) {
 	pubkey := conf.Pubkey
 	if pubkey == nil {
 		pubkey = fallbackKey
@@ -45,11 +46,11 @@ func NewDNSRegistrarFromConf(conf *pb.DnsRegConf, bidirectional bool, delay time
 	default:
 		return nil, errors.New("unkown reg method in conf")
 	}
-	return NewDNSRegistrar(*conf.DnsRegMethod, target, *conf.Domain, pubkey, *conf.UtlsDistribution, maxTries, bidirectional, delay, *conf.StunServer, logger)
+	return NewDNSRegistrar(*conf.DnsRegMethod, target, *conf.Domain, pubkey, *conf.UtlsDistribution, maxTries, bidirectional, delay, *conf.StunServer)
 }
 
 // NewDNSRegistrar creates a DNSRegistrar.
-func NewDNSRegistrar(regType pb.DnsRegMethod, target string, domain string, pubkey []byte, utlsDistribution string, maxTries int, bidirectional bool, delay time.Duration, stun_server string, logger logrus.FieldLogger) (*DNSRegistrar, error) {
+func NewDNSRegistrar(regType pb.DnsRegMethod, target string, domain string, pubkey []byte, utlsDistribution string, maxTries int, bidirectional bool, delay time.Duration, stun_server string) (*DNSRegistrar, error) {
 	var err error
 	if utlsDistribution == "" {
 		return nil, errors.New("utlsDistribution must be specified")
@@ -89,8 +90,7 @@ func NewDNSRegistrar(regType pb.DnsRegMethod, target string, domain string, pubk
 
 	ip, err := getPublicIp(stun_server)
 	if err != nil {
-		logger.Errorf("Failed to get public IP: [%v]", err)
-		return nil, err
+		return nil, fmt.Errorf("failed to get public IP: %w", err)
 	}
 
 	return &DNSRegistrar{
@@ -99,7 +99,7 @@ func NewDNSRegistrar(regType pb.DnsRegMethod, target string, domain string, pubk
 		maxTries:        maxTries,
 		bidirectional:   bidirectional,
 		connectionDelay: delay,
-		logger:          logger,
+		logger:          tapdance.Logger().WithField("registrar", "DNS"),
 	}, nil
 }
 
