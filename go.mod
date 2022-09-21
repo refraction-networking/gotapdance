@@ -4,13 +4,13 @@ go 1.16
 
 require (
 	git.torproject.org/pluggable-transports/goptlib.git v1.2.0
-	github.com/ccding/go-stun v0.1.5-0.20220419042218-44e89cab7805
 	github.com/flynn/noise v1.0.0
 	github.com/golang/protobuf v1.5.2
 	github.com/jinzhu/copier v0.3.5
 	github.com/keltia/ripe-atlas v0.0.0-20211221125000-f6eb808d5dc6
 	github.com/mroth/weightedrand v0.4.1
 	github.com/pelletier/go-toml v1.9.4
+	github.com/pion/stun v0.3.5
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.6.0
 	github.com/refraction-networking/utls v1.0.0

@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ccding/go-stun/stun"
 	"github.com/golang/protobuf/proto"
+	"github.com/pion/stun"
 	"github.com/refraction-networking/gotapdance/pkg/dns-registrar/requester"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	"github.com/refraction-networking/gotapdance/tapdance"
@@ -214,14 +214,32 @@ func (r *DNSRegistrar) Register(cjSession *tapdance.ConjureSession, ctx context.
 
 func getPublicIp(server string) ([]byte, error) {
 
-	client := stun.NewClient()
+	c, err := stun.Dial("udp4", server)
+	if err != nil {
+		return nil, errors.New("Failed to connect to STUN server: " + err.Error())
+	}
 
-	client.SetServerAddr(server)
+	message := stun.MustBuild(stun.TransactionID, stun.BindingRequest)
 
-	_, host, _ := client.Discover()
-	ip := net.ParseIP(host.IP())
-	if ip == nil {
-		return nil, errors.New("ip parsing failed: [" + host.IP() + "]")
+	ip := net.IP{}
+
+	err = c.Do(message, func(res stun.Event) {
+		if res.Error != nil {
+			err = res.Error
+			return
+		}
+
+		var xorAddr stun.XORMappedAddress
+		err = xorAddr.GetFrom(res.Message)
+		if err != nil {
+			return
+		}
+
+		ip = xorAddr.IP
+	})
+
+	if err != nil {
+		err = errors.New("Failed to get IP address from STUN: " + err.Error())
 	}
 
 	return ip.To4(), nil
