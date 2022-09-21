@@ -38,7 +38,7 @@ var assetsInstance *assets
 var assetsOnce sync.Once
 
 // Assets is an access point to asset managing singleton.
-// First accesshttps://github.com/refraction-networking/conjure/pull/140 to singleton sets path. Assets(), if called
+// First access to singleton sets path. Assets(), if called
 // before SetAssetsDir() sets path to "./assets/"
 func Assets() *assets {
 	var err error
@@ -120,7 +120,7 @@ func initAssets(path string) error {
 	defaultStunServer := "stun.voip.blackberry.com:3478"
 	defaultDnsRegPubkey := getDefaultKey()
 	defaultDnsRegUtlsDistribution := "3*Firefox_65,1*Firefox_63,1*iOS_12_1"
-	defaultDnsRegMethod := pb.DnsRegMethod_UDP
+	defaultDnsRegMethod := pb.DnsRegMethod_DOH
 
 	defaultDnsRegConf := pb.DnsRegConf{
 		DnsRegMethod:     &defaultDnsRegMethod,
