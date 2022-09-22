@@ -92,7 +92,7 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 			// if err != nil {
 			// 	return nil, err
 			// }
-			cjSession := makeConjureSession(address, d.Transport)
+			cjSession := MakeConjureSession(address, d.Transport)
 			cjSession.TcpDialer = d.TcpDialer
 			cjSession.UseProxyHeader = d.UseProxyHeader
 			cjSession.Width = uint(d.Width)
