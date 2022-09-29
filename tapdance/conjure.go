@@ -289,7 +289,7 @@ const (
 	both
 )
 
-//[TODO]{priority:winter-break} make this not constant
+// [TODO]{priority:winter-break} make this not constant
 const defaultRegWidth = 5
 
 // DialConjureAddr - Perform Registration and Dial after creating  a Conjure session from scratch
@@ -376,12 +376,18 @@ type ConjureSession struct {
 
 func makeConjureSession(covert string, transport pb.TransportType) *ConjureSession {
 
-	keys, err := generateSharedKeys(getStationKey())
+	depl, err := Assets().GetDeployment()
+	if err != nil {
+		return nil
+	}
+
+	keys, err := generateSharedKeys(depl.GetConjurePubkey())
 	if err != nil {
 		return nil
 	}
 	//[TODO]{priority:NOW} move v6support initialization to assets so it can be tracked across dials
 	cjSession := &ConjureSession{
+		Deployment:     depl,
 		Keys:           keys,
 		Width:          defaultRegWidth,
 		V6Support:      &V6{support: true, include: both},
@@ -886,7 +892,8 @@ func (cjSession *ConjureSession) setV6Support(support uint) {
 }
 
 // When a registration send goroutine finishes it will call this and log
-//	 	session stats and/or errors.
+//
+//	session stats and/or errors.
 func (cjSession *ConjureSession) registrationCallback(reg *ConjureReg) {
 	//[TODO]{priority:NOW}
 	Logger().Infof("%v %v", cjSession.IDString(), reg.digestStats())
@@ -1000,10 +1007,6 @@ func SelectPhantom(seed []byte, support uint) (*net.IP, *net.IP, error) {
 	}
 }
 
-func getStationKey() [32]byte {
-	return *Assets().GetConjurePubkey()
-}
-
 type Obfs4Keys struct {
 	PrivateKey *ntor.PrivateKey
 	PublicKey  *ntor.PublicKey
@@ -1082,7 +1085,6 @@ func generateSharedKeys(pubkey [32]byte) (*sharedKeys, error) {
 	return keys, err
 }
 
-//
 func conjureHMAC(key []byte, str string) []byte {
 	hash := hmac.New(sha256.New, key)
 	hash.Write([]byte(str))

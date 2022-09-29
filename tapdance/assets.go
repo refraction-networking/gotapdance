@@ -21,7 +21,8 @@ type assets struct {
 	sync.RWMutex
 	path string
 
-	config *pb.ClientConf
+	config  *pb.ClientConf
+	config2 *pb.ClientConf2
 
 	dnsRegConf *pb.DnsRegConf
 
@@ -32,6 +33,29 @@ type assets struct {
 
 	socksAddr string
 }
+
+type deployment struct {
+	sync.RWMutex
+	deploy *pb.Deployment
+}
+
+func (a *assets) GetDeployment() (*deployment, error) {
+
+	depls := a.config2.GetDepoyments()
+	if len(depls) != 0 {
+		return depls[0]
+	}
+}
+
+func (d *deployment) GetConjurePubkey() ([]byte, error) {
+	d.RLock()
+	defer d.RUnlock()
+
+	var pKey [32]byte
+	copy(pKey[:], d.deploy.GetConjurePubkey().GetKey()[:])
+	return &pKey, nil
+}
+
 
 // could reset this internally to refresh assets and avoid woes of singleton testing
 var assetsInstance *assets
@@ -185,6 +209,21 @@ func (a *assets) readConfigs() error {
 		a.config = clientConf
 		return nil
 	}
+
+	readClientConf2 := func(filename string) error {
+		buf, err := ioutil.ReadFile(filename)
+		if err != nil {
+			return err
+		}
+		clientConf := &pb.ClientConf2{}
+		err = proto.Unmarshal(buf, clientConf)
+		if err != nil {
+			return err
+		}
+		a.config2 = clientConf
+		return nil
+	}
+
 
 	var err error
 	Logger().Infoln("Assets: reading from folder " + a.path)
