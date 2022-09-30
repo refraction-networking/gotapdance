@@ -161,6 +161,30 @@ func deleteSubnet(index int, clientConf *pb.ClientConf) {
 	log.Fatal("Error: Index " + fmt.Sprint(index) + " provided to -delete-subnet is out of range")
 }
 
+func deleteStringSubnet(subnetStr string, clientConf *pb.ClientConf) error {
+
+	_, subnet, err := net.ParseCIDR(subnetStr)
+	if err != nil {
+		return err
+	}
+
+	remainingDecoys := []*pb.TLSDecoySpec{}
+	for _, decoy := range clientConf.DecoyList.TlsDecoys {
+		ip4 := make(net.IP, 4)
+		binary.BigEndian.PutUint32(ip4, decoy.GetIpv4Addr())
+
+		ip6 := net.IP(decoy.GetIpv6Addr())
+
+		if !(subnet.Contains(ip4) || subnet.Contains(ip6)) {
+			remainingDecoys = append(remainingDecoys, decoy)
+		}
+	}
+
+	clientConf.DecoyList.TlsDecoys = remainingDecoys
+
+	return nil
+}
+
 func deleteStringPattern(pattern string, clientConf *pb.ClientConf) error {
 
 	remainingDecoys := []*pb.TLSDecoySpec{}
@@ -191,6 +215,7 @@ func main() {
 	var add = flag.Bool("add", false, "If set, modify fields of all decoys in list with provided pubkey/timeout/tcpwin/host/ip")
 	var delete = flag.Int("delete", -1, "Specifies `index` of decoy to delete")
 	var deleteStr = flag.String("delete-str", "", "Specifies pattern of decoy hostnames to delete")
+	var deleteDecoysBySubnet = flag.String("delete-decoys-subnet", "", "Specifies subnet of decoy addresses to delete")
 	var update = flag.Int("update", -1, "Specifies `index` of decoy to update")
 
 	var host = flag.String("host", "", "New/modified decoy host")
@@ -239,6 +264,14 @@ func main() {
 		err := deleteStringPattern(*deleteStr, clientConf)
 		if err != nil {
 			log.Fatalf("failed string pattern decoy delete: %v", err)
+		}
+	}
+
+	// Delete decoys based on subnet of decoy address
+	if *deleteDecoysBySubnet != "" {
+		err := deleteStringSubnet(*deleteDecoysBySubnet, clientConf)
+		if err != nil {
+			log.Fatalf("failed subnet based decoy delete: %v", err)
 		}
 	}
 
