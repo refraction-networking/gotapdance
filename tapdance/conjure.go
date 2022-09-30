@@ -1,7 +1,6 @@
 package tapdance
 
 import (
-	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -11,7 +10,6 @@ import (
 	"io"
 	"math/big"
 	"net"
-	"net/http"
 	"strconv"
 	"sync"
 	"time"
@@ -54,235 +52,6 @@ type Registrar interface {
 	Register(*ConjureSession, context.Context) (*ConjureReg, error)
 }
 
-type DecoyRegistrar struct {
-
-	// TcpDialer is a custom TCP dailer to use when establishing TCP connections
-	// to decoys. When nil, Dialer.TcpDialer will be used.
-	TcpDialer func(context.Context, string, string) (net.Conn, error)
-}
-
-func (r DecoyRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (*ConjureReg, error) {
-	Logger().Debugf("%v Registering V4 and V6 via DecoyRegistrar", cjSession.IDString())
-
-	// Choose N (width) decoys from decoylist
-	decoys, err := SelectDecoys(cjSession.Keys.SharedSecret, cjSession.V6Support.include, cjSession.Width)
-	if err != nil {
-		Logger().Warnf("%v failed to select decoys: %v", cjSession.IDString(), err)
-		return nil, err
-	}
-	cjSession.RegDecoys = decoys
-
-	phantom4, phantom6, err := SelectPhantom(cjSession.Keys.ConjureSeed, cjSession.V6Support.include)
-	if err != nil {
-		Logger().Warnf("%v failed to select Phantom: %v", cjSession.IDString(), err)
-		return nil, err
-	}
-
-	//[reference] Prepare registration
-	reg := &ConjureReg{
-		sessionIDStr:   cjSession.IDString(),
-		keys:           cjSession.Keys,
-		stats:          &pb.SessionStats{},
-		phantom4:       phantom4,
-		phantom6:       phantom6,
-		v6Support:      cjSession.V6Support.include,
-		covertAddress:  cjSession.CovertAddress,
-		transport:      cjSession.Transport,
-		TcpDialer:      cjSession.TcpDialer,
-		useProxyHeader: cjSession.UseProxyHeader,
-	}
-
-	if r.TcpDialer != nil {
-		reg.TcpDialer = r.TcpDialer
-	}
-
-	// //[TODO]{priority:later} How to pass context to multiple registration goroutines?
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	width := uint(len(cjSession.RegDecoys))
-	if width < cjSession.Width {
-		Logger().Warnf("%v Using width %v (default %v)", cjSession.IDString(), width, cjSession.Width)
-	}
-
-	Logger().Debugf("%v Registration - v6:%v, covert:%v, phantoms:%v,[%v], width:%v, transport:%v",
-		reg.sessionIDStr,
-		reg.v6SupportStr(),
-		reg.covertAddress,
-		reg.phantom4.String(),
-		reg.phantom6.String(),
-		cjSession.Width,
-		cjSession.Transport,
-	)
-
-	//[reference] Send registrations to each decoy
-	dialErrors := make(chan error, width)
-	for _, decoy := range cjSession.RegDecoys {
-		Logger().Debugf("%v Sending Reg: %v, %v", cjSession.IDString(), decoy.GetHostname(), decoy.GetIpAddrStr())
-		//decoyAddr := decoy.GetIpAddrStr()
-		go reg.send(ctx, decoy, dialErrors, cjSession.registrationCallback)
-	}
-
-	//[reference] Dial errors happen immediately so block until all N dials complete
-	var unreachableCount uint = 0
-	for err := range dialErrors {
-		if err != nil {
-			Logger().Debugf("%v %v", cjSession.IDString(), err)
-			if dialErr, ok := err.(RegError); ok && dialErr.code == Unreachable {
-				// If we failed because ipv6 network was unreachable try v4 only.
-				unreachableCount++
-				if unreachableCount < width {
-					continue
-				} else {
-					break
-				}
-			}
-		}
-		//[reference] if we succeed or fail for any other reason then the network is reachable and we can continue
-		break
-	}
-
-	//[reference] if ALL fail to dial return error (retry in parent if ipv6 unreachable)
-	if unreachableCount == width {
-		Logger().Debugf("%v NETWORK UNREACHABLE", cjSession.IDString())
-		return nil, &RegError{code: Unreachable, msg: "All decoys failed to register -- Dial Unreachable"}
-	}
-
-	// randomized sleeping here to break the intraflow signal
-	toSleep := reg.getRandomDuration(3000, 212, 3449)
-	Logger().Debugf("%v Successfully sent registrations, sleeping for: %v", cjSession.IDString(), toSleep)
-	sleepWithContext(ctx, toSleep)
-
-	return reg, nil
-}
-
-// Registration strategy using a centralized REST API to
-// create registrations. Only the Endpoint need be specified;
-// the remaining fields are valid with their zero values and
-// provide the opportunity for additional control over the process.
-type APIRegistrar struct {
-	// Endpoint to use in registration request
-	Endpoint string
-
-	// HTTP client to use in request
-	Client *http.Client
-
-	// Length of time to delay after confirming successful
-	// registration before attempting a connection,
-	// allowing for propagation throughout the stations.
-	ConnectionDelay time.Duration
-
-	// Maximum number of retries before giving up
-	MaxRetries int
-
-	// A secondary registration method to use on failure.
-	// Because the API registration can give us definite
-	// indication of a failure to register, this can be
-	// used as a "backup" in the case of the API being
-	// down or being blocked.
-	//
-	// If this field is nil, no secondary registration will
-	// be attempted. If it is non-nil, after failing to register
-	// (retrying MaxRetries times) we will fall back to
-	// the Register method on this field.
-	SecondaryRegistrar Registrar
-}
-
-func (r APIRegistrar) Register(cjSession *ConjureSession, ctx context.Context) (*ConjureReg, error) {
-	Logger().Debugf("%v registering via APIRegistrar", cjSession.IDString())
-	// TODO: this section is duplicated from DecoyRegistrar; consider consolidating
-	phantom4, phantom6, err := SelectPhantom(cjSession.Keys.ConjureSeed, cjSession.V6Support.include)
-	if err != nil {
-		Logger().Warnf("%v failed to select Phantom: %v", cjSession.IDString(), err)
-		return nil, err
-	}
-
-	// [reference] Prepare registration
-	reg := &ConjureReg{
-		sessionIDStr:   cjSession.IDString(),
-		keys:           cjSession.Keys,
-		stats:          &pb.SessionStats{},
-		phantom4:       phantom4,
-		phantom6:       phantom6,
-		v6Support:      cjSession.V6Support.include,
-		covertAddress:  cjSession.CovertAddress,
-		transport:      cjSession.Transport,
-		TcpDialer:      cjSession.TcpDialer,
-		useProxyHeader: cjSession.UseProxyHeader,
-	}
-
-	c2s := reg.generateClientToStation()
-
-	protoPayload := pb.C2SWrapper{
-		SharedSecret:        cjSession.Keys.SharedSecret,
-		RegistrationPayload: c2s,
-	}
-
-	payload, err := proto.Marshal(&protoPayload)
-	if err != nil {
-		Logger().Warnf("%v failed to marshal ClientToStation payload: %v", cjSession.IDString(), err)
-		return nil, err
-	}
-
-	if r.Client == nil {
-		// Transports should ideally be re-used for TCP connection pooling,
-		// but each registration is most likely making precisely one request,
-		// or if it's making more than one, is most likely due to an underlying
-		// connection issue rather than an application-level error anyways.
-		t := http.DefaultTransport.(*http.Transport).Clone()
-		t.DialContext = reg.TcpDialer
-		r.Client = &http.Client{Transport: t}
-	}
-
-	tries := 0
-	for tries < r.MaxRetries+1 {
-		tries++
-		err = r.executeHTTPRequest(ctx, cjSession, payload)
-		if err == nil {
-			Logger().Debugf("%v API registration succeeded", cjSession.IDString())
-			if r.ConnectionDelay != 0 {
-				Logger().Debugf("%v sleeping for %v", cjSession.IDString(), r.ConnectionDelay)
-				sleepWithContext(ctx, r.ConnectionDelay)
-			}
-			return reg, nil
-		}
-		Logger().Warnf("%v failed API registration, attempt %d/%d", cjSession.IDString(), tries, r.MaxRetries+1)
-	}
-
-	// If we make it here, we failed API registration
-	Logger().Warnf("%v giving up on API registration", cjSession.IDString())
-
-	if r.SecondaryRegistrar != nil {
-		Logger().Debugf("%v trying secondary registration method", cjSession.IDString())
-		return r.SecondaryRegistrar.Register(cjSession, ctx)
-	}
-
-	return nil, err
-}
-
-func (r APIRegistrar) executeHTTPRequest(ctx context.Context, cjSession *ConjureSession, payload []byte) error {
-	req, err := http.NewRequestWithContext(ctx, "POST", r.Endpoint, bytes.NewReader(payload))
-	if err != nil {
-		Logger().Warnf("%v failed to create HTTP request to registration endpoint %s: %v", cjSession.IDString(), r.Endpoint, err)
-		return err
-	}
-
-	resp, err := r.Client.Do(req)
-	if err != nil {
-		Logger().Warnf("%v failed to do HTTP request to registration endpoint %s: %v", cjSession.IDString(), r.Endpoint, err)
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		Logger().Warnf("%v got non-success response code %d from registration endpoint %v", cjSession.IDString(), resp.StatusCode, r.Endpoint)
-		return fmt.Errorf("non-success response code %d on %s", resp.StatusCode, r.Endpoint)
-	}
-
-	return nil
-}
-
 const (
 	v4 uint = iota
 	v6
@@ -294,7 +63,7 @@ const defaultRegWidth = 5
 
 // DialConjureAddr - Perform Registration and Dial after creating  a Conjure session from scratch
 func DialConjureAddr(ctx context.Context, address string, registrationMethod Registrar) (net.Conn, error) {
-	cjSession := makeConjureSession(address, pb.TransportType_Min)
+	cjSession := MakeConjureSession(address, pb.TransportType_Min)
 	return DialConjure(ctx, cjSession, registrationMethod)
 }
 
@@ -359,7 +128,6 @@ type ConjureSession struct {
 	V6Support      *V6
 	UseProxyHeader bool
 	SessionID      uint64
-	RegDecoys      []*pb.TLSDecoySpec // pb.DecoyList
 	Phantom        *net.IP
 	Transport      pb.TransportType
 	CovertAddress  string
@@ -374,20 +142,14 @@ type ConjureSession struct {
 	stats *pb.SessionStats
 }
 
-func makeConjureSession(covert string, transport pb.TransportType) *ConjureSession {
+func MakeConjureSession(covert string, transport pb.TransportType) *ConjureSession {
 
-	depl, err := Assets().GetDeployment()
-	if err != nil {
-		return nil
-	}
-
-	keys, err := generateSharedKeys(depl.GetConjurePubkey())
+	keys, err := generateSharedKeys(getStationKey())
 	if err != nil {
 		return nil
 	}
 	//[TODO]{priority:NOW} move v6support initialization to assets so it can be tracked across dials
 	cjSession := &ConjureSession{
-		Deployment:     depl,
 		Keys:           keys,
 		Width:          defaultRegWidth,
 		V6Support:      &V6{support: true, include: both},
@@ -430,6 +192,56 @@ func (cjSession *ConjureSession) String() string {
 	// expand for debug??
 }
 
+// conjureReg generates ConjureReg from the corresponding ConjureSession
+func (cjSession *ConjureSession) conjureReg() *ConjureReg {
+	return &ConjureReg{
+		sessionIDStr:   cjSession.IDString(),
+		keys:           cjSession.Keys,
+		stats:          &pb.SessionStats{},
+		v6Support:      cjSession.V6Support.include,
+		covertAddress:  cjSession.CovertAddress,
+		transport:      cjSession.Transport,
+		TcpDialer:      cjSession.TcpDialer,
+		useProxyHeader: cjSession.UseProxyHeader,
+	}
+}
+
+// PrepareBidirectionalRegData returns a C2SWrapper for bidirectional registration
+func (cjSession *ConjureSession) BidirectionalRegData(regSource *pb.RegistrationSource) (*ConjureReg, *pb.C2SWrapper, error) {
+	reg := cjSession.conjureReg()
+
+	return reg, &pb.C2SWrapper{
+		SharedSecret:        cjSession.Keys.SharedSecret,
+		RegistrationPayload: reg.generateClientToStation(),
+		RegistrationSource:  regSource,
+	}, nil
+
+}
+
+// PrepareUnidirectionalRegData returns a C2SWrapper for unidirectional registration
+func (cjSession *ConjureSession) UnidirectionalRegData(regSource *pb.RegistrationSource) (*ConjureReg, *pb.C2SWrapper, error) {
+	reg := cjSession.conjureReg()
+
+	phantom4, phantom6, err := SelectPhantom(cjSession.Keys.ConjureSeed, cjSession.V6Support.include)
+	if err != nil {
+		Logger().Warnf("%v failed to select Phantom: %v", cjSession.IDString(), err)
+		return nil, nil, err
+	}
+
+	reg.phantom4 = phantom4
+	reg.phantom6 = phantom6
+
+	return reg, &pb.C2SWrapper{
+		SharedSecret:        cjSession.Keys.SharedSecret,
+		RegistrationPayload: reg.generateClientToStation(),
+		RegistrationSource:  regSource,
+	}, nil
+}
+
+func (cjSession *ConjureSession) Decoys() ([]*pb.TLSDecoySpec, error) {
+	return SelectDecoys(cjSession.Keys.SharedSecret, cjSession.V6Support.include, cjSession.Width)
+}
+
 type resultTuple struct {
 	conn net.Conn
 	err  error
@@ -443,7 +255,7 @@ func (reg *ConjureReg) connect(ctx context.Context, addr string, dialer dialFunc
 	deadline, deadlineAlreadySet := ctx.Deadline()
 	if !deadlineAlreadySet {
 		//[reference] randomized timeout to Dial dark decoy address
-		deadline = time.Now().Add(reg.getRandomDuration(0, 1061*2, 1953*3))
+		deadline = time.Now().Add(reg.GetRandomDuration(0, 1061*2, 1953*3))
 		//[TODO]{priority:@sfrolov} explain these numbers and why they were chosen for the boundaries.
 	}
 	childCtx, childCancelFunc := context.WithDeadline(ctx, deadline)
@@ -585,6 +397,47 @@ type ConjureReg struct {
 	m     sync.Mutex
 }
 
+func (reg *ConjureReg) UnpackRegResp(regResp *pb.RegistrationResponse) error {
+	if reg.v6Support == v4 {
+		// Save the ipv4address in the Conjure Reg struct (phantom4) to return
+		ip4 := make(net.IP, 4)
+		addr4 := regResp.GetIpv4Addr()
+		binary.BigEndian.PutUint32(ip4, addr4)
+		reg.phantom4 = &ip4
+	} else if reg.v6Support == v6 {
+		// Save the ipv6address in the Conjure Reg struct (phantom6) to return
+		addr6 := net.IP(regResp.GetIpv6Addr())
+		reg.phantom6 = &addr6
+	} else {
+		// Case where cjSession.V6Support == both
+		// Save the ipv4address in the Conjure Reg struct (phantom4) to return
+		ip4 := make(net.IP, 4)
+		addr4 := regResp.GetIpv4Addr()
+		binary.BigEndian.PutUint32(ip4, addr4)
+		reg.phantom4 = &ip4
+
+		// Save the ipv6address in the Conjure Reg struct (phantom6) to return
+		addr6 := net.IP(regResp.GetIpv6Addr())
+		reg.phantom6 = &addr6
+	}
+
+	// Client config -- check if not nil in the registration response
+	if regResp.GetClientConf() != nil {
+		currGen := Assets().GetGeneration()
+		incomingGen := regResp.GetClientConf().GetGeneration()
+		Logger().Debugf("received clientconf in regResponse w/ gen %d", incomingGen)
+		if currGen < incomingGen {
+			Logger().Debugf("Updating clientconf %d -> %d", currGen, incomingGen)
+			_err := Assets().SetClientConf(regResp.GetClientConf())
+			if _err != nil {
+				Logger().Warnf("could not set ClientConf in bidirectional API: %v", _err.Error())
+			}
+		}
+	}
+
+	return nil
+}
+
 func (reg *ConjureReg) createRequest(tlsConn *tls.UConn, decoy *pb.TLSDecoySpec) ([]byte, error) {
 	//[reference] generate and encrypt variable size payload
 	vsp, err := reg.generateVSP()
@@ -624,7 +477,7 @@ func (reg *ConjureReg) createRequest(tlsConn *tls.UConn, decoy *pb.TLSDecoySpec)
 }
 
 // Being called in parallel -> no changes to ConjureReg allowed in this function
-func (reg *ConjureReg) send(ctx context.Context, decoy *pb.TLSDecoySpec, dialError chan error, callback func(*ConjureReg)) {
+func (reg *ConjureReg) Send(ctx context.Context, decoy *pb.TLSDecoySpec, dialError chan error) {
 
 	deadline, deadlineAlreadySet := ctx.Deadline()
 	if !deadlineAlreadySet {
@@ -685,7 +538,6 @@ func (reg *ConjureReg) send(ctx context.Context, decoy *pb.TLSDecoySpec, dialErr
 
 	dialError <- nil
 	readAndClose(dialConn, time.Second*15)
-	callback(reg)
 }
 
 func (reg *ConjureReg) createTLSConn(dialConn net.Conn, address string, hostname string, deadline time.Time) (*tls.UConn, error) {
@@ -843,6 +695,16 @@ func (reg *ConjureReg) v6SupportStr() string {
 	}
 }
 
+// Phantom4 returns the ipv4 phantom address
+func (reg *ConjureReg) Phantom4() net.IP {
+	return *reg.phantom4
+}
+
+// Phantom6 returns the ipv6 phantom address
+func (reg *ConjureReg) Phantom6() net.IP {
+	return *reg.phantom6
+}
+
 func (reg *ConjureReg) digestStats() string {
 	//[TODO]{priority:eventually} add decoy details to digest
 	if reg == nil || reg.stats == nil {
@@ -857,7 +719,7 @@ func (reg *ConjureReg) digestStats() string {
 		reg.stats.GetTotalTimeToConnect())
 }
 
-func (reg *ConjureReg) getRandomDuration(base, min, max int) time.Duration {
+func (reg *ConjureReg) GetRandomDuration(base, min, max int) time.Duration {
 	addon := getRandInt(min, max) / 1000 // why this min and max???
 	rtt := rttInt(reg.getTcpToDecoy())
 	return time.Millisecond * time.Duration(base+rtt*addon)
@@ -889,14 +751,6 @@ func (cjSession *ConjureSession) setV6Support(support uint) {
 		cjSession.V6Support.support = true
 		cjSession.V6Support.include = v6
 	}
-}
-
-// When a registration send goroutine finishes it will call this and log
-//
-//	session stats and/or errors.
-func (cjSession *ConjureSession) registrationCallback(reg *ConjureReg) {
-	//[TODO]{priority:NOW}
-	Logger().Infof("%v %v", cjSession.IDString(), reg.digestStats())
 }
 
 func (cjSession *ConjureSession) getRandomDuration(base, min, max int) time.Duration {
@@ -1007,6 +861,10 @@ func SelectPhantom(seed []byte, support uint) (*net.IP, *net.IP, error) {
 	}
 }
 
+func getStationKey() [32]byte {
+	return *Assets().GetConjurePubkey()
+}
+
 type Obfs4Keys struct {
 	PrivateKey *ntor.PrivateKey
 	PublicKey  *ntor.PublicKey
@@ -1097,8 +955,16 @@ type RegError struct {
 	msg  string
 }
 
+func NewRegError(code uint, msg string) RegError {
+	return RegError{code: code, msg: msg}
+}
+
 func (err RegError) Error() string {
 	return fmt.Sprintf("Registration Error [%v]: %v", err.CodeStr(), err.msg)
+}
+
+func (err RegError) Code() uint {
+	return err.code
 }
 
 // CodeStr - Get desctriptor associated with error code
