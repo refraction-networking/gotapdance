@@ -15,9 +15,14 @@ build:
 		cd -; \
 	done
 
-clientconf:
+cc:
 	echo "building clientconf"; \
 	cd clientconf && $(GOBUILD) -o ../bin/clientconf ; \
+	cd ../; \
+
+cc2:
+	echo "building clientconf2"; \
+	cd clientconf2 && $(GOBUILD) -o ../bin/clientconf2 ; \
 	cd ../; \
 
 v6lookup:
