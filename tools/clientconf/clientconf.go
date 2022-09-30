@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"regexp"
 	"strings"
 
 	"github.com/golang/protobuf/proto"
@@ -127,7 +128,7 @@ func addSubnets(subnets []string, weight *uint, clientConf *pb.ClientConf) {
 		}
 	}
 	var weight32 = uint32(*weight)
-	
+
 	// add new item to PhantomSubnetsList.WeightedSubnets
 	var newPhantomSubnet = pb.PhantomSubnets{
 		Weight:  &weight32,
@@ -160,6 +161,25 @@ func deleteSubnet(index int, clientConf *pb.ClientConf) {
 	log.Fatal("Error: Index " + fmt.Sprint(index) + " provided to -delete-subnet is out of range")
 }
 
+func deleteStringPattern(pattern string, clientConf *pb.ClientConf) error {
+
+	remainingDecoys := []*pb.TLSDecoySpec{}
+	r, err := regexp.Compile(pattern)
+	if err != nil {
+		return err
+	}
+
+	for _, decoy := range clientConf.DecoyList.TlsDecoys {
+		if !r.MatchString(*decoy.Hostname) {
+			remainingDecoys = append(remainingDecoys, decoy)
+		}
+	}
+
+	clientConf.DecoyList.TlsDecoys = remainingDecoys
+
+	return nil
+}
+
 func main() {
 	var fname = flag.String("f", "", "`ClientConf` file to parse")
 	var out_fname = flag.String("o", "", "`output` file name to write new/modified config")
@@ -170,6 +190,7 @@ func main() {
 
 	var add = flag.Bool("add", false, "If set, modify fields of all decoys in list with provided pubkey/timeout/tcpwin/host/ip")
 	var delete = flag.Int("delete", -1, "Specifies `index` of decoy to delete")
+	var deleteStr = flag.String("delete-str", "", "Specifies pattern of decoy hostnames to delete")
 	var update = flag.Int("update", -1, "Specifies `index` of decoy to update")
 
 	var host = flag.String("host", "", "New/modified decoy host")
@@ -212,6 +233,15 @@ func main() {
 	if *delete_subnet != -1 {
 		deleteSubnet(*delete_subnet, clientConf)
 	}
+
+	// Deletes decoys based on pattern for decoy hostname
+	if *deleteStr != "" {
+		err := deleteStringPattern(*deleteStr, clientConf)
+		if err != nil {
+			log.Fatalf("failed string pattern decoy delete: %v", err)
+		}
+	}
+
 	// Add a subnet
 	if *add_subnets != "" {
 		subnets := strings.Split(*add_subnets, " ")
