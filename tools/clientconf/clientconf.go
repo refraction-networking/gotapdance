@@ -59,6 +59,163 @@ func printClientConf(clientConf *pb.ClientConf) {
 	}
 }
 
+// Single line, not nice for printing, but good for diffs
+func decoyToStr(decoy pb.TLSDecoySpec) string {
+	ip := make(net.IP, 4)
+	binary.BigEndian.PutUint32(ip, decoy.GetIpv4Addr())
+	ip6 := net.IP(decoy.GetIpv6Addr())
+	pk_s := ""
+	if decoy.GetPubkey() != nil {
+		pk_s = hex.EncodeToString(decoy.GetPubkey().Key[:])
+	}
+
+	return fmt.Sprintf("%s (%s / [%s]) pk: %s to: %d win: %d",
+		decoy.GetHostname(), ip.To4().String(), ip6.To16().String(),
+		pk_s, decoy.GetTimeout(), decoy.GetTcpwin())
+}
+
+func keyToStr(key *pb.PubKey) string {
+	if key == nil {
+		return ""
+	}
+	return hex.EncodeToString(key.Key[:])
+}
+
+func phantomsToMap(list *pb.PhantomSubnetsList) (map[string]uint, []string) {
+	var index uint = 0
+	out_map := make(map[string]uint)
+	var out_list []string
+	if list == nil {
+		return out_map, out_list
+	}
+	for _, block := range list.GetWeightedSubnets() {
+		for _, subnet := range block.GetSubnets() {
+			subnet_str := fmt.Sprintf("weight: %d, %s", block.GetWeight(), subnet)
+			out_map[subnet_str] = index
+			out_list = append(out_list, subnet_str)
+			index++
+		}
+	}
+	return out_map, out_list
+}
+
+func printDiff(old *pb.ClientConf, new_fn string) {
+
+	new := parseClientConf(new_fn)
+
+	if old.GetGeneration() != new.GetGeneration() {
+		fmt.Printf("- Generation: %d\n", old.GetGeneration())
+		fmt.Printf("+ Generation: %d\n", new.GetGeneration())
+	}
+
+	old_key := keyToStr(old.GetDefaultPubkey())
+	new_key := keyToStr(new.GetDefaultPubkey())
+	if old_key != new_key {
+		if old_key != "" {
+			fmt.Printf("- Default Pubkey: %s\n", old_key)
+		}
+		if new_key != "" {
+			fmt.Printf("+ Default Pubkey: %s\n", new_key)
+		}
+	}
+
+	old_cj_key := keyToStr(old.GetConjurePubkey())
+	new_cj_key := keyToStr(new.GetConjurePubkey())
+	if old_cj_key != new_cj_key {
+		if old_cj_key != "" {
+			fmt.Printf("- Conjure Pubkey: %s\n", old_cj_key)
+		}
+		if new_cj_key != "" {
+			fmt.Printf("+ Conjure Pubkey: %s\n", new_cj_key)
+		}
+	}
+
+	if old.DecoyList == nil {
+		return
+	}
+	odecoys := old.DecoyList.TlsDecoys
+	ndecoys := new.DecoyList.TlsDecoys
+
+	fmt.Printf("Decoy List: %d -> %d decoys\n", len(odecoys), len(ndecoys))
+
+	n := len(odecoys)
+	if len(ndecoys) > n {
+		n = len(ndecoys)
+	}
+
+	// Map of decoy => index in respective array
+	old_decoys := make(map[string]int)
+	new_decoys := make(map[string]int)
+
+	all_decoys := make(map[string]int) // List of all decoys (union of both)
+
+	for i := 0; i < n; i++ {
+		od := pb.TLSDecoySpec{} // Old Decoy
+		nd := pb.TLSDecoySpec{} // New Decoy
+		if i < len(odecoys) {
+			od = *odecoys[i]
+			old_decoys[decoyToStr(od)] = i
+			all_decoys[decoyToStr(od)] = 1
+		}
+		if i < len(ndecoys) {
+			nd = *ndecoys[i]
+			new_decoys[decoyToStr(nd)] = i
+			all_decoys[decoyToStr(nd)] = 1
+		}
+	}
+
+	// Since we don't really care about order, we don't need a fancy diff like Meyers
+	// Just find the ones that are in old and not in new first
+	removed_idxs := make(map[int]int) // indexes in odecoys
+	added_idxs := make(map[int]int)   // indexes in ndecoys
+
+	for k := range all_decoys {
+		old_idx, in_old := old_decoys[k]
+		new_idx, in_new := new_decoys[k]
+
+		if in_old && in_new {
+			// In both
+		} else if in_old {
+			removed_idxs[old_idx] = -1
+		} else if in_new {
+			added_idxs[new_idx] = -1
+		}
+	}
+
+	for i := 0; i < len(all_decoys); i++ {
+		_, del := removed_idxs[i]
+		_, add := added_idxs[i]
+
+		if del {
+			fmt.Printf("- %d:  %s\n", i, decoyToStr(*odecoys[i]))
+		}
+		if add {
+			fmt.Printf("+ %d:  %s\n", i, decoyToStr(*ndecoys[i]))
+		}
+
+		if !del && !add {
+			//fmt.Printf("%d\n  %s\n", i, decoyToStr(*odecoys[i]))
+		}
+	}
+
+	old_phantom_map, old_phantoms := phantomsToMap(old.GetPhantomSubnetsList())
+	new_phantom_map, new_phantoms := phantomsToMap(new.GetPhantomSubnetsList())
+
+	for i, phantom := range old_phantoms {
+		_, in_new := new_phantom_map[phantom]
+		if !in_new {
+			fmt.Printf("- %d: %s\n", i, phantom)
+		}
+	}
+
+	for i, phantom := range new_phantoms {
+		_, in_old := old_phantom_map[phantom]
+		if !in_old {
+			fmt.Printf("+ %d: %s\n", i, phantom)
+		}
+	}
+}
+
 func parseClientConf(fname string) *pb.ClientConf {
 
 	clientConf := &pb.ClientConf{}
@@ -146,7 +303,7 @@ func deleteSubnet(index int, clientConf *pb.ClientConf) {
 	for blockIndex, block := range *weightedSubnets {
 		blockRange += len(block.Subnets)
 		if blockRange > index {
-			fmt.Printf("index: %d, block_range: %d, len_block: %d", index, blockRange, len(block.Subnets))
+			fmt.Printf("index: %d, block_range: %d, len_block: %d\n", index, blockRange, len(block.Subnets))
 			var indexInBlock = index - (blockRange - len(block.Subnets))
 			block.Subnets[indexInBlock] = block.Subnets[len(block.Subnets)-1]
 			block.Subnets = block.Subnets[:len(block.Subnets)-1]
@@ -233,6 +390,7 @@ func main() {
 	var all = flag.Bool("all", false, "If set, replace all pubkeys/timeouts/tcpwins in decoy list with pubkey/timeout/tcpwin if provided")
 
 	var noout = flag.Bool("noout", false, "Don't print ClientConf")
+	var diff = flag.String("diff", "", "A second conf to diff against (-f old -diff new)")
 	flag.Parse()
 
 	clientConf := &pb.ClientConf{}
@@ -361,7 +519,11 @@ func main() {
 	}
 
 	if !*noout {
-		printClientConf(clientConf)
+		if *diff != "" {
+			printDiff(clientConf, *diff)
+		} else {
+			printClientConf(clientConf)
+		}
 	}
 
 	if *out_fname != "" {
