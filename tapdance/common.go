@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"time"
@@ -171,8 +172,9 @@ func WriteTlsLog(clientRandom, masterSecret []byte) error {
 
 // How much time to sleep on trying to connect to decoys to prevent overwhelming them
 func sleepBeforeConnect(attempt int) (waitTime <-chan time.Time) {
-	if attempt >= 6 { // return nil for first 6 attempts
-		waitTime = time.After(time.Second * 1)
+	if attempt >= 1 {
+		ms := math.Min(25*math.Pow(2, float64(attempt)), 15000)
+		waitTime = time.After(time.Duration(int(ms)) * time.Millisecond)
 	}
 	return
 }
