@@ -437,6 +437,7 @@ func main() {
 		"The file has to be in the following format:\n"+
 		"ip,sni\n",
 	)
+	var print_pairs = flag.Bool("print-pairs", false, "Print pairs of decoys ip,sni")
 
 	flag.Parse()
 
@@ -445,6 +446,23 @@ func main() {
 	// Parse ClientConf
 	if *fname != "" {
 		clientConf = parseClientConf(*fname)
+	}
+
+	// Print pairs of decoy addresses
+	if *print_pairs {
+		ip := ""
+		for _, decoy := range clientConf.DecoyList.TlsDecoys {
+			decoy_ip4 := make(net.IP, 4)
+			binary.BigEndian.PutUint32(decoy_ip4, decoy.GetIpv4Addr())
+			decoy_ip6 := net.IP(decoy.GetIpv6Addr())
+			
+			if decoy_ip4.To4().String() != "0.0.0.0" {
+				ip = decoy_ip4.To4().String()
+			} else {
+				ip = decoy_ip6.To16().String()
+			}
+			fmt.Printf("%s,%s\n", ip, decoy.GetHostname())
+		}
 	}
 
 	// Use subnet-file
