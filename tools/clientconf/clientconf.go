@@ -424,6 +424,7 @@ func main() {
 	var fname = flag.String("f", "", "`ClientConf` file to parse")
 	var out_fname = flag.String("o", "", "`output` file name to write new/modified config")
 	var generation = flag.Int("generation", 0, "New/modified generation")
+	var next_gen = flag.Bool("next-gen", false, "Assign the next generation number to the created ClientConf based on the provided one")
 	var pubkey = flag.String("pubkey", "", "New/modified (decoy) pubkey. If -add or -update, applies to specific decoy. If -all applies to all decoys. Otherwise, applies to default pubkey.")
 	var cjPubkey = flag.String("cjpubkey", "", "New/modified (decoy) conjure pubkey. If -add or -update, applies to specific decoy. If -all applies to all decoys. Otherwise, applies to default pubkey.")
 	var delpubkey = flag.Bool("delpubkey", false, "Delete pubkey from decoy with index specified in -update (or from all decoys if -all)")
@@ -518,6 +519,10 @@ func main() {
 	// Update generation
 	if *generation != 0 {
 		gen := uint32(*generation)
+		clientConf.Generation = &gen
+	} else if *next_gen {
+		gen := clientConf.GetGeneration()
+		gen++
 		clientConf.Generation = &gen
 	}
 
