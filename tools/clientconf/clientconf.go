@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/binary"
 	"encoding/hex"
 	"flag"
@@ -8,6 +9,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"os"
 	"regexp"
 	"strings"
 
@@ -361,6 +363,46 @@ func deleteStringPattern(pattern string, clientConf *pb.ClientConf) error {
 	return nil
 }
 
+func decoysToDeleteFromFile(filename string, clientConf *pb.ClientConf) error {
+
+	f_read, err := os.Open(filename)
+	if err != nil {
+		return err
+	}
+	defer f_read.Close()
+	var lines []string
+	scanner := bufio.NewScanner(f_read)
+
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+
+	remainingDecoys := clientConf.DecoyList.TlsDecoys
+
+	for idx, decoy := range clientConf.DecoyList.TlsDecoys {
+		decoy_ip4 := make(net.IP, 4)
+		binary.BigEndian.PutUint32(decoy_ip4, decoy.GetIpv4Addr())
+		decoy_ip6 := net.IP(decoy.GetIpv6Addr())
+
+		for _, line := range lines {
+			pair := strings.Split(line, ",")
+			ip := pair[0]
+			sni := pair[1]
+			if strings.Contains(ip, ":") {
+				if ip == decoy_ip6.To16().String() && sni == decoy.GetHostname() {
+					remainingDecoys = append(remainingDecoys[:idx], remainingDecoys[idx+1:]...)
+				}
+			} else {
+				if ip == decoy_ip4.To16().String() && sni == decoy.GetHostname() {
+					remainingDecoys = append(remainingDecoys[:idx], remainingDecoys[idx+1:]...)
+				}
+			}
+		}
+		clientConf.DecoyList.TlsDecoys = remainingDecoys
+	}
+	return nil
+}
+
 func main() {
 	var fname = flag.String("f", "", "`ClientConf` file to parse")
 	var out_fname = flag.String("o", "", "`output` file name to write new/modified config")
@@ -391,6 +433,11 @@ func main() {
 
 	var noout = flag.Bool("noout", false, "Don't print ClientConf")
 	var diff = flag.String("diff", "", "A second conf to diff against (-f old -diff new)")
+	var decoys_from_file_to_delete = flag.String("decoys-from-file-to-delete", "", "File of decoys to delete from ClientConf.\n"+
+		"The file has to be in the following format:\n"+
+		"ip,sni\n",
+	)
+
 	flag.Parse()
 
 	clientConf := &pb.ClientConf{}
@@ -400,15 +447,18 @@ func main() {
 		clientConf = parseClientConf(*fname)
 	}
 
-	// Use subnet-fille
+	// Use subnet-file
 	if *subnet_file != "" {
-		tree, err := toml.LoadFile(*subnet_file)
+
+		data, err := ioutil.ReadFile(*subnet_file)
 		if err != nil {
 			log.Fatalf("error opening configuration file: %v", err)
 		}
 		subnets := pb.PhantomSubnetsList{}
-		tree.Unmarshal(&subnets)
-		//fmt.Printf("%+v\n", subnets)
+		err = toml.Unmarshal(data, &subnets)
+		if err != nil {
+			log.Fatalf("error unmarshalling data into PhantomSubnetList structure %v", err)
+		}
 		clientConf.PhantomSubnetsList = &subnets
 	}
 
@@ -430,6 +480,14 @@ func main() {
 		err := deleteStringSubnet(*deleteDecoysBySubnet, clientConf)
 		if err != nil {
 			log.Fatalf("failed subnet based decoy delete: %v", err)
+		}
+	}
+
+	// Delete decoys based on a given file path containing line(s) of "ip,sni" decoys
+	if *decoys_from_file_to_delete != "" {
+		err := decoysToDeleteFromFile(*decoys_from_file_to_delete, clientConf)
+		if err != nil {
+			log.Fatalf("failed file based decoy delete %v", err)
 		}
 	}
 
