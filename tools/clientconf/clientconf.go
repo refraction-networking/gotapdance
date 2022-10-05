@@ -101,6 +101,22 @@ func phantomsToMap(list *pb.PhantomSubnetsList) (map[string]uint, []string) {
 	return out_map, out_list
 }
 
+func printPairs(clientConf *pb.ClientConf) {
+
+	ip := ""
+	for _, decoy := range clientConf.DecoyList.TlsDecoys {
+		decoy_ip4 := make(net.IP, 4)
+		binary.BigEndian.PutUint32(decoy_ip4, decoy.GetIpv4Addr())
+		decoy_ip6 := net.IP(decoy.GetIpv6Addr())
+		if decoy_ip4.To4().String() != "0.0.0.0" {
+			ip = decoy_ip4.To4().String()
+		} else {
+			ip = decoy_ip6.To16().String()
+		}
+		fmt.Printf("%s,%s\n", ip, decoy.GetHostname())
+	}
+}
+
 func printDiff(old *pb.ClientConf, new_fn string) {
 
 	new := parseClientConf(new_fn)
@@ -403,6 +419,7 @@ func decoysToDeleteFromFile(filename string, clientConf *pb.ClientConf) error {
 	return nil
 }
 
+
 func main() {
 	var fname = flag.String("f", "", "`ClientConf` file to parse")
 	var out_fname = flag.String("o", "", "`output` file name to write new/modified config")
@@ -433,8 +450,8 @@ func main() {
 
 	var noout = flag.Bool("noout", false, "Don't print ClientConf")
 	var diff = flag.String("diff", "", "A second conf to diff against (-f old -diff new)")
-	var decoys_from_file_to_delete = flag.String("decoys-from-file-to-delete", "", "File of decoys to delete from ClientConf.\n"+
-		"The file has to be in the following format:\n"+
+	var rm_decoys = flag.String("rm-decoys", "", "File of decoys to delete from ClientConf.\n"+
+		"Each line in the file has to be in the following format:\n"+
 		"ip,sni\n",
 	)
 	var print_pairs = flag.Bool("print-pairs", false, "Print pairs of decoys ip,sni")
@@ -446,23 +463,6 @@ func main() {
 	// Parse ClientConf
 	if *fname != "" {
 		clientConf = parseClientConf(*fname)
-	}
-
-	// Print pairs of decoy addresses
-	if *print_pairs {
-		ip := ""
-		for _, decoy := range clientConf.DecoyList.TlsDecoys {
-			decoy_ip4 := make(net.IP, 4)
-			binary.BigEndian.PutUint32(decoy_ip4, decoy.GetIpv4Addr())
-			decoy_ip6 := net.IP(decoy.GetIpv6Addr())
-			
-			if decoy_ip4.To4().String() != "0.0.0.0" {
-				ip = decoy_ip4.To4().String()
-			} else {
-				ip = decoy_ip6.To16().String()
-			}
-			fmt.Printf("%s,%s\n", ip, decoy.GetHostname())
-		}
 	}
 
 	// Use subnet-file
@@ -502,8 +502,8 @@ func main() {
 	}
 
 	// Delete decoys based on a given file path containing line(s) of "ip,sni" decoys
-	if *decoys_from_file_to_delete != "" {
-		err := decoysToDeleteFromFile(*decoys_from_file_to_delete, clientConf)
+	if *rm_decoys != "" {
+		err := decoysToDeleteFromFile(*rm_decoys, clientConf)
 		if err != nil {
 			log.Fatalf("failed file based decoy delete %v", err)
 		}
@@ -600,6 +600,11 @@ func main() {
 		} else {
 			printClientConf(clientConf)
 		}
+	}
+
+	// Print pairs of decoy addresses (ip,sni)
+	if *print_pairs {
+		printPairs(clientConf)
 	}
 
 	if *out_fname != "" {
