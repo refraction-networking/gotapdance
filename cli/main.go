@@ -48,6 +48,8 @@ func main() {
 	var registrar = flag.String("registrar", "decoy", "One of decoy, api, bdapi, dns, bddns.")
 	var transport = flag.String("transport", "min", `The transport to use for Conjure connections. Current values include "min" and "obfs4".`)
 
+	var phantomNet = flag.String("phantom", "", "Target phantom subnet. Must overlap with ClientConf, and will be achieved by brute force of seeds until satisified")
+
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Dark Decoy CLI\n$./cli -connect-addr=<decoy_address> [OPTIONS] \n\nOptions:\n")
 		flag.PrintDefaults()
@@ -96,7 +98,7 @@ func main() {
 		fmt.Printf("Using Station Pubkey: %s\n", hex.EncodeToString(tapdance.Assets().GetConjurePubkey()[:]))
 	}
 
-	err := connectDirect(*td, *APIRegistration, *registrar, *connect_target, *port, *proxyHeader, v6Support, *width, *transport)
+	err := connectDirect(*td, *APIRegistration, *registrar, *connect_target, *port, *proxyHeader, v6Support, *width, *transport, *phantomNet)
 	if err != nil {
 		tapdance.Logger().Println(err)
 		os.Exit(1)
@@ -112,7 +114,7 @@ func main() {
 		}*/
 }
 
-func connectDirect(td bool, apiEndpoint string, registrar string, connect_target string, localPort int, proxyHeader bool, v6Support bool, width int, transport string) error {
+func connectDirect(td bool, apiEndpoint string, registrar string, connect_target string, localPort int, proxyHeader bool, v6Support bool, width int, transport string, phantomNet string) error {
 	if _, _, err := net.SplitHostPort(connect_target); err != nil {
 		return fmt.Errorf("failed to parse host and port from connect_target %s: %v",
 			connect_target, err)
@@ -130,6 +132,7 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connect_target
 		V6Support:          v6Support,
 		Width:              width,
 		Transport:          getTransportFromName(transport),
+		PhantomNet:         phantomNet,
 	}
 
 	switch registrar {

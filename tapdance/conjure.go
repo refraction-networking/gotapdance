@@ -142,7 +142,7 @@ type ConjureSession struct {
 	stats *pb.SessionStats
 }
 
-func MakeConjureSession(covert string, transport pb.TransportType) *ConjureSession {
+func MakeConjureSessionSilent(covert string, transport pb.TransportType) *ConjureSession {
 
 	keys, err := generateSharedKeys(getStationKey())
 	if err != nil {
@@ -159,17 +159,61 @@ func MakeConjureSession(covert string, transport pb.TransportType) *ConjureSessi
 		SessionID:      sessionsTotal.GetAndInc(),
 	}
 
+	return cjSession
+}
+
+func LogConjureSession(cjSession *ConjureSession) {
+
+	keys := cjSession.Keys
+
 	sharedSecretStr := make([]byte, hex.EncodedLen(len(keys.SharedSecret)))
 	hex.Encode(sharedSecretStr, keys.SharedSecret)
 	Logger().Debugf("%v Shared Secret  - %s", cjSession.IDString(), sharedSecretStr)
 
-	Logger().Debugf("%v covert %s", cjSession.IDString(), covert)
+	Logger().Debugf("%v covert %s", cjSession.IDString(), cjSession.CovertAddress)
 
 	reprStr := make([]byte, hex.EncodedLen(len(keys.Representative)))
 	hex.Encode(reprStr, keys.Representative)
 	Logger().Debugf("%v Representative - %s", cjSession.IDString(), reprStr)
 
+}
+
+func MakeConjureSession(covert string, transport pb.TransportType) *ConjureSession {
+
+	cjSession := MakeConjureSessionSilent(covert, transport)
+	if cjSession == nil {
+		return nil
+	}
+
+	// Print out the session details (debug)
+	LogConjureSession(cjSession)
+
 	return cjSession
+}
+
+func FindConjureSessionInRange(covert string, transport pb.TransportType, phantomSubnet *net.IPNet) *ConjureSession {
+
+	count := 0
+	for {
+		// Generate a random session
+		cjSession := MakeConjureSessionSilent(covert, transport)
+		count += 1
+
+		// Get the phantoms this seed would generate
+		phantom4, phantom6, err := SelectPhantom(cjSession.Keys.ConjureSeed, cjSession.V6Support.include)
+		if err != nil {
+			Logger().Warnf("%v failed to select Phantom: %v", cjSession.IDString(), err)
+		}
+
+		// See if our phantoms are in the subnet
+		if phantomSubnet.Contains(*phantom4) || phantomSubnet.Contains(*phantom6) {
+			Logger().Debugf("Generated %d sessions to find one in %v", count, phantomSubnet)
+			// Print out what we got
+			LogConjureSession(cjSession)
+
+			return cjSession
+		}
+	}
 }
 
 // IDString - Get the ID string for the session
