@@ -281,3 +281,9 @@ func GetDefaultPhantomSubnets() *pb.PhantomSubnetsList {
 		},
 	}
 }
+
+// Just returns the list of subnets provided by the protobuf.
+// Convenience function to not have to export getSubnets() or parseSubnets()
+func GetUnweightedSubnetList(subnetsList *pb.PhantomSubnetsList) ([]*net.IPNet, error) {
+	return parseSubnets(getSubnets(subnetsList, nil, false))
+}

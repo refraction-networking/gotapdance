@@ -16,6 +16,7 @@ import (
 	"github.com/refraction-networking/gotapdance/pkg/registration"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	"github.com/refraction-networking/gotapdance/tapdance"
+	"github.com/refraction-networking/gotapdance/tapdance/phantoms"
 	"github.com/refraction-networking/gotapdance/tdproxy"
 	"github.com/sirupsen/logrus"
 )
@@ -72,6 +73,37 @@ func main() {
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to set single decoy host: %s\n", err)
 			flag.Usage()
+			os.Exit(255)
+		}
+	}
+
+	// Check that the provided phantom net overlaps with at least one of our phatom options
+	if *phantomNet != "" {
+		// Load phantoms
+		subnets, err := phantoms.GetUnweightedSubnetList(tapdance.Assets().GetPhantomSubnets())
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to get Phantom subnets: %v\n", err)
+			os.Exit(255)
+		}
+
+		// Check that the provided phantom parses as a CIDR range
+		_, phantomRange, err := net.ParseCIDR(*phantomNet)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error parsing phantom subnet %s: %v\n", *phantomNet, err)
+			flag.Usage()
+			os.Exit(255)
+		}
+
+		// Iterate through all subnets, see if any overlap with the phantomRange
+		found := false
+		for _, subnet := range subnets {
+			if subnet.Contains(phantomRange.IP) || phantomRange.Contains(subnet.IP) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			fmt.Fprintf(os.Stderr, "Error: provided phantom net %v does not overlap with any phantoms in ClientConf\n", *phantomNet)
 			os.Exit(255)
 		}
 	}
