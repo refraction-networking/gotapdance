@@ -74,7 +74,7 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 		return nil, fmt.Errorf("No Session Provided")
 	}
 
-	cjSession.setV6Support(both)
+	//cjSession.setV6Support(both)	 // We don't want to override this here; defaults set in MakeConjureSession
 
 	// Choose Phantom Address in Register depending on v6 support.
 	registration, err := registrationMethod.Register(cjSession, ctx)
@@ -194,7 +194,8 @@ func MakeConjureSession(covert string, transport pb.TransportType) *ConjureSessi
 func FindConjureSessionInRange(covert string, transport pb.TransportType, phantomSubnet *net.IPNet) *ConjureSession {
 
 	count := 0
-	for {
+	Logger().Debugf("Searching for a seed for phatom subnet %v...", phantomSubnet)
+	for count < 100000 {
 		// Generate a random session
 		cjSession := MakeConjureSessionSilent(covert, transport)
 		count += 1
@@ -214,6 +215,8 @@ func FindConjureSessionInRange(covert string, transport pb.TransportType, phanto
 			return cjSession
 		}
 	}
+	Logger().Warnf("Failed to find a session in %v", phantomSubnet)
+	return nil
 }
 
 // IDString - Get the ID string for the session

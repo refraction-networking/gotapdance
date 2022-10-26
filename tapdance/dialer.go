@@ -105,6 +105,9 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 					return nil, errors.New("Invalid Phantom network goal")
 				}
 				cjSession = FindConjureSessionInRange(address, d.Transport, phantomRange)
+				if cjSession == nil {
+					return nil, errors.New("Failed to find Phantom in target subnet")
+				}
 			} else {
 				cjSession = MakeConjureSession(address, d.Transport)
 			}
