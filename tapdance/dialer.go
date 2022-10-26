@@ -91,11 +91,12 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 			flow.tdRaw.useProxyHeader = d.UseProxyHeader
 			return flow, flow.DialContext(ctx)
 		} else {
+			// Conjure
 			// _, err := makeTdFlow(flowBidirectional, nil, address)
 			// if err != nil {
 			// 	return nil, err
 			// }
-			cjSession := MakeConjureSession(address, d.Transport)
+			var cjSession *ConjureSession
 
 			// If specified, only select a phantom from a given range
 			if d.PhantomNet != "" {
@@ -104,6 +105,8 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 					return nil, errors.New("Invalid Phantom network goal")
 				}
 				cjSession = FindConjureSessionInRange(address, d.Transport, phantomRange)
+			} else {
+				cjSession = MakeConjureSession(address, d.Transport)
 			}
 
 			cjSession.TcpDialer = d.TcpDialer
