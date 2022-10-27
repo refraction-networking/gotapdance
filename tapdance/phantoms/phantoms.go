@@ -3,17 +3,20 @@ package phantoms
 import (
 	"crypto/rand"
 	"crypto/sha256"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/big"
-	mrand "math/rand"
 	"net"
+	"sort"
 
-	wr "github.com/mroth/weightedrand"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	"golang.org/x/crypto/hkdf"
 )
+
+type Choice struct {
+	Subnets []string
+	Weight  int64
+}
 
 // getSubnets - return EITHER all subnet strings as one composite array if we are
 //		selecting unweighted, or return the array associated with the (seed) selected
@@ -23,38 +26,48 @@ func getSubnets(sc *pb.PhantomSubnetsList, seed []byte, weighted bool) []string 
 	var out []string = []string{}
 
 	if weighted {
-		// seed random with hkdf derived seed provided by client
-		seedInt, n := binary.Varint(seed)
-		if n == 0 {
-			// fmt.Println("failed to seed random for weighted rand")
-			return nil
-		}
-		mrand.Seed(seedInt)
 
 		weightedSubnets := sc.GetWeightedSubnets()
 		if weightedSubnets == nil {
 			return []string{}
 		}
 
-		choices := make([]wr.Choice, 0, len(weightedSubnets))
+		choices := make([]Choice, 0, len(weightedSubnets))
 
-		// fmt.Println("DEBUG - len = ", len(weightedSubnets))
+		totWeight := int64(0)
 		for _, cjSubnet := range weightedSubnets {
 			weight := cjSubnet.GetWeight()
 			subnets := cjSubnet.GetSubnets()
 			if subnets == nil {
 				continue
 			}
-			// fmt.Println("Adding Choice", subnets, weight)
-			choices = append(choices, wr.Choice{Item: subnets, Weight: uint(weight)})
+
+			totWeight += int64(weight)
+			choices = append(choices, Choice{Subnets: subnets, Weight: int64(weight)})
 		}
 
-		c, _ := wr.NewChooser(choices...)
-		if c == nil {
-			return []string{}
+		// Sort choices assending
+		sort.Slice(choices, func(i, j int) bool {
+			return choices[i].Weight < choices[j].Weight
+		})
+
+		// Naive method: get random int, subtract from weights until you are < 0
+		hkdfReader := hkdf.New(sha256.New, seed, nil, []byte("phantom-select-subnet"))
+		totWeightBig := big.NewInt(totWeight)
+		rndBig, err := rand.Int(hkdfReader, totWeightBig)
+		if err != nil {
+			return nil
 		}
 
-		out = c.Pick().([]string)
+		// Decrement rnd by each weight until it's < 0
+		rnd := rndBig.Int64()
+		for _, choice := range choices {
+			rnd -= choice.Weight
+			if rnd < 0 {
+				return choice.Subnets
+			}
+		}
+
 	} else {
 
 		weightedSubnets := sc.GetWeightedSubnets()
