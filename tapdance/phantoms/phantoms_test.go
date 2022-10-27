@@ -15,7 +15,6 @@ import (
 )
 
 func TestIPSelectionBasic(t *testing.T) {
-
 	seed, err := hex.DecodeString("5a87133b68da3468988a21659a12ed2ece07345c8c1a5b08459ffdea4218d12f")
 	require.Nil(t, err)
 
@@ -25,7 +24,8 @@ func TestIPSelectionBasic(t *testing.T) {
 
 	addr, err := SelectAddrFromSubnet(seed, net1)
 	require.Nil(t, err)
-	require.Equal(t, "2001:48a8:687f:1:5fa4:c34c:434e:ddd", addr.String())
+	//require.Equal(t, "2001:48a8:687f:1:5fa4:c34c:434e:ddd", addr.String())
+	require.Equal(t, "2001:48a8:687f:1:38a3:5a97:50bf:3de5", addr.String())
 }
 
 func TestSelectWeightedMany(t *testing.T) {
@@ -121,15 +121,18 @@ func TestSelectFilter(t *testing.T) {
 
 	p, err := SelectPhantomWeighted([]byte(seed), phantomSubnets, V4Only)
 	require.Nil(t, err)
-	require.Equal(t, "192.122.190.130", p.String())
+	//require.Equal(t, "192.122.190.130", p.String())
+	require.Equal(t, "192.122.190.142", p.String())
 
 	p, err = SelectPhantomWeighted([]byte(seed), phantomSubnets, V6Only)
 	require.Nil(t, err)
-	require.Equal(t, "2001:48a8:687f:1:5fa4:c34c:434e:ddd", p.String())
+	//require.Equal(t, "2001:48a8:687f:1:5fa4:c34c:434e:ddd", p.String())
+	require.Equal(t, "2001:48a8:687f:1:8e14:49ff:be0d:468d", p.String())
 
 	p, err = SelectPhantomWeighted([]byte(seed), phantomSubnets, nil)
 	require.Nil(t, err)
-	require.Equal(t, "2001:48a8:687f:1:5fa4:c34c:434e:ddd", p.String())
+	//require.Equal(t, "2001:48a8:687f:1:5fa4:c34c:434e:ddd", p.String())
+	require.Equal(t, "2001:48a8:687f:1:8e14:49ff:be0d:468d", p.String())
 }
 
 func TestPhantomsV6OnlyFilter(t *testing.T) {
