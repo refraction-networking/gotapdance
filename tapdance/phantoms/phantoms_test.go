@@ -2,9 +2,9 @@ package phantoms
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"io"
 	"math/rand"
 	"net"
 	"testing"
@@ -192,6 +192,12 @@ func TestPhantomSeededSelectionFuzz(t *testing.T) {
 	}
 }
 
+func ExpandSeed(seed, salt []byte, i int) []byte {
+	bi := make([]byte, 8)
+	binary.LittleEndian.PutUint64(bi, uint64(i))
+	return hkdf.Extract(sha256.New, seed, append(salt, bi...))
+}
+
 func TestForDuplicates(t *testing.T) {
 
 	var ps = &pb.PhantomSubnetsList{
@@ -203,33 +209,28 @@ func TestForDuplicates(t *testing.T) {
 	}
 
 	seed, _ := hex.DecodeString("5a87133b68ea3468988a21659a12ed2ece07345c8c1a5b08459ffdea4218d12f")
-	hkdfReader := hkdf.New(sha256.New, seed, nil, []byte("phantom-duplicate-test"))
+	salt := []byte("phantom-duplicate-test")
 
 	// Set of IPs we have seen
 	ipSet := map[string]int{}
-	seedMap := map[int][]byte{} // Not really needed, but whatever. What's a few MB among lazy friends
 
 	// The odds of this test generating a duplicate by chance is around 10^-10
 	// (based on approximation of birthday bound n^2 / 2*m)
 	for i := 0; i < 100000; i++ {
 
 		// Get new random seed
-		curSeed := make([]byte, 16)
-		if _, err := io.ReadFull(hkdfReader, curSeed); err != nil {
-			t.Fatalf("Failed to read hkdf: %v -- %v", err, i)
-		}
+		curSeed := ExpandSeed(seed, salt, i)
 
-		seedMap[i] = curSeed
-
+		// Get phantom address
 		addr, err := SelectPhantom(curSeed, ps, nil, true)
 		if err != nil {
 			t.Fatalf("Failed to select adddress: %v -- %s, %v, %v, %v -- %v", err, hex.EncodeToString(curSeed), ps, "None", true, i)
 		}
 
-		//t.Logf("%d %v %s\n", i, addr, hex.EncodeToString(curSeed))
 		if prev_i, ok := ipSet[addr.String()]; ok {
+			prevSeed := ExpandSeed(seed, salt, prev_i)
 			t.Fatalf("Generated duplicate IP; biased random. Both seeds %d and %d generated %v\n%d: %s\n%d: %s",
-				i, prev_i, addr, i, hex.EncodeToString(curSeed), prev_i, hex.EncodeToString(seedMap[prev_i]))
+				i, prev_i, addr, i, hex.EncodeToString(curSeed), prev_i, hex.EncodeToString(prevSeed))
 		}
 		ipSet[addr.String()] = i
 	}
