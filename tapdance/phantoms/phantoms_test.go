@@ -205,7 +205,6 @@ func TestForDuplicates(t *testing.T) {
 
 	var ps = &pb.PhantomSubnetsList{
 		WeightedSubnets: []*pb.PhantomSubnets{
-			//{Weight: &w1, Subnets: []string{"192.122.190.0/24"}},
 			{Weight: &w1, Subnets: []string{"2001:48a8:687f:1::/64"}},
 			{Weight: &w9, Subnets: []string{"2002::/64"}},
 		},
