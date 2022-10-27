@@ -1,15 +1,18 @@
 package phantoms
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/big"
-	"math/rand"
+	mrand "math/rand"
 	"net"
 
 	wr "github.com/mroth/weightedrand"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
+	"golang.org/x/crypto/hkdf"
 )
 
 // getSubnets - return EITHER all subnet strings as one composite array if we are
@@ -26,7 +29,7 @@ func getSubnets(sc *pb.PhantomSubnetsList, seed []byte, weighted bool) []string 
 			// fmt.Println("failed to seed random for weighted rand")
 			return nil
 		}
-		rand.Seed(seedInt)
+		mrand.Seed(seedInt)
 
 		weightedSubnets := sc.GetWeightedSubnets()
 		if weightedSubnets == nil {
@@ -137,29 +140,17 @@ func SelectAddrFromSubnet(seed []byte, net1 *net.IPNet) (net.IP, error) {
 		ipBigInt.SetBytes(net1.IP.To16())
 	}
 
-	seedInt, n := binary.Varint(seed)
-	if n == 0 {
-		return nil, fmt.Errorf("failed to create seed ")
-	}
+	hkdfReader := hkdf.New(sha256.New, seed, nil, []byte("phantom-addr-from-subnet"))
 
-	rand.Seed(seedInt)
-	randBytes := make([]byte, addrLen/8)
-	_, err := rand.Read(randBytes)
+	// Compute network size (e.g. an ipv4 /24 is 2^(32-24)
+	var netSize big.Int
+	netSize.Exp(big.NewInt(2), big.NewInt(int64(addrLen-bits)), nil)
+
+	randBigInt, err := rand.Int(hkdfReader, &netSize)
 	if err != nil {
 		return nil, err
 	}
-	randBigInt := &big.Int{}
-	randBigInt.SetBytes(randBytes)
 
-	mask := make([]byte, addrLen/8)
-	for i := 0; i < addrLen/8; i++ {
-		mask[i] = 0xff
-	}
-	maskBigInt := &big.Int{}
-	maskBigInt.SetBytes(mask)
-	maskBigInt.Rsh(maskBigInt, uint(bits))
-
-	randBigInt.And(randBigInt, maskBigInt)
 	ipBigInt.Add(ipBigInt, randBigInt)
 
 	return net.IP(ipBigInt.Bytes()), nil
@@ -208,17 +199,16 @@ func selectIPAddr(seed []byte, subnets []*net.IPNet) (*net.IP, error) {
 
 	// Pick a value using the seed in the range of between 0 and the total
 	// number of addresses.
-	id := &big.Int{}
-	id.SetBytes(seed)
-	if id.Cmp(addressTotal) >= 0 {
-		id.Mod(id, addressTotal)
+	hkdfReader := hkdf.New(sha256.New, seed, nil, []byte("phantom-addr-id"))
+	id, err := rand.Int(hkdfReader, addressTotal)
+	if err != nil {
+		return nil, err
 	}
 
 	// Find the network (ID net) that contains our random value and select a
 	// random address from that subnet.
 	// min >= id%total >= max
 	var result net.IP
-	var err error
 	for _, _idNet := range idNets {
 		// fmt.Printf("tot:%s, seed%%tot:%s     id cmp max: %d,  id cmp min: %d %s\n", addressTotal.String(), id, _idNet.max.Cmp(id), _idNet.min.Cmp(id), _idNet.net.String())
 		if _idNet.max.Cmp(id) >= 0 && _idNet.min.Cmp(id) <= 0 {
