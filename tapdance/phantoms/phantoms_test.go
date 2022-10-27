@@ -149,7 +149,6 @@ func TestSelectFilter(t *testing.T) {
 	p, err = SelectPhantomWeighted([]byte(seed), phantomSubnets, V6Only)
 	require.Nil(t, err)
 	//require.Equal(t, "2001:48a8:687f:1:5fa4:c34c:434e:ddd", p.String())
-	//require.Equal(t, "2001:48a8:687f:1:d8f4:45cd:3ae:fcd4", p.String())
 	require.Equal(t, "2001:48a8:687f:1:5da6:63e0:48a4:b3e", p.String())
 
 	p, err = SelectPhantomWeighted([]byte(seed), phantomSubnets, nil)
