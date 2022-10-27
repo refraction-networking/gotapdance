@@ -1,14 +1,17 @@
 package phantoms
 
 import (
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"math/rand"
 	"net"
 	"testing"
 
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/hkdf"
 )
 
 func TestIPSelectionBasic(t *testing.T) {
@@ -186,5 +189,48 @@ func TestPhantomSeededSelectionFuzz(t *testing.T) {
 			require.Nil(t, err, "i=%d, j=%d, seed='%s'", i, j, hex.EncodeToString(seed))
 			require.NotNil(t, phantomAddr)
 		}
+	}
+}
+
+func TestForDuplicates(t *testing.T) {
+
+	var ps = &pb.PhantomSubnetsList{
+		WeightedSubnets: []*pb.PhantomSubnets{
+			//{Weight: &w1, Subnets: []string{"192.122.190.0/24"}},
+			{Weight: &w1, Subnets: []string{"2001:48a8:687f:1::/64"}},
+			{Weight: &w9, Subnets: []string{"2002::/64"}},
+		},
+	}
+
+	seed, _ := hex.DecodeString("5a87133b68ea3468988a21659a12ed2ece07345c8c1a5b08459ffdea4218d12f")
+	hkdfReader := hkdf.New(sha256.New, seed, nil, []byte("phantom-duplicate-test"))
+
+	// Set of IPs we have seen
+	ipSet := map[string]int{}
+	seedMap := map[int][]byte{} // Not really needed, but whatever. What's a few MB among lazy friends
+
+	// The odds of this test generating a duplicate by chance is around 10^-10
+	// (based on approximation of birthday bound n^2 / 2*m)
+	for i := 0; i < 100000; i++ {
+
+		// Get new random seed
+		curSeed := make([]byte, 16)
+		if _, err := io.ReadFull(hkdfReader, curSeed); err != nil {
+			t.Fatalf("Failed to read hkdf: %v -- %v", err, i)
+		}
+
+		seedMap[i] = curSeed
+
+		addr, err := SelectPhantom(curSeed, ps, nil, true)
+		if err != nil {
+			t.Fatalf("Failed to select adddress: %v -- %s, %v, %v, %v -- %v", err, hex.EncodeToString(curSeed), ps, "None", true, i)
+		}
+
+		//t.Logf("%d %v %s\n", i, addr, hex.EncodeToString(curSeed))
+		if prev_i, ok := ipSet[addr.String()]; ok {
+			t.Fatalf("Generated duplicate IP; biased random. Both seeds %d and %d generated %v\n%d: %s\n%d: %s",
+				i, prev_i, addr, i, hex.EncodeToString(curSeed), prev_i, hex.EncodeToString(seedMap[prev_i]))
+		}
+		ipSet[addr.String()] = i
 	}
 }
