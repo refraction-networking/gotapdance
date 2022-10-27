@@ -138,13 +138,18 @@ func parseSubnets(phantomSubnets []string) ([]*net.IPNet, error) {
 	// return nil, fmt.Errorf("parseSubnets not implemented yet")
 }
 
-// SelectAddrFromSubnet given a seed and a CIDR block choose an address. This is
-// done by generating a seeded random bytes up to teh length of the full address
-// then using the net mask to zero out any bytes that are already specified by
-// the CIDR block. Tde masked random value is then added to the cidr block base
-// giving the final randomly selected address.
-func SelectAddrFromSubnet(seed []byte, net1 *net.IPNet) (net.IP, error) {
+// SelectAddrFromSubnetOffset given a CIDR block and offset, return the net.IP
+func SelectAddrFromSubnetOffset(net1 *net.IPNet, offset *big.Int) (net.IP, error) {
 	bits, addrLen := net1.Mask.Size()
+
+	// Compute network size (e.g. an ipv4 /24 is 2^(32-24)
+	var netSize big.Int
+	netSize.Exp(big.NewInt(2), big.NewInt(int64(addrLen-bits)), nil)
+
+	// Check that offset is within this subnet
+	if netSize.Cmp(offset) <= 0 {
+		return nil, errors.New("Offset too big for subnet")
+	}
 
 	ipBigInt := &big.Int{}
 	if v4net := net1.IP.To4(); v4net != nil {
@@ -153,18 +158,7 @@ func SelectAddrFromSubnet(seed []byte, net1 *net.IPNet) (net.IP, error) {
 		ipBigInt.SetBytes(net1.IP.To16())
 	}
 
-	hkdfReader := hkdf.New(sha256.New, seed, nil, []byte("phantom-addr-from-subnet"))
-
-	// Compute network size (e.g. an ipv4 /24 is 2^(32-24)
-	var netSize big.Int
-	netSize.Exp(big.NewInt(2), big.NewInt(int64(addrLen-bits)), nil)
-
-	randBigInt, err := rand.Int(hkdfReader, &netSize)
-	if err != nil {
-		return nil, err
-	}
-
-	ipBigInt.Add(ipBigInt, randBigInt)
+	ipBigInt.Add(ipBigInt, offset)
 
 	return net.IP(ipBigInt.Bytes()), nil
 }
@@ -225,7 +219,10 @@ func selectIPAddr(seed []byte, subnets []*net.IPNet) (*net.IP, error) {
 	for _, _idNet := range idNets {
 		// fmt.Printf("tot:%s, seed%%tot:%s     id cmp max: %d,  id cmp min: %d %s\n", addressTotal.String(), id, _idNet.max.Cmp(id), _idNet.min.Cmp(id), _idNet.net.String())
 		if _idNet.max.Cmp(id) >= 0 && _idNet.min.Cmp(id) <= 0 {
-			result, err = SelectAddrFromSubnet(seed, &_idNet.net)
+
+			var offset big.Int
+			offset.Sub(id, &_idNet.min)
+			result, err = SelectAddrFromSubnetOffset(&_idNet.net, &offset)
 			if err != nil {
 				return nil, fmt.Errorf("failed to chose IP address: %v", err)
 			}
