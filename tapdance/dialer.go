@@ -30,6 +30,9 @@ type Dialer struct {
 	UseProxyHeader bool
 	V6Support      bool // *bool so that it is a nullable type. that can be overridden
 	Width          int
+
+	// Subnet that we want to limit to (or empty if they're all fine)
+	PhantomNet string
 }
 
 // Dial connects to the address on the named network.
@@ -88,11 +91,27 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 			flow.tdRaw.useProxyHeader = d.UseProxyHeader
 			return flow, flow.DialContext(ctx)
 		} else {
+			// Conjure
 			// _, err := makeTdFlow(flowBidirectional, nil, address)
 			// if err != nil {
 			// 	return nil, err
 			// }
-			cjSession := MakeConjureSession(address, d.Transport)
+			var cjSession *ConjureSession
+
+			// If specified, only select a phantom from a given range
+			if d.PhantomNet != "" {
+				_, phantomRange, err := net.ParseCIDR(d.PhantomNet)
+				if err != nil {
+					return nil, errors.New("Invalid Phantom network goal")
+				}
+				cjSession = FindConjureSessionInRange(address, d.Transport, phantomRange)
+				if cjSession == nil {
+					return nil, errors.New("Failed to find Phantom in target subnet")
+				}
+			} else {
+				cjSession = MakeConjureSession(address, d.Transport)
+			}
+
 			cjSession.TcpDialer = d.TcpDialer
 			cjSession.UseProxyHeader = d.UseProxyHeader
 			cjSession.Width = uint(d.Width)

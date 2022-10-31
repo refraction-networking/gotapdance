@@ -16,6 +16,7 @@ import (
 	"github.com/refraction-networking/gotapdance/pkg/registration"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	"github.com/refraction-networking/gotapdance/tapdance"
+	"github.com/refraction-networking/gotapdance/tapdance/phantoms"
 	"github.com/refraction-networking/gotapdance/tdproxy"
 	"github.com/sirupsen/logrus"
 )
@@ -48,6 +49,8 @@ func main() {
 	var registrar = flag.String("registrar", "decoy", "One of decoy, api, bdapi, dns, bddns.")
 	var transport = flag.String("transport", "min", `The transport to use for Conjure connections. Current values include "min" and "obfs4".`)
 
+	var phantomNet = flag.String("phantom", "", "Target phantom subnet. Must overlap with ClientConf, and will be achieved by brute force of seeds until satisified")
+
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Dark Decoy CLI\n$./cli -connect-addr=<decoy_address> [OPTIONS] \n\nOptions:\n")
 		flag.PrintDefaults()
@@ -74,6 +77,37 @@ func main() {
 		}
 	}
 
+	// Check that the provided phantom net overlaps with at least one of our phatom options
+	if *phantomNet != "" {
+		// Load phantoms
+		subnets, err := phantoms.GetUnweightedSubnetList(tapdance.Assets().GetPhantomSubnets())
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to get Phantom subnets: %v\n", err)
+			os.Exit(255)
+		}
+
+		// Check that the provided phantom parses as a CIDR range
+		_, phantomRange, err := net.ParseCIDR(*phantomNet)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error parsing phantom subnet %s: %v\n", *phantomNet, err)
+			flag.Usage()
+			os.Exit(255)
+		}
+
+		// Iterate through all subnets, see if any overlap with the phantomRange
+		found := false
+		for _, subnet := range subnets {
+			if subnet.Contains(phantomRange.IP) || phantomRange.Contains(subnet.IP) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			fmt.Fprintf(os.Stderr, "Error: provided phantom net %v does not overlap with any phantoms in ClientConf\n", *phantomNet)
+			os.Exit(255)
+		}
+	}
+
 	if *debug {
 		tapdance.Logger().Level = logrus.DebugLevel
 		tapdance.Logger().Debug("Debug logging enabled")
@@ -96,7 +130,7 @@ func main() {
 		fmt.Printf("Using Station Pubkey: %s\n", hex.EncodeToString(tapdance.Assets().GetConjurePubkey()[:]))
 	}
 
-	err := connectDirect(*td, *APIRegistration, *registrar, *connect_target, *port, *proxyHeader, v6Support, *width, *transport)
+	err := connectDirect(*td, *APIRegistration, *registrar, *connect_target, *port, *proxyHeader, v6Support, *width, *transport, *phantomNet)
 	if err != nil {
 		tapdance.Logger().Println(err)
 		os.Exit(1)
@@ -112,7 +146,7 @@ func main() {
 		}*/
 }
 
-func connectDirect(td bool, apiEndpoint string, registrar string, connect_target string, localPort int, proxyHeader bool, v6Support bool, width int, transport string) error {
+func connectDirect(td bool, apiEndpoint string, registrar string, connect_target string, localPort int, proxyHeader bool, v6Support bool, width int, transport string, phantomNet string) error {
 	if _, _, err := net.SplitHostPort(connect_target); err != nil {
 		return fmt.Errorf("failed to parse host and port from connect_target %s: %v",
 			connect_target, err)
@@ -130,6 +164,7 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connect_target
 		V6Support:          v6Support,
 		Width:              width,
 		Transport:          getTransportFromName(transport),
+		PhantomNet:         phantomNet,
 	}
 
 	switch registrar {
