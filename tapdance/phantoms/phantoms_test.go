@@ -1,14 +1,20 @@
 package phantoms
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"io/ioutil"
 	"math/rand"
 	"net"
+	"os"
 	"testing"
 
+	"github.com/golang/protobuf/proto"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/hkdf"
 )
 
 func TestIPSelectionBasic(t *testing.T) {
@@ -186,5 +192,56 @@ func TestPhantomSeededSelectionFuzz(t *testing.T) {
 			require.Nil(t, err, "i=%d, j=%d, seed='%s'", i, j, hex.EncodeToString(seed))
 			require.NotNil(t, phantomAddr)
 		}
+	}
+}
+
+func ExpandSeed(seed, salt []byte, i int) []byte {
+	bi := make([]byte, 8)
+	binary.LittleEndian.PutUint64(bi, uint64(i))
+	return hkdf.Extract(sha256.New, seed, append(salt, bi...))
+}
+
+func parseClientConf(fname string) (*pb.ClientConf, error) {
+
+	clientConf := &pb.ClientConf{}
+	buf, err := ioutil.ReadFile(fname)
+	if err != nil {
+		return nil, err
+	}
+	err = proto.Unmarshal(buf, clientConf)
+	if err != nil {
+		return nil, err
+	}
+	return clientConf, nil
+}
+
+func TestBias(t *testing.T) {
+	seed, _ := hex.DecodeString("5a87133b68ea3468988a21659a12ed2ece07345c8c1a5b08459ffdea4218d12f")
+	salt := []byte("phantom-bias-test")
+
+	clientConf, err := parseClientConf("./ClientConf")
+	require.Nil(t, err)
+	ps := clientConf.GetPhantomSubnetsList()
+	ipCount := map[string]int{}
+
+	//snets, err := parseSubnets(getSubnets(ps, nil, true))
+	//require.Nil(t, err)
+	//for snet := range snets {
+	//}
+	totTrials := 1000000
+	for i := 0; i < totTrials; i++ {
+		curSeed := ExpandSeed(seed, salt, i)
+		addr, err := SelectPhantom(curSeed, ps, V4Only, true)
+		//addr, err := SelectPhantom(curSeed, ps, nil, true)
+		require.Nil(t, err)
+		ipCount[addr.String()] += 1
+	}
+	// Write file
+	f, err := os.Create("./bias-ips.out")
+	require.Nil(t, err)
+	defer f.Close()
+
+	for ip, count := range ipCount {
+		f.WriteString(fmt.Sprintf("%s %d\n", ip, count))
 	}
 }
