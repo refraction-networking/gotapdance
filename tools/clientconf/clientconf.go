@@ -26,24 +26,23 @@ func printClientConf(clientConf *pb.ClientConf) {
 	if clientConf.GetConjurePubkey() != nil {
 		fmt.Printf("Conjure Pubkey: %s\n", hex.EncodeToString(clientConf.GetConjurePubkey().Key[:]))
 	}
-	if clientConf.DecoyList == nil {
-		return
-	}
-	decoys := clientConf.DecoyList.TlsDecoys
-	fmt.Printf("Decoy List: %d decoys\n", len(decoys))
-	for i, decoy := range decoys {
-		ip := make(net.IP, 4)
-		binary.BigEndian.PutUint32(ip, decoy.GetIpv4Addr())
-		ip6 := net.IP(decoy.GetIpv6Addr())
-		fmt.Printf("%d:\n  %s (%s / [%s])\n", i, decoy.GetHostname(), ip.To4().String(), ip6.To16().String())
-		if decoy.GetPubkey() != nil {
-			fmt.Printf("  pubkey: %s\n", hex.EncodeToString(decoy.GetPubkey().Key[:]))
-		}
-		if decoy.GetTimeout() != 0 {
-			fmt.Printf("  timeout: %d ms\n", decoy.GetTimeout())
-		}
-		if decoy.GetTcpwin() != 0 {
-			fmt.Printf("  tcpwin: %d bytes\n", decoy.GetTcpwin())
+	if clientConf.DecoyList != nil {
+		decoys := clientConf.DecoyList.TlsDecoys
+		fmt.Printf("Decoy List: %d decoys\n", len(decoys))
+		for i, decoy := range decoys {
+			ip := make(net.IP, 4)
+			binary.BigEndian.PutUint32(ip, decoy.GetIpv4Addr())
+			ip6 := net.IP(decoy.GetIpv6Addr())
+			fmt.Printf("%d:\n  %s (%s / [%s])\n", i, decoy.GetHostname(), ip.To4().String(), ip6.To16().String())
+			if decoy.GetPubkey() != nil {
+				fmt.Printf("  pubkey: %s\n", hex.EncodeToString(decoy.GetPubkey().Key[:]))
+			}
+			if decoy.GetTimeout() != 0 {
+				fmt.Printf("  timeout: %d ms\n", decoy.GetTimeout())
+			}
+			if decoy.GetTcpwin() != 0 {
+				fmt.Printf("  tcpwin: %d bytes\n", decoy.GetTcpwin())
+			}
 		}
 	}
 
