@@ -307,11 +307,23 @@ message SessionStats {
     optional uint32 tcp_to_decoy = 39; // measured when establishing tcp connection to decot
 }
 
+enum StationOperations {
+    Unknown = 0;
+    New = 1;
+    Update = 2;
+    Clear = 3;
+}
+
 message StationToDetector {
     optional string phantom_ip = 1;
     optional string client_ip = 2;
 
     optional uint64 timeout_ns = 3;
+
+    optional StationOperations operation = 4;
+
+    optional int32 dst_port = 10;
+    optional int32 src_port = 11;
 }
 
 // Adding message response from Station to Client for bidirectional API
