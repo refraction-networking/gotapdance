@@ -25,7 +25,7 @@ type Requester struct {
 }
 
 // New Requester using DoT as transport
-func NewDoTRequester(dotaddr string, domain string, pubkey []byte, utlsDistribution string) (*Requester, error) {
+func NewDoTRequester(dotaddr string, domain string, pubkey []byte, utlsDistribution string, tcpDialer func(ctx context.Context, network, addr string) (net.Conn, error)) (*Requester, error) {
 	basename, err := dns.ParseName(domain)
 	if err != nil {
 		return nil, err
@@ -36,13 +36,24 @@ func NewDoTRequester(dotaddr string, domain string, pubkey []byte, utlsDistribut
 		return nil, err
 	}
 
+	if tcpDialer == nil {
+		dialer := net.Dialer{}
+		tcpDialer = dialer.DialContext
+	}
+
 	remoteAddr := queuepacketconn.DummyAddr{}
 	var dialTLSContext func(ctx context.Context, network, addr string) (net.Conn, error)
 	if utlsClientHelloID == nil {
-		dialTLSContext = (&tls.Dialer{}).DialContext
+		dialTLSContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+			conn, err := tcpDialer(ctx, network, addr)
+			if err != nil {
+				return nil, err
+			}
+			return tls.Client(conn, &tls.Config{}), nil
+		}
 	} else {
 		dialTLSContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-			return utlsDialContext(ctx, network, addr, nil, utlsClientHelloID)
+			return utlsDialContext(ctx, network, addr, nil, utlsClientHelloID, tcpDialer)
 		}
 	}
 	dotconn, err := NewTLSPacketConn(dotaddr, dialTLSContext)
@@ -60,7 +71,7 @@ func NewDoTRequester(dotaddr string, domain string, pubkey []byte, utlsDistribut
 }
 
 // New Requester using DoH as transport
-func NewDoHRequester(dohurl string, domain string, pubkey []byte, utlsDistribution string) (*Requester, error) {
+func NewDoHRequester(dohurl string, domain string, pubkey []byte, utlsDistribution string, tcpDialer func(ctx context.Context, network, addr string) (net.Conn, error)) (*Requester, error) {
 	basename, err := dns.ParseName(domain)
 	if err != nil {
 		return nil, err
@@ -80,10 +91,11 @@ func NewDoHRequester(dohurl string, domain string, pubkey []byte, utlsDistributi
 		// with utlsRoundTripper and with DoT mode,
 		// which do not take a proxy from the
 		// environment.
+		transport.DialContext = tcpDialer
 		transport.Proxy = nil
 		rt = transport
 	} else {
-		rt = NewUTLSRoundTripper(nil, utlsClientHelloID)
+		rt = NewUTLSRoundTripper(nil, utlsClientHelloID, tcpDialer)
 	}
 
 	dohconn, err := NewHTTPPacketConn(rt, dohurl, 32)

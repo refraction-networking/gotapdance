@@ -46,11 +46,11 @@ func NewDNSRegistrarFromConf(conf *pb.DnsRegConf, bidirectional bool, delay time
 	default:
 		return nil, errors.New("unkown reg method in conf")
 	}
-	return NewDNSRegistrar(*conf.DnsRegMethod, target, *conf.Domain, pubkey, *conf.UtlsDistribution, maxTries, bidirectional, delay, *conf.StunServer)
+	return NewDNSRegistrar(*conf.DnsRegMethod, target, *conf.Domain, pubkey, *conf.UtlsDistribution, maxTries, bidirectional, delay, *conf.StunServer, nil)
 }
 
 // NewDNSRegistrar creates a DNSRegistrar.
-func NewDNSRegistrar(regType pb.DnsRegMethod, target string, domain string, pubkey []byte, utlsDistribution string, maxTries int, bidirectional bool, delay time.Duration, stun_server string) (*DNSRegistrar, error) {
+func NewDNSRegistrar(regType pb.DnsRegMethod, target string, domain string, pubkey []byte, utlsDistribution string, maxTries int, bidirectional bool, delay time.Duration, stun_server string, tcpDialContext func(ctx context.Context, network, addr string) (net.Conn, error)) (*DNSRegistrar, error) {
 	var err error
 	if utlsDistribution == "" {
 		return nil, errors.New("utlsDistribution must be specified")
@@ -75,12 +75,12 @@ func NewDNSRegistrar(regType pb.DnsRegMethod, target string, domain string, pubk
 			return nil, err
 		}
 	case pb.DnsRegMethod_DOT:
-		req, err = requester.NewDoTRequester(target, domain, pubkey, utlsDistribution)
+		req, err = requester.NewDoTRequester(target, domain, pubkey, utlsDistribution, tcpDialContext)
 		if err != nil {
 			return nil, err
 		}
 	case pb.DnsRegMethod_DOH:
-		req, err = requester.NewDoHRequester(target, domain, pubkey, utlsDistribution)
+		req, err = requester.NewDoHRequester(target, domain, pubkey, utlsDistribution, tcpDialContext)
 		if err != nil {
 			return nil, err
 		}
