@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"net"
-
-	pb "github.com/refraction-networking/gotapdance/protobuf"
 )
 
 var sessionsTotal CounterUint64
@@ -25,11 +23,15 @@ type Dialer struct {
 	DarkDecoyRegistrar Registrar
 
 	// The type of transport to use for Conjure connections.
-	Transport pb.TransportType
+	Transport Transport
 
 	UseProxyHeader bool
-	V6Support      bool // *bool so that it is a nullable type. that can be overridden
+	V6Support      bool
 	Width          int
+
+	// RandomizeDstPort enables dst port randomization. Requires selected transport that supports
+	// destination port randomization.
+	RandomizeDstPort bool
 }
 
 // Dial connects to the address on the named network.
@@ -96,6 +98,7 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 			cjSession.TcpDialer = d.TcpDialer
 			cjSession.UseProxyHeader = d.UseProxyHeader
 			cjSession.Width = uint(d.Width)
+			cjSession.RandomizeDstPort = d.RandomizeDstPort
 
 			if d.V6Support {
 				cjSession.V6Support = &V6{include: both, support: true}

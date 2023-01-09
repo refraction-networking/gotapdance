@@ -11,14 +11,21 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/refraction-networking/gotapdance/pkg/transports"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	"github.com/refraction-networking/gotapdance/tapdance"
 	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAPIRegistrar(t *testing.T) {
 	tapdance.AssetsSetDir("./assets")
-	session := tapdance.MakeConjureSession("1.2.3.4:1234", pb.TransportType_Min)
+
+	transports.AddDefaultTransports()
+	transport, err := transports.New("min")
+	require.Nil(t, err)
+
+	session := tapdance.MakeConjureSession("1.2.3.4:1234", transport)
 
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
@@ -59,8 +66,11 @@ func TestAPIRegistrar(t *testing.T) {
 
 func TestAPIRegistrarBidirectional(t *testing.T) {
 	tapdance.AssetsSetDir("./assets")
+	transports.AddDefaultTransports()
+	transport, err := transports.New("min")
+	require.Nil(t, err)
 	// Make Conjure session with covert address
-	session := tapdance.MakeConjureSession("1.2.3.4:1234", pb.TransportType_Min)
+	session := tapdance.MakeConjureSession("1.2.3.4:1234", transport)
 	addr4 := binary.BigEndian.Uint32(net.ParseIP("127.0.0.1").To4())
 	addr6 := net.ParseIP("2001:48a8:687f:1:41d3:ff12:45b:73c8")
 	var port uint32 = 80
@@ -115,7 +125,7 @@ func TestAPIRegistrarBidirectional(t *testing.T) {
 	response := &tapdance.ConjureReg{}
 	// register.Register() connects to server set up above and sends registration info
 	// "response" will store the RegistrationResponse protobuf that the server replies with
-	response, err := registrar.Register(session, context.TODO())
+	response, err = registrar.Register(session, context.TODO())
 	if err != nil {
 		t.Fatalf("bidirectional registrar failed with error: %v", err)
 	}

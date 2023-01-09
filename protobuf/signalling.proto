@@ -339,8 +339,8 @@ message StationToDetector {
 
     optional StationOperations operation = 4;
 
-    optional int32 dst_port = 10;
-    optional int32 src_port = 11;
+    optional uint32 dst_port = 10;
+    optional uint32 src_port = 11;
     optional IpProto proto = 12;
 }
 
@@ -351,7 +351,7 @@ message RegistrationResponse {
   optional bytes ipv6addr = 2;
 
   // Respond with randomized port
-  optional uint32 port = 3;
+  optional uint32 dst_port = 3;
 
   // Future: station provides client with secret, want chanel present
   // Leave null for now

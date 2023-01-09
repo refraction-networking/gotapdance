@@ -15,7 +15,6 @@ import (
 	"time"
 
 	pt "git.torproject.org/pluggable-transports/goptlib.git"
-	"github.com/golang/protobuf/proto"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	ps "github.com/refraction-networking/gotapdance/tapdance/phantoms"
 	tls "github.com/refraction-networking/utls"
@@ -23,6 +22,8 @@ import (
 	"gitlab.com/yawning/obfs4.git/transports/obfs4"
 	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/hkdf"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 // CurrentClientLibraryVersion returns the current client library version used
@@ -32,9 +33,18 @@ import (
 // When adding new client versions comment out older versions and add new
 // version below with a description of the reason for the new version.
 func currentClientLibraryVersion() uint32 {
-	// Initial inclusion of client version - added due to update in phantom
-	// selection algorithm that is not backwards compatible to older clients.
-	return 1
+
+	// Support for randomizing destination port for phantom connection
+	return 3
+
+	// // Phantom selection version rework again to use hkdf for actual uniform
+	// // distribution across phantom subnets.
+	// // https://github.com/refraction-networking/conjure/pull/145
+	// return 2
+
+	// // Initial inclusion of client version - added due to update in phantom
+	// // selection algorithm that is not backwards compatible to older clients.
+	// return 1
 
 	// // No client version indicates any client before this change.
 	// return 0
@@ -46,12 +56,6 @@ type V6 struct {
 	include uint
 }
 
-// Registrar defines the interface for a service executing
-// decoy registrations.
-type Registrar interface {
-	Register(*ConjureSession, context.Context) (*ConjureReg, error)
-}
-
 const (
 	v4 uint = iota
 	v6
@@ -60,12 +64,6 @@ const (
 
 // [TODO]{priority:winter-break} make this not constant
 const defaultRegWidth = 5
-
-// DialConjureAddr - Perform Registration and Dial after creating  a Conjure session from scratch
-func DialConjureAddr(ctx context.Context, address string, registrationMethod Registrar) (net.Conn, error) {
-	cjSession := MakeConjureSession(address, pb.TransportType_Min)
-	return DialConjure(ctx, cjSession, registrationMethod)
-}
 
 // DialConjure - Perform Registration and Dial on an existing Conjure session
 func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMethod Registrar) (net.Conn, error) {
@@ -85,7 +83,7 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 
 	Logger().Debugf("%v Attempting to Connect ...", cjSession.IDString())
 
-	return registration.Connect(ctx)
+	return registration.Connect(ctx, registration.Transport)
 	// return Connect(cjSession)
 }
 
@@ -118,31 +116,35 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 
 // Connect - Dial the Phantom IP address after registration
 func Connect(ctx context.Context, reg *ConjureReg) (net.Conn, error) {
-	return reg.Connect(ctx)
+	return reg.Connect(ctx, reg.Transport)
 }
 
 // ConjureSession - Create a session with details for registration and connection
 type ConjureSession struct {
-	Keys           *sharedKeys
-	Width          uint
-	V6Support      *V6
-	UseProxyHeader bool
-	SessionID      uint64
-	Phantom        *net.IP
-	Transport      pb.TransportType
-	CovertAddress  string
+	Keys             *sharedKeys
+	Width            uint
+	V6Support        *V6
+	UseProxyHeader   bool
+	RandomizeDstPort bool
+	SessionID        uint64
+	Phantom          *net.IP
+	Transport        Transport
+	CovertAddress    string
 	// rtt			   uint // tracked in stats
 
+	// TcpDialer allows the caller to provide a custom dialer for outgoing proxy connections.
+	//
 	// THIS IS REQUIRED TO INTERFACE WITH PSIPHON ANDROID
-	//		we use their dialer to prevent connection loopback into our own proxy
-	//		connection when tunneling the whole device.
+	//      we use their dialer to prevent connection loopback into our own proxy
+	//      connection when tunneling the whole device.
 	TcpDialer func(context.Context, string, string) (net.Conn, error)
 
 	// performance tracking
 	stats *pb.SessionStats
 }
 
-func MakeConjureSession(covert string, transport pb.TransportType) *ConjureSession {
+// MakeConjureSession creates a conjure session.
+func MakeConjureSession(covert string, transport Transport) *ConjureSession {
 
 	keys, err := generateSharedKeys(getStationKey())
 	if err != nil {
@@ -200,25 +202,30 @@ func (cjSession *ConjureSession) conjureReg() *ConjureReg {
 		stats:          &pb.SessionStats{},
 		v6Support:      cjSession.V6Support.include,
 		covertAddress:  cjSession.CovertAddress,
-		transport:      cjSession.Transport,
+		Transport:      cjSession.Transport,
 		TcpDialer:      cjSession.TcpDialer,
 		useProxyHeader: cjSession.UseProxyHeader,
 	}
 }
 
-// PrepareBidirectionalRegData returns a C2SWrapper for bidirectional registration
+// BidirectionalRegData returns a C2SWrapper for bidirectional registration
 func (cjSession *ConjureSession) BidirectionalRegData(regSource *pb.RegistrationSource) (*ConjureReg, *pb.C2SWrapper, error) {
 	reg := cjSession.conjureReg()
 
+	c2s, err := reg.generateClientToStation()
+	if err != nil {
+		return nil, nil, err
+	}
+
 	return reg, &pb.C2SWrapper{
 		SharedSecret:        cjSession.Keys.SharedSecret,
-		RegistrationPayload: reg.generateClientToStation(),
+		RegistrationPayload: c2s,
 		RegistrationSource:  regSource,
 	}, nil
 
 }
 
-// PrepareUnidirectionalRegData returns a C2SWrapper for unidirectional registration
+// UnidirectionalRegData returns a C2SWrapper for unidirectional registration
 func (cjSession *ConjureSession) UnidirectionalRegData(regSource *pb.RegistrationSource) (*ConjureReg, *pb.C2SWrapper, error) {
 	reg := cjSession.conjureReg()
 
@@ -230,14 +237,21 @@ func (cjSession *ConjureSession) UnidirectionalRegData(regSource *pb.Registratio
 
 	reg.phantom4 = phantom4
 	reg.phantom6 = phantom6
+	reg.phantomDstPort = cjSession.Transport.GetDstPort(reg)
+
+	c2s, err := reg.generateClientToStation()
+	if err != nil {
+		return nil, nil, err
+	}
 
 	return reg, &pb.C2SWrapper{
 		SharedSecret:        cjSession.Keys.SharedSecret,
-		RegistrationPayload: reg.generateClientToStation(),
+		RegistrationPayload: c2s,
 		RegistrationSource:  regSource,
 	}, nil
 }
 
+// Decoys returns the set of usable decoys for a given conjure session.
 func (cjSession *ConjureSession) Decoys() ([]*pb.TLSDecoySpec, error) {
 	return SelectDecoys(cjSession.Keys.SharedSecret, cjSession.V6Support.include, cjSession.Width)
 }
@@ -262,7 +276,7 @@ func (reg *ConjureReg) connect(ctx context.Context, addr string, dialer dialFunc
 	defer childCancelFunc()
 
 	//[reference] Connect to Phantom Host
-	phantomAddr := net.JoinHostPort(addr, "443")
+	phantomAddr := net.JoinHostPort(addr, strconv.Itoa(int(reg.phantomDstPort)))
 
 	// conn, err := reg.TcpDialer(childCtx, "tcp", phantomAddr)
 	return dialer(childCtx, "tcp", phantomAddr)
@@ -281,7 +295,7 @@ func (reg *ConjureReg) getFirstConnection(ctx context.Context, dialer dialFunc, 
 				connChannel <- resultTuple{nil, err}
 				return
 			}
-			Logger().Infof("%v Connected to phantom %v using transport %d", reg.sessionIDStr, phantom.String(), reg.transport)
+			Logger().Infof("%v Connected to phantom %v using transport %s", reg.sessionIDStr, phantom.String(), reg.Transport)
 			connChannel <- resultTuple{conn, nil}
 		}(p)
 	}
@@ -316,11 +330,11 @@ func (reg *ConjureReg) getFirstConnection(ctx context.Context, dialer dialFunc, 
 // Connect - Use a registration (result of calling Register) to connect to a phantom
 // Note: This is hacky but should work for v4, v6, or both as any nil phantom addr will
 // return a dial error and be ignored.
-func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
+func (reg *ConjureReg) Connect(ctx context.Context, transport Transport) (net.Conn, error) {
 	phantoms := []*net.IP{reg.phantom4, reg.phantom6}
 
 	//[reference] Provide chosen transport to sent bytes (or connect) if necessary
-	switch reg.transport {
+	switch reg.Transport.ID() {
 	case pb.TransportType_Min:
 		conn, err := reg.getFirstConnection(ctx, reg.TcpDialer, phantoms)
 		if err != nil {
@@ -329,7 +343,7 @@ func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
 		}
 
 		// Send hmac(seed, str) bytes to indicate to station (min transport)
-		connectTag := conjureHMAC(reg.keys.SharedSecret, "MinTrasportHMACString")
+		connectTag := conjureHMAC(reg.keys.SharedSecret, "MinTransportHMACString")
 		conn.Write(connectTag)
 		return conn, nil
 
@@ -377,15 +391,17 @@ func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
 
 // ConjureReg - Registration structure created for each individual registration within a session.
 type ConjureReg struct {
+	Transport
+
 	seed           []byte
 	sessionIDStr   string
 	phantom4       *net.IP
 	phantom6       *net.IP
+	phantomDstPort uint16
 	useProxyHeader bool
 	covertAddress  string
 	phantomSNI     string
 	v6Support      uint
-	transport      pb.TransportType
 
 	// THIS IS REQUIRED TO INTERFACE WITH PSIPHON ANDROID
 	//		we use their dialer to prevent connection loopback into our own proxy
@@ -419,6 +435,12 @@ func (reg *ConjureReg) UnpackRegResp(regResp *pb.RegistrationResponse) error {
 		// Save the ipv6address in the Conjure Reg struct (phantom6) to return
 		addr6 := net.IP(regResp.GetIpv6Addr())
 		reg.phantom6 = &addr6
+	}
+	reg.phantomDstPort = uint16(regResp.GetDstPort())
+	if reg.phantomDstPort == 0 {
+		// If a bidirectional registrar does not support randomization (or doesn't set the port in the
+		// registration response we default to the original port we used for all transports).
+		reg.phantomDstPort = 443
 	}
 
 	// Client config -- check if not nil in the registration response
@@ -594,7 +616,12 @@ func (reg *ConjureReg) setTLSToDecoy(tlsrtt *uint32) {
 }
 
 func (reg *ConjureReg) getPbTransport() pb.TransportType {
-	return pb.TransportType(reg.transport)
+	return reg.Transport.ID()
+}
+
+func (reg *ConjureReg) getPbTransportParams() (*anypb.Any, error) {
+	var m proto.Message = reg.Transport.GetParams()
+	return anypb.New(m)
 }
 
 func (reg *ConjureReg) generateFlags() *pb.RegistrationFlags {
@@ -615,7 +642,7 @@ func (reg *ConjureReg) generateFlags() *pb.RegistrationFlags {
 	return flags
 }
 
-func (reg *ConjureReg) generateClientToStation() *pb.ClientToStation {
+func (reg *ConjureReg) generateClientToStation() (*pb.ClientToStation, error) {
 	var covert *string
 	if len(reg.covertAddress) > 0 {
 		//[TODO]{priority:medium} this isn't the correct place to deal with signaling to the station
@@ -628,6 +655,11 @@ func (reg *ConjureReg) generateClientToStation() *pb.ClientToStation {
 	currentGen := Assets().GetGeneration()
 	currentLibVer := currentClientLibraryVersion()
 	transport := reg.getPbTransport()
+	transportParams, err := reg.getPbTransportParams()
+	if err != nil {
+		Logger().Debugf("%s failed to marshal transport parameters ", reg.sessionIDStr)
+	}
+
 	initProto := &pb.ClientToStation{
 		ClientLibVersion:    &currentLibVer,
 		CovertAddress:       covert,
@@ -636,7 +668,7 @@ func (reg *ConjureReg) generateClientToStation() *pb.ClientToStation {
 		V4Support:           reg.getV4Support(),
 		Transport:           &transport,
 		Flags:               reg.generateFlags(),
-		// StateTransition:     &transition,
+		TransportParams:     transportParams,
 
 		//[TODO]{priority:medium} specify width in C2S because different width might
 		// 		be useful in different regions (constant for now.)
@@ -650,12 +682,17 @@ func (reg *ConjureReg) generateClientToStation() *pb.ClientToStation {
 		initProto.Padding = append(initProto.Padding, byte(0))
 	}
 
-	return initProto
+	return initProto, nil
 }
 
 func (reg *ConjureReg) generateVSP() ([]byte, error) {
+	c2s, err := reg.generateClientToStation()
+	if err != nil {
+		return nil, err
+	}
+
 	//[reference] Marshal ClientToStation protobuf
-	return proto.Marshal(reg.generateClientToStation())
+	return proto.Marshal(c2s)
 }
 
 func (reg *ConjureReg) generateFSP(espSize uint16) []byte {
@@ -719,6 +756,7 @@ func (reg *ConjureReg) digestStats() string {
 		reg.stats.GetTotalTimeToConnect())
 }
 
+// GetRandomDuration returns a random duration that
 func (reg *ConjureReg) GetRandomDuration(base, min, max int) time.Duration {
 	addon := getRandInt(min, max) / 1000 // why this min and max???
 	rtt := rttInt(reg.getTcpToDecoy())

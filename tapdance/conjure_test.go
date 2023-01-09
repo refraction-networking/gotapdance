@@ -255,3 +255,14 @@ func TestSelectDecoysErrorHandling(t *testing.T) {
 	require.NotNil(t, decoy)
 	assert.Equal(t, "tapdance1.freeaeskey.xyz", decoy[0].GetHostname())
 }
+
+// func TestConjurePBTransportParams(t *testing.T) {
+// 	// func (reg *ConjureReg) getPbTransportParams() (*anypb.Any, error) {
+// 	reg := &ConjureReg{
+// 		Transport: mockTransport,
+// 	}
+
+// 	params, err := reg.getPbTransportParams()
+// 	require.Nil(t, err)
+// 	require.Nil(t, params)
+// }
