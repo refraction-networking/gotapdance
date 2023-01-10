@@ -558,62 +558,62 @@ func (StationOperations) EnumDescriptor() ([]byte, []int) {
 	return file_signalling_proto_rawDescGZIP(), []int{7}
 }
 
-type IpProto int32
+type IPProto int32
 
 const (
-	IpProto_Unk IpProto = 0
-	IpProto_Tcp IpProto = 1
-	IpProto_Udp IpProto = 2
+	IPProto_Unk IPProto = 0
+	IPProto_Tcp IPProto = 1
+	IPProto_Udp IPProto = 2
 )
 
-// Enum value maps for IpProto.
+// Enum value maps for IPProto.
 var (
-	IpProto_name = map[int32]string{
+	IPProto_name = map[int32]string{
 		0: "Unk",
 		1: "Tcp",
 		2: "Udp",
 	}
-	IpProto_value = map[string]int32{
+	IPProto_value = map[string]int32{
 		"Unk": 0,
 		"Tcp": 1,
 		"Udp": 2,
 	}
 )
 
-func (x IpProto) Enum() *IpProto {
-	p := new(IpProto)
+func (x IPProto) Enum() *IPProto {
+	p := new(IPProto)
 	*p = x
 	return p
 }
 
-func (x IpProto) String() string {
+func (x IPProto) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (IpProto) Descriptor() protoreflect.EnumDescriptor {
+func (IPProto) Descriptor() protoreflect.EnumDescriptor {
 	return file_signalling_proto_enumTypes[8].Descriptor()
 }
 
-func (IpProto) Type() protoreflect.EnumType {
+func (IPProto) Type() protoreflect.EnumType {
 	return &file_signalling_proto_enumTypes[8]
 }
 
-func (x IpProto) Number() protoreflect.EnumNumber {
+func (x IPProto) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
 // Deprecated: Do not use.
-func (x *IpProto) UnmarshalJSON(b []byte) error {
+func (x *IPProto) UnmarshalJSON(b []byte) error {
 	num, err := protoimpl.X.UnmarshalJSONEnum(x.Descriptor(), b)
 	if err != nil {
 		return err
 	}
-	*x = IpProto(num)
+	*x = IPProto(num)
 	return nil
 }
 
-// Deprecated: Use IpProto.Descriptor instead.
-func (IpProto) EnumDescriptor() ([]byte, []int) {
+// Deprecated: Use IPProto.Descriptor instead.
+func (IPProto) EnumDescriptor() ([]byte, []int) {
 	return file_signalling_proto_rawDescGZIP(), []int{8}
 }
 
@@ -1899,7 +1899,7 @@ type StationToDetector struct {
 	Operation *StationOperations `protobuf:"varint,4,opt,name=operation,enum=tapdance.StationOperations" json:"operation,omitempty"`
 	DstPort   *uint32            `protobuf:"varint,10,opt,name=dst_port,json=dstPort" json:"dst_port,omitempty"`
 	SrcPort   *uint32            `protobuf:"varint,11,opt,name=src_port,json=srcPort" json:"src_port,omitempty"`
-	Proto     *IpProto           `protobuf:"varint,12,opt,name=proto,enum=tapdance.IpProto" json:"proto,omitempty"`
+	Proto     *IPProto           `protobuf:"varint,12,opt,name=proto,enum=tapdance.IPProto" json:"proto,omitempty"`
 }
 
 func (x *StationToDetector) Reset() {
@@ -1976,11 +1976,11 @@ func (x *StationToDetector) GetSrcPort() uint32 {
 	return 0
 }
 
-func (x *StationToDetector) GetProto() IpProto {
+func (x *StationToDetector) GetProto() IPProto {
 	if x != nil && x.Proto != nil {
 		return *x.Proto
 	}
-	return IpProto_Unk
+	return IPProto_Unk
 }
 
 // Adding message response from Station to Client for bidirectional API
@@ -2369,7 +2369,7 @@ var file_signalling_proto_rawDesc = []byte{
 	0x19, 0x0a, 0x08, 0x73, 0x72, 0x63, 0x5f, 0x70, 0x6f, 0x72, 0x74, 0x18, 0x0b, 0x20, 0x01, 0x28,
 	0x0d, 0x52, 0x07, 0x73, 0x72, 0x63, 0x50, 0x6f, 0x72, 0x74, 0x12, 0x27, 0x0a, 0x05, 0x70, 0x72,
 	0x6f, 0x74, 0x6f, 0x18, 0x0c, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x11, 0x2e, 0x74, 0x61, 0x70, 0x64,
-	0x61, 0x6e, 0x63, 0x65, 0x2e, 0x49, 0x70, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x52, 0x05, 0x70, 0x72,
+	0x61, 0x6e, 0x63, 0x65, 0x2e, 0x49, 0x50, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x52, 0x05, 0x70, 0x72,
 	0x6f, 0x74, 0x6f, 0x22, 0xd9, 0x01, 0x0a, 0x14, 0x52, 0x65, 0x67, 0x69, 0x73, 0x74, 0x72, 0x61,
 	0x74, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1a, 0x0a, 0x08,
 	0x69, 0x70, 0x76, 0x34, 0x61, 0x64, 0x64, 0x72, 0x18, 0x01, 0x20, 0x01, 0x28, 0x07, 0x52, 0x08,
@@ -2452,7 +2452,7 @@ var file_signalling_proto_rawDesc = []byte{
 	0x61, 0x74, 0x69, 0x6f, 0x6e, 0x73, 0x12, 0x0b, 0x0a, 0x07, 0x55, 0x6e, 0x6b, 0x6e, 0x6f, 0x77,
 	0x6e, 0x10, 0x00, 0x12, 0x07, 0x0a, 0x03, 0x4e, 0x65, 0x77, 0x10, 0x01, 0x12, 0x0a, 0x0a, 0x06,
 	0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x10, 0x02, 0x12, 0x09, 0x0a, 0x05, 0x43, 0x6c, 0x65, 0x61,
-	0x72, 0x10, 0x03, 0x2a, 0x24, 0x0a, 0x07, 0x49, 0x70, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x12, 0x07,
+	0x72, 0x10, 0x03, 0x2a, 0x24, 0x0a, 0x07, 0x49, 0x50, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x12, 0x07,
 	0x0a, 0x03, 0x55, 0x6e, 0x6b, 0x10, 0x00, 0x12, 0x07, 0x0a, 0x03, 0x54, 0x63, 0x70, 0x10, 0x01,
 	0x12, 0x07, 0x0a, 0x03, 0x55, 0x64, 0x70, 0x10, 0x02,
 }
@@ -2480,7 +2480,7 @@ var file_signalling_proto_goTypes = []interface{}{
 	(TransportType)(0),             // 5: tapdance.TransportType
 	(RegistrationSource)(0),        // 6: tapdance.RegistrationSource
 	(StationOperations)(0),         // 7: tapdance.StationOperations
-	(IpProto)(0),                   // 8: tapdance.IpProto
+	(IPProto)(0),                   // 8: tapdance.IPProto
 	(*PubKey)(nil),                 // 9: tapdance.PubKey
 	(*TLSDecoySpec)(nil),           // 10: tapdance.TLSDecoySpec
 	(*ClientConf)(nil),             // 11: tapdance.ClientConf
@@ -2527,7 +2527,7 @@ var file_signalling_proto_depIdxs = []int32{
 	6,  // 21: tapdance.C2SWrapper.registration_source:type_name -> tapdance.RegistrationSource
 	26, // 22: tapdance.C2SWrapper.registration_response:type_name -> tapdance.RegistrationResponse
 	7,  // 23: tapdance.StationToDetector.operation:type_name -> tapdance.StationOperations
-	8,  // 24: tapdance.StationToDetector.proto:type_name -> tapdance.IpProto
+	8,  // 24: tapdance.StationToDetector.proto:type_name -> tapdance.IPProto
 	11, // 25: tapdance.RegistrationResponse.clientConf:type_name -> tapdance.ClientConf
 	26, // 26: tapdance.DnsResponse.bidirectional_response:type_name -> tapdance.RegistrationResponse
 	27, // [27:27] is the sub-list for method output_type
