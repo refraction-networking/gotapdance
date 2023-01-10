@@ -125,7 +125,6 @@ type ConjureSession struct {
 	Width            uint
 	V6Support        *V6
 	UseProxyHeader   bool
-	RandomizeDstPort bool
 	SessionID        uint64
 	Phantom          *net.IP
 	Transport        Transport
