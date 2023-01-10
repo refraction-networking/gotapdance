@@ -3,8 +3,8 @@ package transports
 import (
 	"errors"
 
-	"github.com/refraction-networking/gotapdance/pkg/transports/min"
-	"github.com/refraction-networking/gotapdance/pkg/transports/obfs4"
+	"github.com/refraction-networking/conjure/application/transports/wrapping/min"
+	"github.com/refraction-networking/conjure/application/transports/wrapping/obfs4"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	cj "github.com/refraction-networking/gotapdance/tapdance"
 )
@@ -56,8 +56,8 @@ func GetTransportByID(id pb.TransportType) (cj.Transport, bool) {
 }
 
 var defaultTransports = []cj.Transport{
-	&min.Transport{},
-	&obfs4.Transport{},
+	&min.ClientTransport{},
+	&obfs4.ClientTransport{},
 }
 
 // AddTransport adds new transport

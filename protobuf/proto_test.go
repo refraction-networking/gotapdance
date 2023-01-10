@@ -13,7 +13,7 @@ func TestBidirectionalAPIResponse(t *testing.T) {
 	addr := uint32(12345)
 	c2s.Ipv4Addr = &addr
 	port := uint32(10)
-	c2s.Port = &port
+	c2s.DstPort = &port
 
 	// Serialize
 	marsh, err := proto.Marshal(&c2s)
@@ -24,7 +24,7 @@ func TestBidirectionalAPIResponse(t *testing.T) {
 	err = proto.Unmarshal(marsh, &deser)
 	require.Nil(t, err)
 	require.Equal(t, addr, deser.GetIpv4Addr())
-	require.Equal(t, port, deser.GetPort())
+	require.Equal(t, port, deser.GetDstPort())
 }
 
 // TestProtoLibVer validates that the accessor method returns a default value for

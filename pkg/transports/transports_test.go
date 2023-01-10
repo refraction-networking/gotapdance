@@ -4,7 +4,7 @@ import (
 	// "net/pipe"
 	"testing"
 
-	"github.com/refraction-networking/gotapdance/pkg/transports/min"
+	"github.com/refraction-networking/conjure/application/transports/wrapping/min"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	cj "github.com/refraction-networking/gotapdance/tapdance"
 	"github.com/stretchr/testify/require"
@@ -20,7 +20,7 @@ func TestTransportParameterFunctionality(t *testing.T) {
 		RandomizeDstPort: &fl,
 	}
 
-	transport := &min.Transport{}
+	transport := &min.ClientTransport{}
 
 	// If params is unset it returns nil
 	params := transport.GetParams()

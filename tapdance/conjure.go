@@ -237,7 +237,10 @@ func (cjSession *ConjureSession) UnidirectionalRegData(regSource *pb.Registratio
 
 	reg.phantom4 = phantom4
 	reg.phantom6 = phantom6
-	reg.phantomDstPort = cjSession.Transport.GetDstPort(reg)
+	reg.phantomDstPort, err = cjSession.Transport.GetDstPort(reg.keys.ConjureSeed, nil)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	c2s, err := reg.generateClientToStation()
 	if err != nil {

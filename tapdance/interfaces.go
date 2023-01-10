@@ -37,6 +37,6 @@ type Transport interface {
 	// error if the provided generic message is not compatible.
 	SetParams(any) error
 
-	// GetPort returns the destination port that the client should open the phantom connection to
-	GetDstPort(reg *ConjureReg) uint16
+	// GetDstPort returns the destination port that the client should open the phantom connection with.
+	GetDstPort(seed []byte, params any) (uint16, error)
 }
