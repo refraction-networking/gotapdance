@@ -346,7 +346,7 @@ func (reg *ConjureReg) Connect(ctx context.Context, transport Transport) (net.Co
 		}
 
 		// Send hmac(seed, str) bytes to indicate to station (min transport)
-		connectTag := conjureHMAC(reg.keys.SharedSecret, "MinTransportHMACString")
+		connectTag := conjureHMAC(reg.keys.SharedSecret, "MinTrasportHMACString")
 		conn.Write(connectTag)
 		return conn, nil
 
@@ -1034,7 +1034,7 @@ const (
 	// NotImplemented - Related Function Not Implemented
 	NotImplemented
 
-	// TLS Error (Expired, Wrong-Host, Untrusted-Root, ...)
+	// TLSError (Expired, Wrong-Host, Untrusted-Root, ...)
 	TLSError
 
 	// Unknown - Error occurred without obvious explanation
