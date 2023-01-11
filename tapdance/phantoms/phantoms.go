@@ -1,16 +1,22 @@
 package phantoms
 
 import (
-	"encoding/binary"
+	"crypto/rand"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"math/big"
-	"math/rand"
 	"net"
+	"sort"
 
-	wr "github.com/mroth/weightedrand"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
+	"golang.org/x/crypto/hkdf"
 )
+
+type Choice struct {
+	Subnets []string
+	Weight  int64
+}
 
 // getSubnets - return EITHER all subnet strings as one composite array if we are
 //		selecting unweighted, or return the array associated with the (seed) selected
@@ -20,38 +26,48 @@ func getSubnets(sc *pb.PhantomSubnetsList, seed []byte, weighted bool) []string 
 	var out []string = []string{}
 
 	if weighted {
-		// seed random with hkdf derived seed provided by client
-		seedInt, n := binary.Varint(seed)
-		if n == 0 {
-			// fmt.Println("failed to seed random for weighted rand")
-			return nil
-		}
-		rand.Seed(seedInt)
 
 		weightedSubnets := sc.GetWeightedSubnets()
 		if weightedSubnets == nil {
 			return []string{}
 		}
 
-		choices := make([]wr.Choice, 0, len(weightedSubnets))
+		choices := make([]Choice, 0, len(weightedSubnets))
 
-		// fmt.Println("DEBUG - len = ", len(weightedSubnets))
+		totWeight := int64(0)
 		for _, cjSubnet := range weightedSubnets {
 			weight := cjSubnet.GetWeight()
 			subnets := cjSubnet.GetSubnets()
 			if subnets == nil {
 				continue
 			}
-			// fmt.Println("Adding Choice", subnets, weight)
-			choices = append(choices, wr.Choice{Item: subnets, Weight: uint(weight)})
+
+			totWeight += int64(weight)
+			choices = append(choices, Choice{Subnets: subnets, Weight: int64(weight)})
 		}
 
-		c, _ := wr.NewChooser(choices...)
-		if c == nil {
-			return []string{}
+		// Sort choices assending
+		sort.Slice(choices, func(i, j int) bool {
+			return choices[i].Weight < choices[j].Weight
+		})
+
+		// Naive method: get random int, subtract from weights until you are < 0
+		hkdfReader := hkdf.New(sha256.New, seed, nil, []byte("phantom-select-subnet"))
+		totWeightBig := big.NewInt(totWeight)
+		rndBig, err := rand.Int(hkdfReader, totWeightBig)
+		if err != nil {
+			return nil
 		}
 
-		out = c.Pick().([]string)
+		// Decrement rnd by each weight until it's < 0
+		rnd := rndBig.Int64()
+		for _, choice := range choices {
+			rnd -= choice.Weight
+			if rnd < 0 {
+				return choice.Subnets
+			}
+		}
+
 	} else {
 
 		weightedSubnets := sc.GetWeightedSubnets()
@@ -122,13 +138,18 @@ func parseSubnets(phantomSubnets []string) ([]*net.IPNet, error) {
 	// return nil, fmt.Errorf("parseSubnets not implemented yet")
 }
 
-// SelectAddrFromSubnet given a seed and a CIDR block choose an address. This is
-// done by generating a seeded random bytes up to teh length of the full address
-// then using the net mask to zero out any bytes that are already specified by
-// the CIDR block. Tde masked random value is then added to the cidr block base
-// giving the final randomly selected address.
-func SelectAddrFromSubnet(seed []byte, net1 *net.IPNet) (net.IP, error) {
+// SelectAddrFromSubnetOffset given a CIDR block and offset, return the net.IP
+func SelectAddrFromSubnetOffset(net1 *net.IPNet, offset *big.Int) (net.IP, error) {
 	bits, addrLen := net1.Mask.Size()
+
+	// Compute network size (e.g. an ipv4 /24 is 2^(32-24)
+	var netSize big.Int
+	netSize.Exp(big.NewInt(2), big.NewInt(int64(addrLen-bits)), nil)
+
+	// Check that offset is within this subnet
+	if netSize.Cmp(offset) <= 0 {
+		return nil, errors.New("Offset too big for subnet")
+	}
 
 	ipBigInt := &big.Int{}
 	if v4net := net1.IP.To4(); v4net != nil {
@@ -137,30 +158,7 @@ func SelectAddrFromSubnet(seed []byte, net1 *net.IPNet) (net.IP, error) {
 		ipBigInt.SetBytes(net1.IP.To16())
 	}
 
-	seedInt, n := binary.Varint(seed)
-	if n == 0 {
-		return nil, fmt.Errorf("failed to create seed ")
-	}
-
-	rand.Seed(seedInt)
-	randBytes := make([]byte, addrLen/8)
-	_, err := rand.Read(randBytes)
-	if err != nil {
-		return nil, err
-	}
-	randBigInt := &big.Int{}
-	randBigInt.SetBytes(randBytes)
-
-	mask := make([]byte, addrLen/8)
-	for i := 0; i < addrLen/8; i++ {
-		mask[i] = 0xff
-	}
-	maskBigInt := &big.Int{}
-	maskBigInt.SetBytes(mask)
-	maskBigInt.Rsh(maskBigInt, uint(bits))
-
-	randBigInt.And(randBigInt, maskBigInt)
-	ipBigInt.Add(ipBigInt, randBigInt)
+	ipBigInt.Add(ipBigInt, offset)
 
 	return net.IP(ipBigInt.Bytes()), nil
 }
@@ -208,21 +206,23 @@ func selectIPAddr(seed []byte, subnets []*net.IPNet) (*net.IP, error) {
 
 	// Pick a value using the seed in the range of between 0 and the total
 	// number of addresses.
-	id := &big.Int{}
-	id.SetBytes(seed)
-	if id.Cmp(addressTotal) >= 0 {
-		id.Mod(id, addressTotal)
+	hkdfReader := hkdf.New(sha256.New, seed, nil, []byte("phantom-addr-id"))
+	id, err := rand.Int(hkdfReader, addressTotal)
+	if err != nil {
+		return nil, err
 	}
 
 	// Find the network (ID net) that contains our random value and select a
 	// random address from that subnet.
 	// min >= id%total >= max
 	var result net.IP
-	var err error
 	for _, _idNet := range idNets {
 		// fmt.Printf("tot:%s, seed%%tot:%s     id cmp max: %d,  id cmp min: %d %s\n", addressTotal.String(), id, _idNet.max.Cmp(id), _idNet.min.Cmp(id), _idNet.net.String())
 		if _idNet.max.Cmp(id) >= 0 && _idNet.min.Cmp(id) <= 0 {
-			result, err = SelectAddrFromSubnet(seed, &_idNet.net)
+
+			var offset big.Int
+			offset.Sub(id, &_idNet.min)
+			result, err = SelectAddrFromSubnetOffset(&_idNet.net, &offset)
 			if err != nil {
 				return nil, fmt.Errorf("failed to chose IP address: %v", err)
 			}
@@ -280,4 +280,10 @@ func GetDefaultPhantomSubnets() *pb.PhantomSubnetsList {
 			},
 		},
 	}
+}
+
+// Just returns the list of subnets provided by the protobuf.
+// Convenience function to not have to export getSubnets() or parseSubnets()
+func GetUnweightedSubnetList(subnetsList *pb.PhantomSubnetsList) ([]*net.IPNet, error) {
+	return parseSubnets(getSubnets(subnetsList, nil, false))
 }

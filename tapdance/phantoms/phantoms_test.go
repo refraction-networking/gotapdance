@@ -1,28 +1,53 @@
 package phantoms
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"math/big"
 	"math/rand"
 	"net"
 	"testing"
 
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/hkdf"
 )
 
 func TestIPSelectionBasic(t *testing.T) {
-
-	seed, err := hex.DecodeString("5a87133b68da3468988a21659a12ed2ece07345c8c1a5b08459ffdea4218d12f")
-	require.Nil(t, err)
+	//seed, err := hex.DecodeString("5a87133b68da3468988a21659a12ed2ece07345c8c1a5b08459ffdea4218d12f")
+	//require.Nil(t, err)
+	offset := big.NewInt(0x7eadbeefcafed00d)
 
 	netStr := "2001:48a8:687f:1::/64"
 	_, net1, err := net.ParseCIDR(netStr)
 	require.Nil(t, err)
 
-	addr, err := SelectAddrFromSubnet(seed, net1)
+	addr, err := SelectAddrFromSubnetOffset(net1, offset)
 	require.Nil(t, err)
-	require.Equal(t, "2001:48a8:687f:1:5fa4:c34c:434e:ddd", addr.String())
+	//require.Equal(t, "2001:48a8:687f:1:5fa4:c34c:434e:ddd", addr.String())
+	require.Equal(t, "2001:48a8:687f:1:7ead:beef:cafe:d00d", addr.String())
+}
+
+func TestOffsetTooLarge(t *testing.T) {
+
+	offset := big.NewInt(256)
+	netStr := "10.1.2.0/24"
+	_, net1, err := net.ParseCIDR(netStr)
+	require.Nil(t, err)
+
+	// Offset too big
+	addr, err := SelectAddrFromSubnetOffset(net1, offset)
+	if err == nil {
+		t.Fatalf("Error: expected error, got address %v", addr)
+	}
+
+	// Offset that is just fine
+	offset = big.NewInt(255)
+	addr, err = SelectAddrFromSubnetOffset(net1, offset)
+	require.Nil(t, err)
+	require.Equal(t, "10.1.2.255", addr.String())
 }
 
 func TestSelectWeightedMany(t *testing.T) {
@@ -118,15 +143,18 @@ func TestSelectFilter(t *testing.T) {
 
 	p, err := SelectPhantomWeighted([]byte(seed), phantomSubnets, V4Only)
 	require.Nil(t, err)
-	require.Equal(t, "192.122.190.130", p.String())
+	//require.Equal(t, "192.122.190.130", p.String())
+	require.Equal(t, "192.122.190.164", p.String())
 
 	p, err = SelectPhantomWeighted([]byte(seed), phantomSubnets, V6Only)
 	require.Nil(t, err)
-	require.Equal(t, "2001:48a8:687f:1:5fa4:c34c:434e:ddd", p.String())
+	//require.Equal(t, "2001:48a8:687f:1:5fa4:c34c:434e:ddd", p.String())
+	require.Equal(t, "2001:48a8:687f:1:5da6:63e0:48a4:b3e", p.String())
 
 	p, err = SelectPhantomWeighted([]byte(seed), phantomSubnets, nil)
 	require.Nil(t, err)
-	require.Equal(t, "2001:48a8:687f:1:5fa4:c34c:434e:ddd", p.String())
+	//require.Equal(t, "2001:48a8:687f:1:5fa4:c34c:434e:ddd", p.String())
+	require.Equal(t, "2001:48a8:687f:1:d8f4:45cd:3ae:fcd4", p.String())
 }
 
 func TestPhantomsV6OnlyFilter(t *testing.T) {
@@ -186,5 +214,90 @@ func TestPhantomSeededSelectionFuzz(t *testing.T) {
 			require.Nil(t, err, "i=%d, j=%d, seed='%s'", i, j, hex.EncodeToString(seed))
 			require.NotNil(t, phantomAddr)
 		}
+	}
+}
+
+func ExpandSeed(seed, salt []byte, i int) []byte {
+	bi := make([]byte, 8)
+	binary.LittleEndian.PutUint64(bi, uint64(i))
+	return hkdf.Extract(sha256.New, seed, append(salt, bi...))
+}
+
+// This test serves two functions. First, it checks if there's any duplicates
+// when there should not be (generating 100k 64-bit numbers, we don't expect any duplicates)
+// Second, we check if the weighting is approximately correct (within +/-0.5%)
+func TestForDuplicates(t *testing.T) {
+
+	// Constraints:
+	// -Only one subnet per weight
+	// -Must be large enough subnets (e.g. /64) to avoid birthday bound problems (100k no collision)
+	// -Subnets cannot overlap
+	var w40 = uint32(40)
+	var ps = &pb.PhantomSubnetsList{
+		WeightedSubnets: []*pb.PhantomSubnets{
+			{Weight: &w1, Subnets: []string{"2001:48a8:687f:1::/64"}},
+			{Weight: &w9, Subnets: []string{"2002::/64"}},
+			{Weight: &w40, Subnets: []string{"2003::/64"}},
+		},
+	}
+
+	seed, _ := hex.DecodeString("5a87133b68ea3468988a21659a12ed2ece07345c8c1a5b08459ffdea4218d12f")
+	salt := []byte("phantom-duplicate-test")
+
+	// Set of IPs we have seen
+	ipSet := map[string]int{}
+
+	// Count of IPs in each set
+	netMap := map[string]int{}
+	weights := map[string]int{}
+
+	totWeights := 0
+	snets, err := parseSubnets(getSubnets(ps, nil, false))
+	require.Nil(t, err)
+	for _, phantomSubnet := range ps.WeightedSubnets {
+		snet := phantomSubnet.Subnets[0]
+		weights[snet] = int(*phantomSubnet.Weight)
+		netMap[snet] = 0
+		totWeights += int(*phantomSubnet.Weight)
+	}
+
+	totTrials := 100000
+	// The odds of this test generating a duplicate by chance is around 10^-10
+	// (based on approximation of birthday bound n^2 / 2*m)
+	for i := 0; i < totTrials; i++ {
+
+		// Get new random seed
+		curSeed := ExpandSeed(seed, salt, i)
+
+		// Get phantom address
+		addr, err := SelectPhantom(curSeed, ps, nil, true)
+		if err != nil {
+			t.Fatalf("Failed to select adddress: %v -- %s, %v, %v, %v -- %v", err, hex.EncodeToString(curSeed), ps, "None", true, i)
+		}
+		//fmt.Printf("%s %v\n", hex.EncodeToString(curSeed), addr)
+
+		if prev_i, ok := ipSet[addr.String()]; ok {
+			prevSeed := ExpandSeed(seed, salt, prev_i)
+			t.Fatalf("Generated duplicate IP; biased random. Both seeds %d and %d generated %v\n%d: %s\n%d: %s",
+				i, prev_i, addr, i, hex.EncodeToString(curSeed), prev_i, hex.EncodeToString(prevSeed))
+		}
+		ipSet[addr.String()] = i
+
+		for _, snet := range snets {
+			if snet.Contains(*addr) {
+				netMap[snet.String()] += 1
+			}
+		}
+	}
+
+	// Check if weights are approximately right
+	margin := totTrials / 200 // +/- 0.5%
+	for snet, count := range netMap {
+		expectedCount := totTrials * weights[snet] / totWeights
+		if count < (expectedCount-margin) || count > (expectedCount+margin) {
+			t.Fatalf("Generated weight outside bound: %s had %d but expected %d, off by more than %d\n",
+				snet, count, expectedCount, margin)
+		}
+		//fmt.Printf("%s: had %d, weight %d/%d (expected %d +/-%d)\n", snet, count, weights[snet], totWeights, expectedCount, margin)
 	}
 }

@@ -33,18 +33,19 @@ import (
 // When adding new client versions comment out older versions and add new
 // version below with a description of the reason for the new version.
 func currentClientLibraryVersion() uint32 {
-
 	// Support for randomizing destination port for phantom connection
+	// https://github.com/refraction-networking/gotapdance/pull/108
 	return 3
 
-	// // Phantom selection version rework again to use hkdf for actual uniform
-	// // distribution across phantom subnets.
+	// // Selection algorithm update - Oct 27, 2022 -- Phantom selection version rework again to use
+	// // hkdf for actual uniform distribution across phantom subnets.
 	// // https://github.com/refraction-networking/conjure/pull/145
 	// return 2
 
 	// // Initial inclusion of client version - added due to update in phantom
 	// // selection algorithm that is not backwards compatible to older clients.
 	// return 1
+
 
 	// // No client version indicates any client before this change.
 	// return 0
@@ -72,7 +73,7 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 		return nil, fmt.Errorf("No Session Provided")
 	}
 
-	cjSession.setV6Support(both)
+	//cjSession.setV6Support(both)	 // We don't want to override this here; defaults set in MakeConjureSession
 
 	// Choose Phantom Address in Register depending on v6 support.
 	registration, err := registrationMethod.Register(cjSession, ctx)
@@ -142,8 +143,8 @@ type ConjureSession struct {
 	stats *pb.SessionStats
 }
 
-// MakeConjureSession creates a conjure session.
-func MakeConjureSession(covert string, transport Transport) *ConjureSession {
+// MakeConjureSessionSilent creates a conjure session without logging anything
+func MakeConjureSessionSilent(covert string, transport Transport) *ConjureSession {
 
 	keys, err := generateSharedKeys(getStationKey())
 	if err != nil {
@@ -160,17 +161,64 @@ func MakeConjureSession(covert string, transport Transport) *ConjureSession {
 		SessionID:      sessionsTotal.GetAndInc(),
 	}
 
+	return cjSession
+}
+
+func LogConjureSession(cjSession *ConjureSession) {
+
+	keys := cjSession.Keys
+
 	sharedSecretStr := make([]byte, hex.EncodedLen(len(keys.SharedSecret)))
 	hex.Encode(sharedSecretStr, keys.SharedSecret)
 	Logger().Debugf("%v Shared Secret  - %s", cjSession.IDString(), sharedSecretStr)
 
-	Logger().Debugf("%v covert %s", cjSession.IDString(), covert)
+	Logger().Debugf("%v covert %s", cjSession.IDString(), cjSession.CovertAddress)
 
 	reprStr := make([]byte, hex.EncodedLen(len(keys.Representative)))
 	hex.Encode(reprStr, keys.Representative)
 	Logger().Debugf("%v Representative - %s", cjSession.IDString(), reprStr)
 
+}
+
+func MakeConjureSession(covert string,transport Transport) *ConjureSession {
+
+	cjSession := MakeConjureSessionSilent(covert, transport)
+	if cjSession == nil {
+		return nil
+	}
+
+	// Print out the session details (debug)
+	LogConjureSession(cjSession)
+
 	return cjSession
+}
+
+func FindConjureSessionInRange(covert string, transport Transport, phantomSubnet *net.IPNet) *ConjureSession {
+
+	count := 0
+	Logger().Debugf("Searching for a seed for phantom subnet %v...", phantomSubnet)
+	for count < 100000 {
+		// Generate a random session
+		cjSession := MakeConjureSessionSilent(covert, transport)
+		count += 1
+
+		// Get the phantoms this seed would generate
+		phantom4, phantom6, err := SelectPhantom(cjSession.Keys.ConjureSeed, cjSession.V6Support.include)
+		if err != nil {
+			Logger().Warnf("%v failed to select Phantom: %v", cjSession.IDString(), err)
+		}
+
+		// See if our phantoms are in the subnet
+		if phantomSubnet.Contains(*phantom4) || phantomSubnet.Contains(*phantom6) {
+			Logger().Debugf("Generated %d sessions to find one in %v", count, phantomSubnet)
+			// Print out what we got
+			LogConjureSession(cjSession)
+
+			return cjSession
+		}
+	}
+	Logger().Warnf("Failed to find a session in %v", phantomSubnet)
+	return nil
 }
 
 // IDString - Get the ID string for the session
