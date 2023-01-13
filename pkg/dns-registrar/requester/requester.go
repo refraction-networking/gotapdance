@@ -24,8 +24,14 @@ type Requester struct {
 	pubkey []byte
 }
 
+// New Requester using DoT as transport with default dialer
+func NewDoTRequester(dohurl string, domain string, pubkey []byte, utlsDistribution string) (*Requester, error) {
+	dialer := net.Dialer{}
+	return NewDoTRequesterWithDialContext(dohurl, domain, pubkey, utlsDistribution, dialer.DialContext)
+}
+
 // New Requester using DoT as transport
-func NewDoTRequester(dotaddr string, domain string, pubkey []byte, utlsDistribution string, tcpDialer func(ctx context.Context, network, addr string) (net.Conn, error)) (*Requester, error) {
+func NewDoTRequesterWithDialContext(dotaddr string, domain string, pubkey []byte, utlsDistribution string, tcpDialer func(ctx context.Context, network, addr string) (net.Conn, error)) (*Requester, error) {
 	basename, err := dns.ParseName(domain)
 	if err != nil {
 		return nil, err
@@ -70,6 +76,7 @@ func NewDoTRequester(dotaddr string, domain string, pubkey []byte, utlsDistribut
 	}, nil
 }
 
+// New Requester using DoH as transport with default dialer
 func NewDoHRequester(dohurl string, domain string, pubkey []byte, utlsDistribution string) (*Requester, error) {
 	dialer := net.Dialer{}
 	return NewDoHRequesterWithDialContext(dohurl, domain, pubkey, utlsDistribution, dialer.DialContext)
@@ -117,12 +124,13 @@ func NewDoHRequesterWithDialContext(dohurl string, domain string, pubkey []byte,
 	}, nil
 }
 
+// New Requester using UDP as transport with default dialer
 func NewUDPRequester(remoteAddr net.Addr, domain string, pubkey []byte) (*Requester, error) {
 	listener := net.ListenConfig{}
 	return NewUDPRequesterWithListenPacket(remoteAddr, domain, pubkey, listener.ListenPacket)
 }
 
-// New Requester using plain UDP as transport
+// New Requester using UDP as transport
 func NewUDPRequesterWithListenPacket(remoteAddr net.Addr, domain string, pubkey []byte, listenPacket func(ctx context.Context, network, address string) (net.PacketConn, error)) (*Requester, error) {
 	if listenPacket == nil {
 		return nil, fmt.Errorf("listenPacket cannot be nil")
