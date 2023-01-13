@@ -113,17 +113,23 @@ func NewDoHRequester(dohurl string, domain string, pubkey []byte, utlsDistributi
 }
 
 // New Requester using plain UDP as transport
-func NewUDPRequester(remoteAddr net.Addr, domain string, pubkey []byte) (*Requester, error) {
+func NewUDPRequester(remoteAddr net.Addr, domain string, pubkey []byte, udpDialer func(ctx context.Context, network, addr string) (net.Conn, error)) (*Requester, error) {
 	basename, err := dns.ParseName(domain)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error parsing domain: %v", err)
 	}
 
-	udpconn, err := net.ListenUDP("udp", nil)
+	conn, err := udpDialer(context.Background(), "udp", "")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error dialing udp connection: %v", err)
 	}
-	pconn := NewDNSPacketConn(udpconn, remoteAddr, basename)
+
+	udpConn, ok := conn.(*net.UDPConn)
+	if !ok {
+		return nil, fmt.Errorf("error dialing udp connection: dialed conn from dialer cannot be asserted to net.UDPConn")
+	}
+
+	pconn := NewDNSPacketConn(udpConn, remoteAddr, basename)
 	return &Requester{
 		transport:  pconn,
 		remoteAddr: remoteAddr,
