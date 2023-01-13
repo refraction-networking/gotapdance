@@ -70,7 +70,7 @@ func NewDNSRegistrar(regType pb.DnsRegMethod, target string, domain string, pubk
 		if err != nil {
 			return nil, err
 		}
-		req, err = requester.NewUDPRequester(remoteAddr, domain, pubkey, dialContext)
+		req, err = requester.NewUDPRequester(remoteAddr, domain, pubkey)
 		if err != nil {
 			return nil, err
 		}
