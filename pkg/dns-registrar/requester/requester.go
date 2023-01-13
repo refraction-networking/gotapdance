@@ -70,8 +70,13 @@ func NewDoTRequester(dotaddr string, domain string, pubkey []byte, utlsDistribut
 	}, nil
 }
 
+func NewDoHRequester(dohurl string, domain string, pubkey []byte, utlsDistribution string) (*Requester, error) {
+	dialer := net.Dialer{}
+	return NewDoHRequesterWithDialContext(dohurl, domain, pubkey, utlsDistribution, dialer.DialContext)
+}
+
 // New Requester using DoH as transport
-func NewDoHRequester(dohurl string, domain string, pubkey []byte, utlsDistribution string, tcpDialer func(ctx context.Context, network, addr string) (net.Conn, error)) (*Requester, error) {
+func NewDoHRequesterWithDialContext(dohurl string, domain string, pubkey []byte, utlsDistribution string, tcpDialer func(ctx context.Context, network, addr string) (net.Conn, error)) (*Requester, error) {
 	basename, err := dns.ParseName(domain)
 	if err != nil {
 		return nil, err

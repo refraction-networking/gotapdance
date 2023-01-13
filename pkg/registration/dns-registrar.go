@@ -80,7 +80,7 @@ func NewDNSRegistrar(regType pb.DnsRegMethod, target string, domain string, pubk
 			return nil, err
 		}
 	case pb.DnsRegMethod_DOH:
-		req, err = requester.NewDoHRequester(target, domain, pubkey, utlsDistribution, dialContext)
+		req, err = requester.NewDoHRequester(target, domain, pubkey, utlsDistribution)
 		if err != nil {
 			return nil, err
 		}
