@@ -31,7 +31,7 @@ func NewDoTRequester(dohurl string, domain string, pubkey []byte, utlsDistributi
 }
 
 // New Requester using DoT as transport
-func NewDoTRequesterWithDialContext(dotaddr string, domain string, pubkey []byte, utlsDistribution string, tcpDialer func(ctx context.Context, network, addr string) (net.Conn, error)) (*Requester, error) {
+func NewDoTRequesterWithDialContext(dotaddr string, domain string, pubkey []byte, utlsDistribution string, dialContext func(ctx context.Context, network, addr string) (net.Conn, error)) (*Requester, error) {
 	basename, err := dns.ParseName(domain)
 	if err != nil {
 		return nil, err
@@ -42,16 +42,16 @@ func NewDoTRequesterWithDialContext(dotaddr string, domain string, pubkey []byte
 		return nil, err
 	}
 
-	if tcpDialer == nil {
+	if dialContext == nil {
 		dialer := net.Dialer{}
-		tcpDialer = dialer.DialContext
+		dialContext = dialer.DialContext
 	}
 
 	remoteAddr := queuepacketconn.DummyAddr{}
 	var dialTLSContext func(ctx context.Context, network, addr string) (net.Conn, error)
 	if utlsClientHelloID == nil {
 		dialTLSContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-			conn, err := tcpDialer(ctx, network, addr)
+			conn, err := dialContext(ctx, network, addr)
 			if err != nil {
 				return nil, err
 			}
@@ -59,7 +59,7 @@ func NewDoTRequesterWithDialContext(dotaddr string, domain string, pubkey []byte
 		}
 	} else {
 		dialTLSContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-			return utlsDialContext(ctx, network, addr, nil, utlsClientHelloID, tcpDialer)
+			return utlsDialContext(ctx, network, addr, nil, utlsClientHelloID, dialContext)
 		}
 	}
 	dotconn, err := NewTLSPacketConn(dotaddr, dialTLSContext)
@@ -83,7 +83,7 @@ func NewDoHRequester(dohurl string, domain string, pubkey []byte, utlsDistributi
 }
 
 // New Requester using DoH as transport
-func NewDoHRequesterWithDialContext(dohurl string, domain string, pubkey []byte, utlsDistribution string, tcpDialer func(ctx context.Context, network, addr string) (net.Conn, error)) (*Requester, error) {
+func NewDoHRequesterWithDialContext(dohurl string, domain string, pubkey []byte, utlsDistribution string, dialContext func(ctx context.Context, network, addr string) (net.Conn, error)) (*Requester, error) {
 	basename, err := dns.ParseName(domain)
 	if err != nil {
 		return nil, err
@@ -103,11 +103,11 @@ func NewDoHRequesterWithDialContext(dohurl string, domain string, pubkey []byte,
 		// with utlsRoundTripper and with DoT mode,
 		// which do not take a proxy from the
 		// environment.
-		transport.DialContext = tcpDialer
+		transport.DialContext = dialContext
 		transport.Proxy = nil
 		rt = transport
 	} else {
-		rt = NewUTLSRoundTripper(nil, utlsClientHelloID, tcpDialer)
+		rt = NewUTLSRoundTripper(nil, utlsClientHelloID, dialContext)
 	}
 
 	dohconn, err := NewHTTPPacketConn(rt, dohurl, 32)
