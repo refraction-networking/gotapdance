@@ -21,7 +21,7 @@ import (
 func TestAPIRegistrar(t *testing.T) {
 	tapdance.AssetsSetDir("./assets")
 
-	transports.AddDefaultTransports()
+	transports.EnableDefaultTransports()
 	transport, err := transports.New("min")
 	require.Nil(t, err)
 
@@ -66,7 +66,7 @@ func TestAPIRegistrar(t *testing.T) {
 
 func TestAPIRegistrarBidirectional(t *testing.T) {
 	tapdance.AssetsSetDir("./assets")
-	transports.AddDefaultTransports()
+	transports.EnableDefaultTransports()
 	transport, err := transports.New("min")
 	require.Nil(t, err)
 	// Make Conjure session with covert address

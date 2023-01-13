@@ -69,6 +69,11 @@ func main() {
 	v6Support := !*excludeV6
 
 	tapdance.AssetsSetDir(*assetsLocation)
+	err := transports.EnableDefaultTransports()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to enable transports", err)
+		os.Exit(1)
+	}
 
 	if *decoy != "" {
 		err := setSingleDecoyHost(*decoy)
@@ -132,7 +137,7 @@ func main() {
 		fmt.Printf("Using Station Pubkey: %s\n", hex.EncodeToString(tapdance.Assets().GetConjurePubkey()[:]))
 	}
 
-	err := connectDirect(*td, *APIRegistration, *registrar, *connectTarget, *port, *proxyHeader, v6Support, *width, *transport, *phantomNet , *randomizeDstPort)
+	err = connectDirect(*td, *APIRegistration, *registrar, *connectTarget, *port, *proxyHeader, v6Support, *width, *transport, *phantomNet , *randomizeDstPort)
 
 	if err != nil {
 		tapdance.Logger().Println(err)

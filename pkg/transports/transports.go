@@ -76,8 +76,8 @@ func AddTransport(t cj.Transport) error {
 	return nil
 }
 
-// AddDefaultTransports initializes the library with default transports
-func AddDefaultTransports() error {
+// EnableDefaultTransports initializes the library with default transports
+func EnableDefaultTransports() error {
 	var err error
 	for _, t := range defaultTransports {
 		err = AddTransport(t)
@@ -90,5 +90,5 @@ func AddDefaultTransports() error {
 }
 
 // func init() {
-// 	AddDefaultTransports()
+// 	EnableDefaultTransports()
 // }
