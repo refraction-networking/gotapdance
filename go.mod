@@ -1,24 +1,41 @@
 module github.com/refraction-networking/gotapdance
 
-go 1.16
+go 1.18
 
 require (
-	git.torproject.org/pluggable-transports/goptlib.git v1.2.0
+	git.torproject.org/pluggable-transports/goptlib.git v1.3.0
 	github.com/flynn/noise v1.0.0
 	github.com/golang/protobuf v1.5.2
 	github.com/jinzhu/copier v0.3.5
 	github.com/keltia/ripe-atlas v0.0.0-20211221125000-f6eb808d5dc6
-	github.com/mroth/weightedrand v0.4.1
-	github.com/pelletier/go-toml v1.9.4
+	github.com/pelletier/go-toml v1.9.5
 	github.com/pion/stun v0.3.5
 	github.com/pkg/errors v0.9.1
-	github.com/pkg/profile v1.6.0
-	github.com/refraction-networking/utls v1.0.0
+	github.com/pkg/profile v1.7.0
+	github.com/refraction-networking/utls v1.2.0
 	github.com/sergeyfrolov/bsbuffer v0.0.0-20180903213811-94e85abb8507
-	github.com/sirupsen/logrus v1.8.1
-	github.com/stretchr/testify v1.7.1
-	gitlab.com/yawning/obfs4.git v0.0.0-20220204003609-77af0cba934d
-	golang.org/x/crypto v0.0.0-20220411220226-7b82a4e95df4
-	golang.org/x/net v0.0.0-20220531201128-c960675eff93
-	google.golang.org/protobuf v1.28.0
+	github.com/sirupsen/logrus v1.9.0
+	github.com/stretchr/testify v1.8.1
+	gitlab.com/yawning/obfs4.git v0.0.0-20220904064028-336a71d6e4cf
+	golang.org/x/crypto v0.5.0
+	golang.org/x/net v0.5.0
+	google.golang.org/protobuf v1.28.1
+)
+
+require (
+	filippo.io/edwards25519 v1.0.0 // indirect
+	github.com/andybalholm/brotli v1.0.4 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/dchest/siphash v1.2.3 // indirect
+	github.com/felixge/fgprof v0.9.3 // indirect
+	github.com/google/go-cmp v0.5.6 // indirect
+	github.com/google/pprof v0.0.0-20211214055906-6f57359322fd // indirect
+	github.com/keltia/proxy v0.9.3 // indirect
+	github.com/klauspost/compress v1.15.12 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
+	gitlab.com/yawning/edwards25519-extra.git v0.0.0-20211229043746-2f91fcc9fbdb // indirect
+	golang.org/x/sys v0.4.0 // indirect
+	golang.org/x/text v0.6.0 // indirect
+	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
