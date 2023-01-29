@@ -126,14 +126,14 @@ func NewDoHRequesterWithDialContext(dohurl string, domain string, pubkey []byte,
 
 // New Requester using UDP as transport with default dialer
 func NewUDPRequester(remoteAddr net.Addr, domain string, pubkey []byte) (*Requester, error) {
-	listener := net.ListenConfig{}
-	return NewUDPRequesterWithListenPacket(remoteAddr, domain, pubkey, listener.ListenPacket)
+	dialer := net.Dialer{}
+	return NewUDPRequesterWithListenPacket(remoteAddr, domain, pubkey, dialer.DialContext)
 }
 
 // New Requester using UDP as transport
-func NewUDPRequesterWithListenPacket(remoteAddr net.Addr, domain string, pubkey []byte, listenPacket func(ctx context.Context, network, address string) (net.PacketConn, error)) (*Requester, error) {
-	if listenPacket == nil {
-		return nil, fmt.Errorf("listenPacket cannot be nil")
+func NewUDPRequesterWithListenPacket(remoteAddr net.Addr, domain string, pubkey []byte, dialContext func(ctx context.Context, network, addr string) (net.Conn, error)) (*Requester, error) {
+	if dialContext == nil {
+		return nil, fmt.Errorf("dialContext cannot be nil")
 	}
 
 	basename, err := dns.ParseName(domain)
@@ -141,7 +141,7 @@ func NewUDPRequesterWithListenPacket(remoteAddr net.Addr, domain string, pubkey 
 		return nil, fmt.Errorf("error parsing domain: %v", err)
 	}
 
-	udpConn, err := listenPacket(context.Background(), "udp", "")
+	udpConn, err := dialContext(context.Background(), "udp", remoteAddr.String())
 	if err != nil {
 		return nil, fmt.Errorf("error dialing udp connection: %v", err)
 	}
