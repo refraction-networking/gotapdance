@@ -9,11 +9,13 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+type DialFunc func(ctx context.Context, network, addr string) (net.Conn, error)
+
 type DecoyRegistrar struct {
 
-	// tcpDialer is a custom TCP dailer to use when establishing TCP connections
-	// to decoys. When nil, Dialer.tcpDialer will be used.
-	tcpDialer func(context.Context, string, string) (net.Conn, error)
+	// dialContex is a custom dailer to use when establishing TCP connections
+	// to decoys. When nil, Dialer.dialContex will be used.
+	dialContex DialFunc
 
 	logger logrus.FieldLogger
 }
@@ -26,8 +28,8 @@ func NewDecoyRegistrar() *DecoyRegistrar {
 
 func NewDecoyRegistrarWithDialer(dialer func(context.Context, string, string) (net.Conn, error)) *DecoyRegistrar {
 	return &DecoyRegistrar{
-		tcpDialer: dialer,
-		logger:    tapdance.Logger(),
+		dialContex: dialer,
+		logger:     tapdance.Logger(),
 	}
 }
 
@@ -49,8 +51,8 @@ func (r DecoyRegistrar) Register(cjSession *tapdance.ConjureSession, ctx context
 		return nil, err
 	}
 
-	if r.tcpDialer != nil {
-		reg.TcpDialer = r.tcpDialer
+	if r.dialContex != nil {
+		reg.TcpDialer = r.dialContex
 	}
 
 	// //[TODO]{priority:later} How to pass context to multiple registration goroutines?

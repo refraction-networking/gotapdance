@@ -50,7 +50,7 @@ func NewDNSRegistrarFromConf(conf *pb.DnsRegConf, bidirectional bool, delay time
 }
 
 // NewDNSRegistrar creates a DNSRegistrar.
-func NewDNSRegistrar(regType pb.DnsRegMethod, target string, domain string, pubkey []byte, utlsDistribution string, maxTries int, bidirectional bool, delay time.Duration, stun_server string, dialContext func(ctx context.Context, network, addr string) (net.Conn, error)) (*DNSRegistrar, error) {
+func NewDNSRegistrar(regType pb.DnsRegMethod, target string, domain string, pubkey []byte, utlsDistribution string, maxTries int, bidirectional bool, delay time.Duration, stun_server string, dialContext DialFunc) (*DNSRegistrar, error) {
 	var err error
 	if utlsDistribution == "" {
 		return nil, errors.New("utlsDistribution must be specified")

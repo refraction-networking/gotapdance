@@ -15,6 +15,8 @@ import (
 	utls "github.com/refraction-networking/utls"
 )
 
+type DialFunc func(ctx context.Context, network, addr string) (net.Conn, error)
+
 type Requester struct {
 	// underlying transport used for the dns request
 	transport net.PacketConn
@@ -31,7 +33,7 @@ func NewDoTRequester(dohurl string, domain string, pubkey []byte, utlsDistributi
 }
 
 // New Requester using DoT as transport
-func NewDoTRequesterWithDialContext(dotaddr string, domain string, pubkey []byte, utlsDistribution string, dialContext func(ctx context.Context, network, addr string) (net.Conn, error)) (*Requester, error) {
+func NewDoTRequesterWithDialContext(dotaddr string, domain string, pubkey []byte, utlsDistribution string, dialContext DialFunc) (*Requester, error) {
 	basename, err := dns.ParseName(domain)
 	if err != nil {
 		return nil, err
@@ -83,7 +85,7 @@ func NewDoHRequester(dohurl string, domain string, pubkey []byte, utlsDistributi
 }
 
 // New Requester using DoH as transport
-func NewDoHRequesterWithDialContext(dohurl string, domain string, pubkey []byte, utlsDistribution string, dialContext func(ctx context.Context, network, addr string) (net.Conn, error)) (*Requester, error) {
+func NewDoHRequesterWithDialContext(dohurl string, domain string, pubkey []byte, utlsDistribution string, dialContext DialFunc) (*Requester, error) {
 	basename, err := dns.ParseName(domain)
 	if err != nil {
 		return nil, err
@@ -131,7 +133,7 @@ func NewUDPRequester(remoteAddr net.Addr, domain string, pubkey []byte) (*Reques
 }
 
 // New Requester using UDP as transport
-func NewUDPRequesterWithListenPacket(remoteAddr net.Addr, domain string, pubkey []byte, dialContext func(ctx context.Context, network, addr string) (net.Conn, error)) (*Requester, error) {
+func NewUDPRequesterWithListenPacket(remoteAddr net.Addr, domain string, pubkey []byte, dialContext DialFunc) (*Requester, error) {
 	if dialContext == nil {
 		return nil, fmt.Errorf("dialContext cannot be nil")
 	}
