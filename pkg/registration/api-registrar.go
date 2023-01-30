@@ -9,10 +9,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/golang/protobuf/proto"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	"github.com/refraction-networking/gotapdance/tapdance"
 	"github.com/sirupsen/logrus"
+	"google.golang.org/protobuf/proto"
 )
 
 // Registration strategy using a centralized REST API to
