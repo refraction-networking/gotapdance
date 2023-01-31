@@ -123,6 +123,13 @@ func NewDNSRegistrar(regType pb.DnsRegMethod, target string, domain string, pubk
 func (r *DNSRegistrar) registerUnidirectional(cjSession *tapdance.ConjureSession) (*tapdance.ConjureReg, error) {
 	logger := r.logger.WithFields(logrus.Fields{"type": "unidirectional", "sessionID": cjSession.IDString()})
 
+	if cjSession.TcpDialer != nil {
+		err := r.req.SetDialer(cjSession.TcpDialer)
+		if err != nil {
+			return nil, fmt.Errorf("failed to set session dialer to requester: %v", err)
+		}
+	}
+
 	reg, protoPayload, err := cjSession.UnidirectionalRegData(pb.RegistrationSource_DNS.Enum())
 
 	if err != nil {
@@ -161,8 +168,14 @@ func (r *DNSRegistrar) registerUnidirectional(cjSession *tapdance.ConjureSession
 
 // registerBidirectional sends bidirectional registration data to the registration server and reads the response
 func (r *DNSRegistrar) registerBidirectional(cjSession *tapdance.ConjureSession) (*tapdance.ConjureReg, error) {
-
 	logger := r.logger.WithFields(logrus.Fields{"type": "bidirectional", "sessionID": cjSession.IDString()})
+
+	if cjSession.TcpDialer != nil {
+		err := r.req.SetDialer(cjSession.TcpDialer)
+		if err != nil {
+			return nil, fmt.Errorf("failed to set session dialer to requester: %v", err)
+		}
+	}
 
 	reg, protoPayload, err := cjSession.BidirectionalRegData(pb.RegistrationSource_BidirectionalDNS.Enum())
 
