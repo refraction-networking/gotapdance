@@ -23,7 +23,10 @@ type Requester struct {
 	// dialTransport is used for constructing the transport on the first request
 	// this allows us to not dial anything until the first request, while avoid storing
 	// a lot of internal state in Requester
-	dialTransport func() (net.PacketConn, error)
+	dialTransport func(dialer DialFunc) (net.PacketConn, error)
+
+	// dialer is the dialer to be used for the underlying TCP/UDP transport
+	dialer DialFunc
 
 	// remote address
 	remoteAddr net.Addr
@@ -132,24 +135,24 @@ func NewRequester(config *Config) (*Requester, error) {
 		return nil, fmt.Errorf("error resolving addr from config: %v", err)
 	}
 
-	dialTransport := func() (net.PacketConn, error) {
+	dialTransport := func(dialer DialFunc) (net.PacketConn, error) {
 		switch config.TransportMethod {
 		case DoT:
-			conn, err := dialDoT(config.Target, config.UtlsDistribution, config.dialTransport())
+			conn, err := dialDoT(config.Target, config.UtlsDistribution, dialer)
 			if err != nil {
 				return nil, fmt.Errorf("error dialing DoT connection: %v", err)
 			}
 
 			return NewDNSPacketConn(conn, addr, baseDomain), nil
 		case DoH:
-			conn, err := dialDoH(config.Target, config.UtlsDistribution, config.dialTransport())
+			conn, err := dialDoH(config.Target, config.UtlsDistribution, dialer)
 			if err != nil {
 				return nil, fmt.Errorf("error dialing DoH connection: %v", err)
 			}
 
 			return NewDNSPacketConn(conn, addr, baseDomain), nil
 		case UDP:
-			conn, err := dialUDP(config.Target, config.dialTransport())
+			conn, err := dialUDP(config.Target, dialer)
 			if err != nil {
 				return nil, fmt.Errorf("error dialing UDP connection: %v", err)
 			}
@@ -162,6 +165,7 @@ func NewRequester(config *Config) (*Requester, error) {
 
 	return &Requester{
 		dialTransport: dialTransport,
+		dialer:        config.dialTransport(),
 		remoteAddr:    addr,
 		pubkey:        config.Pubkey,
 	}, nil
@@ -191,9 +195,19 @@ func (r *Requester) sendHandshake(payload []byte) (*noise.CipherState, *noise.Ci
 	return recvCipher, sendCipher, nil
 }
 
+// SetDialer sets a custom dialer for the underlying TCP/UDP transport
+func (r *Requester) SetDialer(dialer DialFunc) error {
+	if dialer == nil {
+		return fmt.Errorf("no dialer provided")
+	}
+
+	r.dialer = dialer
+	return nil
+}
+
 func (r *Requester) RequestAndRecv(sendBytes []byte) ([]byte, error) {
 	if r.transport == nil {
-		transport, err := r.dialTransport()
+		transport, err := r.dialTransport(r.dialer)
 		if err != nil {
 			return nil, fmt.Errorf("error dialing transport: %v", err)
 		}
