@@ -18,42 +18,31 @@ import (
 type DialFunc func(ctx context.Context, network, addr string) (net.Conn, error)
 
 type Requester struct {
-	// underlying transport used for the dns request
+	// transport is the underlying transport used for the dns request
 	transport net.PacketConn
+	// dialTransport is used for constructing the transport on the first request
+	// this allows us to not dial anything until the first request, while avoid storing
+	// a lot of internal state in Requester
+	dialTransport func() (net.PacketConn, error)
+
 	// remote address
 	remoteAddr net.Addr
+
 	// server public key
 	pubkey []byte
 }
 
-// New Requester using DoT as transport with default dialer
-func NewDoTRequester(dohurl string, domain string, pubkey []byte, utlsDistribution string) (*Requester, error) {
-	dialer := net.Dialer{}
-	return NewDoTRequesterWithDialContext(dohurl, domain, pubkey, utlsDistribution, dialer.DialContext)
-}
-
 // New Requester using DoT as transport
-func NewDoTRequesterWithDialContext(dotaddr string, domain string, pubkey []byte, utlsDistribution string, dialContext DialFunc) (*Requester, error) {
-	basename, err := dns.ParseName(domain)
-	if err != nil {
-		return nil, err
-	}
-
+func dialDoT(dotaddr string, utlsDistribution string, dialTransport DialFunc) (net.Conn, error) {
 	utlsClientHelloID, err := sampleUTLSDistribution(utlsDistribution)
 	if err != nil {
 		return nil, err
 	}
 
-	if dialContext == nil {
-		dialer := net.Dialer{}
-		dialContext = dialer.DialContext
-	}
-
-	remoteAddr := queuepacketconn.DummyAddr{}
 	var dialTLSContext func(ctx context.Context, network, addr string) (net.Conn, error)
 	if utlsClientHelloID == nil {
 		dialTLSContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-			conn, err := dialContext(ctx, network, addr)
+			conn, err := dialTransport(ctx, network, addr)
 			if err != nil {
 				return nil, err
 			}
@@ -61,7 +50,7 @@ func NewDoTRequesterWithDialContext(dotaddr string, domain string, pubkey []byte
 		}
 	} else {
 		dialTLSContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-			return utlsDialContext(ctx, network, addr, nil, utlsClientHelloID, dialContext)
+			return utlsDialContext(ctx, network, addr, nil, utlsClientHelloID, dialTransport)
 		}
 	}
 	dotconn, err := NewTLSPacketConn(dotaddr, dialTLSContext)
@@ -69,34 +58,16 @@ func NewDoTRequesterWithDialContext(dotaddr string, domain string, pubkey []byte
 		return nil, err
 	}
 
-	pconn := NewDNSPacketConn(dotconn, remoteAddr, basename)
-
-	return &Requester{
-		transport:  pconn,
-		remoteAddr: remoteAddr,
-		pubkey:     pubkey,
-	}, nil
-}
-
-// New Requester using DoH as transport with default dialer
-func NewDoHRequester(dohurl string, domain string, pubkey []byte, utlsDistribution string) (*Requester, error) {
-	dialer := net.Dialer{}
-	return NewDoHRequesterWithDialContext(dohurl, domain, pubkey, utlsDistribution, dialer.DialContext)
+	return dotconn, nil
 }
 
 // New Requester using DoH as transport
-func NewDoHRequesterWithDialContext(dohurl string, domain string, pubkey []byte, utlsDistribution string, dialContext DialFunc) (*Requester, error) {
-	basename, err := dns.ParseName(domain)
-	if err != nil {
-		return nil, err
-	}
-
+func dialDoH(dohurl string, utlsDistribution string, dialTransport DialFunc) (net.Conn, error) {
 	utlsClientHelloID, err := sampleUTLSDistribution(utlsDistribution)
 	if err != nil {
 		return nil, err
 	}
 
-	remoteAddr := queuepacketconn.DummyAddr{}
 	var rt http.RoundTripper
 	if utlsClientHelloID == nil {
 		transport := http.DefaultTransport.(*http.Transport).Clone()
@@ -105,11 +76,11 @@ func NewDoHRequesterWithDialContext(dohurl string, domain string, pubkey []byte,
 		// with utlsRoundTripper and with DoT mode,
 		// which do not take a proxy from the
 		// environment.
-		transport.DialContext = dialContext
+		transport.DialContext = dialTransport
 		transport.Proxy = nil
 		rt = transport
 	} else {
-		rt = NewUTLSRoundTripper(nil, utlsClientHelloID, dialContext)
+		rt = NewUTLSRoundTripper(nil, utlsClientHelloID, dialTransport)
 	}
 
 	dohconn, err := NewHTTPPacketConn(rt, dohurl, 32)
@@ -117,42 +88,82 @@ func NewDoHRequesterWithDialContext(dohurl string, domain string, pubkey []byte,
 		return nil, err
 	}
 
-	pconn := NewDNSPacketConn(dohconn, remoteAddr, basename)
-
-	return &Requester{
-		transport:  pconn,
-		remoteAddr: remoteAddr,
-		pubkey:     pubkey,
-	}, nil
-}
-
-// New Requester using UDP as transport with default dialer
-func NewUDPRequester(remoteAddr net.Addr, domain string, pubkey []byte) (*Requester, error) {
-	dialer := net.Dialer{}
-	return NewUDPRequesterWithListenPacket(remoteAddr, domain, pubkey, dialer.DialContext)
+	return dohconn, nil
 }
 
 // New Requester using UDP as transport
-func NewUDPRequesterWithListenPacket(remoteAddr net.Addr, domain string, pubkey []byte, dialContext DialFunc) (*Requester, error) {
-	if dialContext == nil {
-		return nil, fmt.Errorf("dialContext cannot be nil")
-	}
-
-	basename, err := dns.ParseName(domain)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing domain: %v", err)
-	}
-
-	udpConn, err := dialContext(context.Background(), "udp", remoteAddr.String())
+func dialUDP(remoteAddr string, dialContext DialFunc) (net.Conn, error) {
+	udpConn, err := dialContext(context.Background(), "udp", remoteAddr)
 	if err != nil {
 		return nil, fmt.Errorf("error dialing udp connection: %v", err)
 	}
 
-	pconn := NewDNSPacketConn(udpConn, remoteAddr, basename)
+	return udpConn, nil
+}
+
+func resolveAddr(config *Config) (net.Addr, error) {
+	switch config.TransportMethod {
+	case DoH, DoT:
+		return queuepacketconn.DummyAddr{}, nil
+	case UDP:
+		addr, err := net.ResolveUDPAddr("udp", config.Target)
+		if err != nil {
+			return nil, fmt.Errorf("error resolving UDP addr: %v", err)
+		}
+		return addr, nil
+	}
+
+	return nil, fmt.Errorf("invalid transport type configured")
+}
+
+func NewRequester(config *Config) (*Requester, error) {
+	err := validateConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("error validaing config: %v", err)
+	}
+
+	baseDomain, err := dns.ParseName(config.BaseDomain)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing domain: %v", err)
+	}
+
+	addr, err := resolveAddr(config)
+	if err != nil {
+		return nil, fmt.Errorf("error resolving addr from config: %v", err)
+	}
+
+	dialTransport := func() (net.PacketConn, error) {
+		switch config.TransportMethod {
+		case DoT:
+			conn, err := dialDoT(config.Target, config.UtlsDistribution, config.dialTransport())
+			if err != nil {
+				return nil, fmt.Errorf("error dialing DoT connection: %v", err)
+			}
+
+			return NewDNSPacketConn(conn, addr, baseDomain), nil
+		case DoH:
+			conn, err := dialDoH(config.Target, config.UtlsDistribution, config.dialTransport())
+			if err != nil {
+				return nil, fmt.Errorf("error dialing DoH connection: %v", err)
+			}
+
+			return NewDNSPacketConn(conn, addr, baseDomain), nil
+		case UDP:
+			conn, err := dialUDP(config.Target, config.dialTransport())
+			if err != nil {
+				return nil, fmt.Errorf("error dialing UDP connection: %v", err)
+			}
+
+			return NewDNSPacketConn(conn, addr, baseDomain), nil
+		}
+
+		return nil, fmt.Errorf("invalid transport type configured")
+	}
+
 	return &Requester{
-		transport:  pconn,
-		remoteAddr: remoteAddr,
-		pubkey:     pubkey,
+		dialTransport: dialTransport,
+		remoteAddr:    addr,
+		pubkey:        config.Pubkey,
 	}, nil
 }
 
@@ -181,6 +192,15 @@ func (r *Requester) sendHandshake(payload []byte) (*noise.CipherState, *noise.Ci
 }
 
 func (r *Requester) RequestAndRecv(sendBytes []byte) ([]byte, error) {
+	if r.transport == nil {
+		transport, err := r.dialTransport()
+		if err != nil {
+			return nil, fmt.Errorf("error dialing transport: %v", err)
+		}
+
+		r.transport = transport
+	}
+
 	recvCipher, _, err := r.sendHandshake(sendBytes)
 	if err != nil {
 		return nil, err

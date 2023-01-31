@@ -66,26 +66,42 @@ func NewDNSRegistrar(regType pb.DnsRegMethod, target string, domain string, pubk
 
 	switch regType {
 	case pb.DnsRegMethod_UDP:
-		remoteAddr, err := net.ResolveUDPAddr("udp", target)
+		req, err = requester.NewRequester(&requester.Config{
+			TransportMethod: requester.UDP,
+			Target:          target,
+			DialTransport:   requester.DialFunc(dialContext),
+			BaseDomain:      domain,
+			Pubkey:          pubkey,
+		})
 		if err != nil {
-			return nil, err
-		}
-		req, err = requester.NewUDPRequester(remoteAddr, domain, pubkey)
-		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error creating requester: %v", err)
 		}
 	case pb.DnsRegMethod_DOT:
-		req, err = requester.NewDoTRequester(target, domain, pubkey, utlsDistribution)
+		req, err = requester.NewRequester(&requester.Config{
+			TransportMethod:  requester.DoT,
+			UtlsDistribution: utlsDistribution,
+			Target:           target,
+			DialTransport:    requester.DialFunc(dialContext),
+			BaseDomain:       domain,
+			Pubkey:           pubkey,
+		})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error creating requester: %v", err)
 		}
 	case pb.DnsRegMethod_DOH:
-		req, err = requester.NewDoHRequester(target, domain, pubkey, utlsDistribution)
+		req, err = requester.NewRequester(&requester.Config{
+			TransportMethod:  requester.DoH,
+			UtlsDistribution: utlsDistribution,
+			Target:           target,
+			DialTransport:    requester.DialFunc(dialContext),
+			BaseDomain:       domain,
+			Pubkey:           pubkey,
+		})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error creating requester: %v", err)
 		}
 	default:
-		return nil, errors.New("unkown reg method")
+		return nil, fmt.Errorf("invalid registration method")
 	}
 
 	ip, err := getPublicIp(stun_server)
