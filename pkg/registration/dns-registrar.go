@@ -85,18 +85,17 @@ func NewDNSRegistrar(config *Config) (*DNSRegistrar, error) {
 func (r *DNSRegistrar) registerUnidirectional(cjSession *tapdance.ConjureSession) (*tapdance.ConjureReg, error) {
 	logger := r.logger.WithFields(logrus.Fields{"type": "unidirectional", "sessionID": cjSession.IDString()})
 
-	if cjSession.Dialer != nil {
-		err := r.req.SetDialer(cjSession.Dialer)
-		if err != nil {
-			return nil, fmt.Errorf("failed to set session dialer to requester: %v", err)
-		}
-	}
-
 	reg, protoPayload, err := cjSession.UnidirectionalRegData(pb.RegistrationSource_DNS.Enum())
-
 	if err != nil {
 		logger.Errorf("Failed to prepare registration data: %v", err)
 		return nil, ErrRegFailed
+	}
+
+	if reg.Dialer != nil {
+		err := r.req.SetDialer(reg.Dialer)
+		if err != nil {
+			return nil, fmt.Errorf("failed to set dialer to requester: %v", err)
+		}
 	}
 
 	protoPayload.RegistrationAddress = r.ip
@@ -132,18 +131,17 @@ func (r *DNSRegistrar) registerUnidirectional(cjSession *tapdance.ConjureSession
 func (r *DNSRegistrar) registerBidirectional(cjSession *tapdance.ConjureSession) (*tapdance.ConjureReg, error) {
 	logger := r.logger.WithFields(logrus.Fields{"type": "bidirectional", "sessionID": cjSession.IDString()})
 
-	if cjSession.Dialer != nil {
-		err := r.req.SetDialer(cjSession.Dialer)
-		if err != nil {
-			return nil, fmt.Errorf("failed to set session dialer to requester: %v", err)
-		}
-	}
-
 	reg, protoPayload, err := cjSession.BidirectionalRegData(pb.RegistrationSource_BidirectionalDNS.Enum())
-
 	if err != nil {
 		logger.Errorf("Failed to prepare registration data: %v", err)
 		return nil, ErrRegFailed
+	}
+
+	if reg.Dialer != nil {
+		err := r.req.SetDialer(reg.Dialer)
+		if err != nil {
+			return nil, fmt.Errorf("failed to set dialer to requester: %v", err)
+		}
 	}
 
 	protoPayload.RegistrationAddress = r.ip
