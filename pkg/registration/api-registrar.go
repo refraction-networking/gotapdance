@@ -53,14 +53,13 @@ type APIRegistrar struct {
 	logger logrus.FieldLogger
 }
 
-func NewAPIRegistrar(endpoint string, httpClient *http.Client, bidirectional bool, connectionDelay time.Duration, maxRetries int, secondaryRegistrar tapdance.Registrar) (*APIRegistrar, error) {
+func NewAPIRegistrar(config *Config) (*APIRegistrar, error) {
 	return &APIRegistrar{
-		endpoint:           endpoint,
-		client:             httpClient,
-		bidirectional:      bidirectional,
-		connectionDelay:    connectionDelay,
-		maxRetries:         maxRetries,
-		secondaryRegistrar: secondaryRegistrar,
+		endpoint:           config.Target,
+		bidirectional:      config.Bidirectional,
+		connectionDelay:    config.Delay,
+		maxRetries:         config.MaxRetries,
+		secondaryRegistrar: config.SecondaryRegistrar,
 		logger:             tapdance.Logger().WithField("registrar", "API"),
 	}, nil
 }
