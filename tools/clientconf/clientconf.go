@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/binary"
 	"encoding/hex"
 	"flag"
@@ -8,6 +9,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"os"
 	"regexp"
 	"strings"
 
@@ -24,24 +26,23 @@ func printClientConf(clientConf *pb.ClientConf) {
 	if clientConf.GetConjurePubkey() != nil {
 		fmt.Printf("Conjure Pubkey: %s\n", hex.EncodeToString(clientConf.GetConjurePubkey().Key[:]))
 	}
-	if clientConf.DecoyList == nil {
-		return
-	}
-	decoys := clientConf.DecoyList.TlsDecoys
-	fmt.Printf("Decoy List: %d decoys\n", len(decoys))
-	for i, decoy := range decoys {
-		ip := make(net.IP, 4)
-		binary.BigEndian.PutUint32(ip, decoy.GetIpv4Addr())
-		ip6 := net.IP(decoy.GetIpv6Addr())
-		fmt.Printf("%d:\n  %s (%s / [%s])\n", i, decoy.GetHostname(), ip.To4().String(), ip6.To16().String())
-		if decoy.GetPubkey() != nil {
-			fmt.Printf("  pubkey: %s\n", hex.EncodeToString(decoy.GetPubkey().Key[:]))
-		}
-		if decoy.GetTimeout() != 0 {
-			fmt.Printf("  timeout: %d ms\n", decoy.GetTimeout())
-		}
-		if decoy.GetTcpwin() != 0 {
-			fmt.Printf("  tcpwin: %d bytes\n", decoy.GetTcpwin())
+	if clientConf.DecoyList != nil {
+		decoys := clientConf.DecoyList.TlsDecoys
+		fmt.Printf("Decoy List: %d decoys\n", len(decoys))
+		for i, decoy := range decoys {
+			ip := make(net.IP, 4)
+			binary.BigEndian.PutUint32(ip, decoy.GetIpv4Addr())
+			ip6 := net.IP(decoy.GetIpv6Addr())
+			fmt.Printf("%d:\n  %s (%s / [%s])\n", i, decoy.GetHostname(), ip.To4().String(), ip6.To16().String())
+			if decoy.GetPubkey() != nil {
+				fmt.Printf("  pubkey: %s\n", hex.EncodeToString(decoy.GetPubkey().Key[:]))
+			}
+			if decoy.GetTimeout() != 0 {
+				fmt.Printf("  timeout: %d ms\n", decoy.GetTimeout())
+			}
+			if decoy.GetTcpwin() != 0 {
+				fmt.Printf("  tcpwin: %d bytes\n", decoy.GetTcpwin())
+			}
 		}
 	}
 
@@ -97,6 +98,22 @@ func phantomsToMap(list *pb.PhantomSubnetsList) (map[string]uint, []string) {
 		}
 	}
 	return out_map, out_list
+}
+
+func printPairs(clientConf *pb.ClientConf) {
+
+	ip := ""
+	for _, decoy := range clientConf.DecoyList.TlsDecoys {
+		decoy_ip4 := make(net.IP, 4)
+		binary.BigEndian.PutUint32(decoy_ip4, decoy.GetIpv4Addr())
+		decoy_ip6 := net.IP(decoy.GetIpv6Addr())
+		if decoy_ip4.To4().String() != "0.0.0.0" {
+			ip = decoy_ip4.To4().String()
+		} else {
+			ip = decoy_ip6.To16().String()
+		}
+		fmt.Printf("%s,%s\n", ip, decoy.GetHostname())
+	}
 }
 
 func printDiff(old *pb.ClientConf, new_fn string) {
@@ -361,10 +378,52 @@ func deleteStringPattern(pattern string, clientConf *pb.ClientConf) error {
 	return nil
 }
 
+func decoysToDeleteFromFile(filename string, clientConf *pb.ClientConf) error {
+
+	f_read, err := os.Open(filename)
+	if err != nil {
+		return err
+	}
+	defer f_read.Close()
+	var lines []string
+	scanner := bufio.NewScanner(f_read)
+
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+
+	remainingDecoys := clientConf.DecoyList.TlsDecoys
+
+	for idx, decoy := range clientConf.DecoyList.TlsDecoys {
+		decoy_ip4 := make(net.IP, 4)
+		binary.BigEndian.PutUint32(decoy_ip4, decoy.GetIpv4Addr())
+		decoy_ip6 := net.IP(decoy.GetIpv6Addr())
+
+		for _, line := range lines {
+			pair := strings.Split(line, ",")
+			ip := pair[0]
+			sni := pair[1]
+			if strings.Contains(ip, ":") {
+				if ip == decoy_ip6.To16().String() && sni == decoy.GetHostname() {
+					remainingDecoys = append(remainingDecoys[:idx], remainingDecoys[idx+1:]...)
+				}
+			} else {
+				if ip == decoy_ip4.To16().String() && sni == decoy.GetHostname() {
+					remainingDecoys = append(remainingDecoys[:idx], remainingDecoys[idx+1:]...)
+				}
+			}
+		}
+		clientConf.DecoyList.TlsDecoys = remainingDecoys
+	}
+	return nil
+}
+
+
 func main() {
 	var fname = flag.String("f", "", "`ClientConf` file to parse")
 	var out_fname = flag.String("o", "", "`output` file name to write new/modified config")
 	var generation = flag.Int("generation", 0, "New/modified generation")
+	var next_gen = flag.Bool("next-gen", false, "Assign the next generation number to the created ClientConf based on the provided one")
 	var pubkey = flag.String("pubkey", "", "New/modified (decoy) pubkey. If -add or -update, applies to specific decoy. If -all applies to all decoys. Otherwise, applies to default pubkey.")
 	var cjPubkey = flag.String("cjpubkey", "", "New/modified (decoy) conjure pubkey. If -add or -update, applies to specific decoy. If -all applies to all decoys. Otherwise, applies to default pubkey.")
 	var delpubkey = flag.Bool("delpubkey", false, "Delete pubkey from decoy with index specified in -update (or from all decoys if -all)")
@@ -391,6 +450,12 @@ func main() {
 
 	var noout = flag.Bool("noout", false, "Don't print ClientConf")
 	var diff = flag.String("diff", "", "A second conf to diff against (-f old -diff new)")
+	var rm_decoys = flag.String("rm-decoys", "", "File of decoys to delete from ClientConf.\n"+
+		"Each line in the file has to be in the following format:\n"+
+		"ip,sni\n",
+	)
+	var print_pairs = flag.Bool("print-pairs", false, "Print pairs of decoys ip,sni")
+
 	flag.Parse()
 
 	clientConf := &pb.ClientConf{}
@@ -400,15 +465,18 @@ func main() {
 		clientConf = parseClientConf(*fname)
 	}
 
-	// Use subnet-fille
+	// Use subnet-file
 	if *subnet_file != "" {
-		tree, err := toml.LoadFile(*subnet_file)
+
+		data, err := ioutil.ReadFile(*subnet_file)
 		if err != nil {
 			log.Fatalf("error opening configuration file: %v", err)
 		}
 		subnets := pb.PhantomSubnetsList{}
-		tree.Unmarshal(&subnets)
-		//fmt.Printf("%+v\n", subnets)
+		err = toml.Unmarshal(data, &subnets)
+		if err != nil {
+			log.Fatalf("error unmarshalling data into PhantomSubnetList structure %v", err)
+		}
 		clientConf.PhantomSubnetsList = &subnets
 	}
 
@@ -433,6 +501,14 @@ func main() {
 		}
 	}
 
+	// Delete decoys based on a given file path containing line(s) of "ip,sni" decoys
+	if *rm_decoys != "" {
+		err := decoysToDeleteFromFile(*rm_decoys, clientConf)
+		if err != nil {
+			log.Fatalf("failed file based decoy delete %v", err)
+		}
+	}
+
 	// Add a subnet
 	if *add_subnets != "" {
 		subnets := strings.Split(*add_subnets, " ")
@@ -442,6 +518,10 @@ func main() {
 	// Update generation
 	if *generation != 0 {
 		gen := uint32(*generation)
+		clientConf.Generation = &gen
+	} else if *next_gen {
+		gen := clientConf.GetGeneration()
+		gen++
 		clientConf.Generation = &gen
 	}
 
@@ -524,6 +604,11 @@ func main() {
 		} else {
 			printClientConf(clientConf)
 		}
+	}
+
+	// Print pairs of decoy addresses (ip,sni)
+	if *print_pairs {
+		printPairs(clientConf)
 	}
 
 	if *out_fname != "" {
