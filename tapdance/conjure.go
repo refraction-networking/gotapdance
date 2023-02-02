@@ -314,7 +314,7 @@ func (reg *ConjureReg) connect(ctx context.Context, addr string, dialer dialFunc
 	//[reference] Connect to Phantom Host
 	phantomAddr := net.JoinHostPort(addr, "443")
 
-	// conn, err := reg.TcpDialer(childCtx, "tcp", phantomAddr)
+	// conn, err := reg.Dialer(childCtx, "tcp", phantomAddr)
 	return dialer(childCtx, "tcp", phantomAddr)
 }
 
