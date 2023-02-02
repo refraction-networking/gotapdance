@@ -136,7 +136,7 @@ type ConjureSession struct {
 	// THIS IS REQUIRED TO INTERFACE WITH PSIPHON ANDROID
 	//		we use their dialer to prevent connection loopback into our own proxy
 	//		connection when tunneling the whole device.
-	TcpDialer func(context.Context, string, string) (net.Conn, error)
+	Dialer dialFunc
 
 	// performance tracking
 	stats *pb.SessionStats
@@ -201,7 +201,7 @@ func (cjSession *ConjureSession) conjureReg() *ConjureReg {
 		v6Support:      cjSession.V6Support.include,
 		covertAddress:  cjSession.CovertAddress,
 		transport:      cjSession.Transport,
-		TcpDialer:      cjSession.TcpDialer,
+		Dialer:         cjSession.Dialer,
 		useProxyHeader: cjSession.UseProxyHeader,
 	}
 }
@@ -322,7 +322,7 @@ func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
 	//[reference] Provide chosen transport to sent bytes (or connect) if necessary
 	switch reg.transport {
 	case pb.TransportType_Min:
-		conn, err := reg.getFirstConnection(ctx, reg.TcpDialer, phantoms)
+		conn, err := reg.getFirstConnection(ctx, reg.Dialer, phantoms)
 		if err != nil {
 			Logger().Infof("%v failed to form phantom connection: %v", reg.sessionIDStr, err)
 			return nil, err
@@ -355,7 +355,7 @@ func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
 		}
 
 		dialer := func(dialContext context.Context, network string, address string) (net.Conn, error) {
-			d := func(network, address string) (net.Conn, error) { return reg.TcpDialer(dialContext, network, address) }
+			d := func(network, address string) (net.Conn, error) { return reg.Dialer(dialContext, network, address) }
 			return c.Dial("tcp", address, d, parsedArgs)
 		}
 
@@ -368,7 +368,7 @@ func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
 		return conn, err
 	case pb.TransportType_Null:
 		// Dial and do nothing to the connection before returning it to the user.
-		return reg.getFirstConnection(ctx, reg.TcpDialer, phantoms)
+		return reg.getFirstConnection(ctx, reg.Dialer, phantoms)
 	default:
 		// If transport is unrecognized use min transport.
 		return nil, fmt.Errorf("unknown transport")
@@ -390,7 +390,7 @@ type ConjureReg struct {
 	// THIS IS REQUIRED TO INTERFACE WITH PSIPHON ANDROID
 	//		we use their dialer to prevent connection loopback into our own proxy
 	//		connection when tunneling the whole device.
-	TcpDialer func(context.Context, string, string) (net.Conn, error)
+	Dialer dialFunc
 
 	stats *pb.SessionStats
 	keys  *sharedKeys
@@ -490,7 +490,7 @@ func (reg *ConjureReg) Send(ctx context.Context, decoy *pb.TLSDecoySpec, dialErr
 	tcpToDecoyStartTs := time.Now()
 
 	//[Note] decoy.GetIpAddrStr() will get only v4 addr if a decoy has both
-	dialConn, err := reg.TcpDialer(childCtx, "tcp", decoy.GetIpAddrStr())
+	dialConn, err := reg.Dialer(childCtx, "tcp", decoy.GetIpAddrStr())
 
 	reg.setTCPToDecoy(durationToU32ptrMs(time.Since(tcpToDecoyStartTs)))
 	if err != nil {

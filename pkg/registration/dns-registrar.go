@@ -85,8 +85,8 @@ func NewDNSRegistrar(config *Config) (*DNSRegistrar, error) {
 func (r *DNSRegistrar) registerUnidirectional(cjSession *tapdance.ConjureSession) (*tapdance.ConjureReg, error) {
 	logger := r.logger.WithFields(logrus.Fields{"type": "unidirectional", "sessionID": cjSession.IDString()})
 
-	if cjSession.TcpDialer != nil {
-		err := r.req.SetDialer(cjSession.TcpDialer)
+	if cjSession.Dialer != nil {
+		err := r.req.SetDialer(cjSession.Dialer)
 		if err != nil {
 			return nil, fmt.Errorf("failed to set session dialer to requester: %v", err)
 		}
@@ -132,8 +132,8 @@ func (r *DNSRegistrar) registerUnidirectional(cjSession *tapdance.ConjureSession
 func (r *DNSRegistrar) registerBidirectional(cjSession *tapdance.ConjureSession) (*tapdance.ConjureReg, error) {
 	logger := r.logger.WithFields(logrus.Fields{"type": "bidirectional", "sessionID": cjSession.IDString()})
 
-	if cjSession.TcpDialer != nil {
-		err := r.req.SetDialer(cjSession.TcpDialer)
+	if cjSession.Dialer != nil {
+		err := r.req.SetDialer(cjSession.Dialer)
 		if err != nil {
 			return nil, fmt.Errorf("failed to set session dialer to requester: %v", err)
 		}

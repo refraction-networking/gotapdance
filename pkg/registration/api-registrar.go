@@ -153,7 +153,7 @@ func (r *APIRegistrar) setHTTPClient(reg *tapdance.ConjureReg) {
 		// or if it's making more than one, is most likely due to an underlying
 		// connection issue rather than an application-level error anyways.
 		t := http.DefaultTransport.(*http.Transport).Clone()
-		t.DialContext = reg.TcpDialer
+		t.DialContext = reg.Dialer
 		r.client = &http.Client{Transport: t}
 	}
 }

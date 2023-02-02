@@ -26,7 +26,7 @@ func NewDecoyRegistrar() *DecoyRegistrar {
 	}
 }
 
-func NewDecoyRegistrarWithDialer(dialer func(context.Context, string, string) (net.Conn, error)) *DecoyRegistrar {
+func NewDecoyRegistrarWithDialer(dialer DialFunc) *DecoyRegistrar {
 	return &DecoyRegistrar{
 		dialContex: dialer,
 		logger:     tapdance.Logger(),
@@ -52,7 +52,7 @@ func (r DecoyRegistrar) Register(cjSession *tapdance.ConjureSession, ctx context
 	}
 
 	if r.dialContex != nil {
-		reg.TcpDialer = r.dialContex
+		reg.Dialer = r.dialContex
 	}
 
 	// //[TODO]{priority:later} How to pass context to multiple registration goroutines?
