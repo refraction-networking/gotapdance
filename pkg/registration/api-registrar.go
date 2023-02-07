@@ -185,7 +185,7 @@ func (r APIRegistrar) executeHTTPRequest(ctx context.Context, payload []byte, lo
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		logger.Warnf("%v got non-success response code %d from registration endpoint %v", resp.StatusCode, r.endpoint)
+		// logger.Warnf("got non-success response code %d from registration endpoint %v", resp.StatusCode, r.endpoint)
 		return fmt.Errorf("non-success response code %d on %s", resp.StatusCode, r.endpoint)
 	}
 
@@ -211,20 +211,20 @@ func (r APIRegistrar) executeHTTPRequestBidirectional(ctx context.Context, paylo
 
 	// Check that the HTTP request returned a success code
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		logger.Warnf("%v got non-success response code %d from registration endpoint %v", resp.StatusCode, r.endpoint)
+		// logger.Warnf("got non-success response code %d from registration endpoint %v", resp.StatusCode, r.endpoint)
 		return regResp, fmt.Errorf("non-success response code %d on %s", resp.StatusCode, r.endpoint)
 	}
 
 	// Read the HTTP response body into []bytes
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		logger.Warnf("error in serializing Registrtion Response protobuf in bytes: %v", err)
+		logger.Warnf("error in serializing Registration Response protobuf in bytes: %v", err)
 		return regResp, err
 	}
 
 	// Unmarshal response body into Registration Response protobuf
 	if err = proto.Unmarshal(bodyBytes, regResp); err != nil {
-		logger.Warnf("error in storing Registrtion Response protobuf: %v", err)
+		logger.Warnf("error in storing Registration Response protobuf: %v", err)
 		return regResp, err
 	}
 

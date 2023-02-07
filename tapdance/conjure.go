@@ -345,7 +345,7 @@ func (reg *ConjureReg) getFirstConnection(ctx context.Context, dialer dialFunc, 
 				connChannel <- resultTuple{nil, err}
 				return
 			}
-			Logger().Infof("%v Connected to phantom %v using transport %s", reg.sessionIDStr, phantom.String(), reg.Transport)
+			Logger().Infof("%v Connected to phantom %v using transport %s", reg.sessionIDStr, net.JoinHostPort(phantom.String(), strconv.Itoa(int(reg.phantomDstPort))), reg.Transport)
 			connChannel <- resultTuple{conn, nil}
 		}(p)
 	}
