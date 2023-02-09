@@ -26,3 +26,10 @@
 	
 all:
 	protoc --go_out=./ --go_opt=M"signalling.proto=./;tdproto" signalling.proto
+client2:
+	protoc --go_out=./ \
+	--go_opt=M"clientconf.proto=./;tdproto" \
+	--go_opt=M"signalling.proto=./;tdproto" \
+	clientconf.proto signalling.proto
+clean:
+	rm clientconf.pb.go signalling.pb.go

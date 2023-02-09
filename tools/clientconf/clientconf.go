@@ -276,6 +276,9 @@ func updateDecoy(decoy *pb.TLSDecoySpec, host string, ip string, pubkey string, 
 		}
 	}
 	if pubkey != "" {
+		if decoy.Pubkey == nil {
+			decoy.Pubkey = &pb.PubKey{}
+		}
 		decoy.Pubkey.Key = parsePubkey(pubkey)
 	}
 	if delpubkey {
@@ -289,6 +292,7 @@ func updateDecoy(decoy *pb.TLSDecoySpec, host string, ip string, pubkey string, 
 		t := uint32(tcpwin)
 		decoy.Tcpwin = &t
 	}
+
 }
 
 func addSubnets(subnets []string, weight *uint, clientConf *pb.ClientConf) {
