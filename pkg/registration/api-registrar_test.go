@@ -10,12 +10,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/refraction-networking/gotapdance/pkg/transports"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	"github.com/refraction-networking/gotapdance/tapdance"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestAPIRegistrar(t *testing.T) {
@@ -122,10 +122,9 @@ func TestAPIRegistrarBidirectional(t *testing.T) {
 		logger:        logrus.New(),
 	}
 
-	response := &tapdance.ConjureReg{}
 	// register.Register() connects to server set up above and sends registration info
 	// "response" will store the RegistrationResponse protobuf that the server replies with
-	response, err = registrar.Register(session, context.TODO())
+	response, err := registrar.Register(session, context.TODO())
 	if err != nil {
 		t.Fatalf("bidirectional registrar failed with error: %v", err)
 	}

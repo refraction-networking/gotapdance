@@ -52,7 +52,7 @@ func utlsLookup(label string) *utls.ClientHelloID {
 // utlsDialContext connects to the given network address and initiates a TLS
 // handshake with the provided ClientHelloID, and returns the resulting TLS
 // connection.
-func utlsDialContext(ctx context.Context, network, addr string, config *utls.Config, id *utls.ClientHelloID) (*utls.UConn, error) {
+func utlsDialContext(ctx context.Context, network, addr string, config *utls.Config, id *utls.ClientHelloID, tcpDialContex func(context.Context, string, string) (net.Conn, error)) (*utls.UConn, error) {
 	// Set the SNI from addr, if not already set.
 	if config == nil {
 		config = &utls.Config{}
@@ -65,8 +65,7 @@ func utlsDialContext(ctx context.Context, network, addr string, config *utls.Con
 		}
 		config.ServerName = host
 	}
-	dialer := &net.Dialer{}
-	conn, err := dialer.DialContext(ctx, network, addr)
+	conn, err := tcpDialContex(ctx, network, addr)
 	if err != nil {
 		return nil, err
 	}
@@ -133,18 +132,20 @@ func utlsDialContext(ctx context.Context, network, addr string, config *utls.Con
 //
 // Can only be reused among servers which negotiate the same ALPN.
 type utlsRoundTripper struct {
-	clientHelloID *utls.ClientHelloID
-	config        *utls.Config
-	innerLock     sync.Mutex
-	inner         http.RoundTripper
+	clientHelloID  *utls.ClientHelloID
+	config         *utls.Config
+	innerLock      sync.Mutex
+	inner          http.RoundTripper
+	tcpDialContext func(ctx context.Context, network, addr string) (net.Conn, error)
 }
 
 // NewUTLSRoundTripper creates a utlsRoundTripper with the given TLS
 // configuration and ClientHelloID.
-func NewUTLSRoundTripper(config *utls.Config, id *utls.ClientHelloID) *utlsRoundTripper {
+func NewUTLSRoundTripper(config *utls.Config, id *utls.ClientHelloID, tcpDialContext func(ctx context.Context, network, addr string) (net.Conn, error)) *utlsRoundTripper {
 	return &utlsRoundTripper{
-		clientHelloID: id,
-		config:        config,
+		clientHelloID:  id,
+		config:         config,
+		tcpDialContext: tcpDialContext,
 		// inner will be set in the first call to RoundTrip.
 	}
 }
@@ -153,7 +154,9 @@ func (rt *utlsRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 	switch req.URL.Scheme {
 	case "http":
 		// If http, don't invoke uTLS; just pass it to an ordinary http.Transport.
-		return http.DefaultTransport.RoundTrip(req)
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.DialContext = rt.tcpDialContext
+		return transport.RoundTrip(req)
 	case "https":
 	default:
 		return nil, fmt.Errorf("unsupported URL scheme %q", req.URL.Scheme)
@@ -164,7 +167,7 @@ func (rt *utlsRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 	if rt.inner == nil {
 		// On the first call, make an http.Transport or http2.Transport
 		// as appropriate.
-		rt.inner, err = makeRoundTripper(req, rt.config, rt.clientHelloID)
+		rt.inner, err = makeRoundTripper(req, rt.config, rt.clientHelloID, rt.tcpDialContext)
 	}
 	rt.innerLock.Unlock()
 	if err != nil {
@@ -180,13 +183,13 @@ func (rt *utlsRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 // http2.Transport, depending on the negotated ALPN. The Transport is set up to
 // make future TLS connections using the same TLS configuration and
 // ClientHelloID.
-func makeRoundTripper(req *http.Request, config *utls.Config, id *utls.ClientHelloID) (http.RoundTripper, error) {
+func makeRoundTripper(req *http.Request, config *utls.Config, id *utls.ClientHelloID, tcpDialContext func(ctx context.Context, network, addr string) (net.Conn, error)) (http.RoundTripper, error) {
 	addr, err := addrForDial(req.URL)
 	if err != nil {
 		return nil, err
 	}
 
-	bootstrapConn, err := utlsDialContext(req.Context(), "tcp", addr, config, id)
+	bootstrapConn, err := utlsDialContext(req.Context(), "tcp", addr, config, id, tcpDialContext)
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +213,7 @@ func makeRoundTripper(req *http.Request, config *utls.Config, id *utls.ClientHel
 		}
 
 		// Later dials make a new connection.
-		uconn, err := utlsDialContext(ctx, "tcp", addr, config, id)
+		uconn, err := utlsDialContext(ctx, "tcp", addr, config, id, tcpDialContext)
 		if err != nil {
 			return nil, err
 		}

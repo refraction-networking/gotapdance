@@ -1,6 +1,7 @@
 package queuepacketconn
 
 import (
+	"fmt"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -85,6 +86,17 @@ func (c *QueuePacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
 	}
 }
 
+// Read calls ReadFrom to read a packet. Created to implement net.Conn interface.
+// Should be only used by stream-oriented transports (DoH, DoT), will return error if this is not the case.
+func (c *QueuePacketConn) Read(b []byte) (int, error) {
+	n, remoteAddr, err := c.ReadFrom(b)
+	if remoteAddr.String() != "dummy" {
+		return 0, fmt.Errorf("use of Read on packet-oriented transport")
+	}
+
+	return n, err
+}
+
 // WriteTo queues an outgoing packet for the given address. The queue can later
 // be retrieved using the OutgoingQueue method.
 func (c *QueuePacketConn) WriteTo(p []byte, addr net.Addr) (int, error) {
@@ -103,6 +115,12 @@ func (c *QueuePacketConn) WriteTo(p []byte, addr net.Addr) (int, error) {
 		// Drop the outgoing packet if the send queue is full.
 		return len(buf), nil
 	}
+}
+
+// Write calls WriteTo to read a packet. Created to implement net.Conn interface.
+// This should be only used by stream-oriented transports (DoH, DoT).
+func (c *QueuePacketConn) Write(b []byte) (int, error) {
+	return c.WriteTo(b, DummyAddr{})
 }
 
 // closeWithError unblocks pending operations and makes future operations fail
@@ -129,6 +147,12 @@ func (c *QueuePacketConn) closeWithError(err error) error {
 // "closed connection" error.
 func (c *QueuePacketConn) Close() error {
 	return c.closeWithError(nil)
+}
+
+// RemoteAddr returns a stub addr. Created to implement net.Conn interface.
+// This should be only used by stream-oriented transports (DoH, DoT).
+func (c *QueuePacketConn) RemoteAddr() net.Addr {
+	return DummyAddr{}
 }
 
 // LocalAddr returns the localAddr value that was passed to NewQueuePacketConn.

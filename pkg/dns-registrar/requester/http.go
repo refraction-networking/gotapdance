@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"strconv"
@@ -95,7 +94,7 @@ func (c *HTTPPacketConn) send(p []byte) error {
 		if ct := resp.Header.Get("Content-Type"); ct != "application/dns-message" {
 			return fmt.Errorf("unknown HTTP response Content-Type %+q", ct)
 		}
-		body, err := ioutil.ReadAll(io.LimitReader(resp.Body, 64000))
+		body, err := io.ReadAll(io.LimitReader(resp.Body, 64000))
 		if err == nil {
 			c.QueuePacketConn.QueueIncoming(body, queuepacketconn.DummyAddr{})
 		}
