@@ -17,7 +17,7 @@ type Dialer struct {
 	// THIS IS REQUIRED TO INTERFACE WITH PSIPHON ANDROID
 	//		we use their dialer to prevent connection loopback into our own proxy
 	//		connection when tunneling the whole device.
-	TcpDialer func(context.Context, string, string) (net.Conn, error)
+	Dialer func(context.Context, string, string) (net.Conn, error)
 
 	DarkDecoy bool
 
@@ -75,10 +75,10 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 		}
 	}
 
-	if d.TcpDialer == nil {
+	if d.Dialer == nil {
 		// custom dialer is not set, use default
 		defaultDialer := net.Dialer{}
-		d.TcpDialer = defaultDialer.DialContext
+		d.Dialer = defaultDialer.DialContext
 	}
 
 	if !d.SplitFlows {
@@ -87,7 +87,7 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 			if err != nil {
 				return nil, err
 			}
-			flow.tdRaw.TcpDialer = d.TcpDialer
+			flow.tdRaw.Dialer = d.Dialer
 			flow.tdRaw.useProxyHeader = d.UseProxyHeader
 			return flow, flow.DialContext(ctx)
 		} else {
@@ -112,7 +112,7 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 				cjSession = MakeConjureSession(address, d.Transport)
 			}
 
-			cjSession.TcpDialer = d.TcpDialer
+			cjSession.Dialer = d.Dialer
 			cjSession.UseProxyHeader = d.UseProxyHeader
 			cjSession.Width = uint(d.Width)
 

@@ -36,7 +36,7 @@ type DNSPacketConn struct {
 // and ReadFrom methods, handles the actual sending and receiving the DNS
 // messages encoded by DNSPacketConn. addr is the address to be passed to
 // transport.WriteTo whenever a message needs to be sent.
-func NewDNSPacketConn(transport net.PacketConn, addr net.Addr, domain dns.Name) *DNSPacketConn {
+func NewDNSPacketConn(transport net.Conn, addr net.Addr, domain dns.Name) *DNSPacketConn {
 	// Generate a new random ClientID.
 	c := &DNSPacketConn{
 		domain:          domain,
@@ -95,10 +95,10 @@ func dnsResponsePayload(resp *dns.Message, domain dns.Name) []byte {
 // recvLoop repeatedly calls transport.ReadFrom to receive a DNS message,
 // extracts its payload and breaks it into packets, and stores the packets in a
 // queue to be returned from a future call to c.ReadFrom.
-func (c *DNSPacketConn) recvLoop(transport net.PacketConn) error {
+func (c *DNSPacketConn) recvLoop(transport net.Conn) error {
 	for {
 		var buf [4096]byte
-		n, addr, err := transport.ReadFrom(buf[:])
+		n, err := transport.Read(buf[:])
 		if err != nil {
 			if err, ok := err.(net.Error); ok {
 				log.Printf("ReadFrom error: %v", err)
@@ -116,7 +116,7 @@ func (c *DNSPacketConn) recvLoop(transport net.PacketConn) error {
 
 		payload := dnsResponsePayload(&resp, c.domain)
 
-		c.QueuePacketConn.QueueIncoming(payload, addr)
+		c.QueuePacketConn.QueueIncoming(payload, transport.RemoteAddr())
 	}
 }
 
@@ -138,15 +138,15 @@ func chunks(p []byte, n int) [][]byte {
 // send sends p as a single packet encoded into a DNS query, using
 // transport.WriteTo(query, addr). The length of p must be less than 224 bytes.
 //
-// 0. Start with the raw packet contents.
+//  0. Start with the raw packet contents.
 //     supercalifragilisticexpialidocious
-// 1. Base32-encode, without padding and in lower case.
+//  1. Base32-encode, without padding and in lower case.
 //     ingesrkokreujy6zumkse43vobsxey3bnruwm4tbm5uwy2ltoruwgzlyobuwc3djmrxwg2lpovzq
-// 2. Break into labels of at most 63 octets.
+//  2. Break into labels of at most 63 octets.
 //     ingesrkokreujy6zumkse43vobsxey3bnruwm4tbm5uwy2ltoruwgzlyobuwc3d.jmrxwg2lpovzq
-// 3. Append the domain.
+//  3. Append the domain.
 //     ingesrkokreujy6zumkse43vobsxey3bnruwm4tbm5uwy2ltoruwgzlyobuwc3d.jmrxwg2lpovzq.t.example.com
-func (c *DNSPacketConn) send(transport net.PacketConn, p []byte, addr net.Addr) error {
+func (c *DNSPacketConn) send(transport net.Conn, p []byte) error {
 	encoded := make([]byte, base32Encoding.EncodedLen(len(p)))
 	base32Encoding.Encode(encoded, p)
 	encoded = bytes.ToLower(encoded)
@@ -185,14 +185,14 @@ func (c *DNSPacketConn) send(transport net.PacketConn, p []byte, addr net.Addr) 
 		return err
 	}
 
-	_, err = transport.WriteTo(buf, addr)
+	_, err = transport.Write(buf)
 	return err
 }
 
 // sendLoop takes packets that have been written using c.WriteTo, and sends them
 // on the network using send. It also does polling with empty packets when
 // requested by pollChan or after a timeout.
-func (c *DNSPacketConn) sendLoop(transport net.PacketConn, addr net.Addr) error {
+func (c *DNSPacketConn) sendLoop(transport net.Conn, addr net.Addr) error {
 	for {
 		var p []byte
 		outgoing := c.QueuePacketConn.OutgoingQueue(addr)
@@ -203,7 +203,7 @@ func (c *DNSPacketConn) sendLoop(transport net.PacketConn, addr net.Addr) error 
 		// Unlike in the server, in the client we assume that because
 		// the data capacity of queries is so limited, it's not worth
 		// trying to send more than one packet per query.
-		err := c.send(transport, p, addr)
+		err := c.send(transport, p)
 		if err != nil {
 			log.Printf("send: %v", err)
 			continue
