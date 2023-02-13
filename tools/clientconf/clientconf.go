@@ -437,7 +437,7 @@ func dnsRegMethodFromStr(method string) (pb.DnsRegMethod, error) {
 	return 0, fmt.Errorf("unknown reg method: %v", method)
 }
 
-// updateDNSReg updates fields in old with non-zero fields in new
+// updateDNSReg updates fields in cc.DnsRegConf with non-zero fields in new
 func updateDNSReg(cc *pb.ClientConf, new *pb.DnsRegConf) {
 	if cc.DnsRegConf == nil {
 		cc.DnsRegConf = &pb.DnsRegConf{}
