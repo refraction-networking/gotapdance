@@ -10,7 +10,7 @@ import (
 func TestUpdateDNSReg(t *testing.T) {
 	originalTarget := "original target"
 	originalDomain := "original domain"
-	originalMethod := pb.DnsRegMethod_UDP
+	originalMethod := pb.DnsRegMethod_DOH
 	originalPubkey := []byte{1, 2}
 	original := &pb.DnsRegConf{
 		DnsRegMethod: &originalMethod,
@@ -20,10 +20,12 @@ func TestUpdateDNSReg(t *testing.T) {
 	}
 
 	newTarget := "target"
-	newMethod := pb.DnsRegMethod_DOH
+	newDomain := ""
+	newMethod := pb.DnsRegMethod_UDP
 	newPubkey := []byte{3, 4}
 	new := &pb.DnsRegConf{
 		Target:       &newTarget,
+		Domain:       &newDomain,
 		DnsRegMethod: &newMethod,
 		Pubkey:       newPubkey,
 	}

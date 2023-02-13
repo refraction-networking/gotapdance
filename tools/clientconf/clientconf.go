@@ -431,6 +431,7 @@ func dnsRegMethodFromStr(method string) (pb.DnsRegMethod, error) {
 	return 0, fmt.Errorf("unknown reg method: %v", method)
 }
 
+// updateDNSReg updates fields in old with non-zero fields in new
 func updateDNSReg(old *pb.DnsRegConf, new *pb.DnsRegConf) error {
 	oldVal := reflect.ValueOf(old).Elem()
 	newVal := reflect.ValueOf(new).Elem()
@@ -439,6 +440,12 @@ func updateDNSReg(old *pb.DnsRegConf, new *pb.DnsRegConf) error {
 		if newVal.Field(i).IsZero() {
 			continue
 		}
+
+		// if field is pointer, also check if the value that it points to is a zero value
+		if newVal.Field(i).Kind() == reflect.Pointer && newVal.Field(i).Elem().IsZero() {
+			continue
+		}
+
 		oldVal.Field(i).Set(newVal.Field(i))
 	}
 	return nil
@@ -637,6 +644,10 @@ func main() {
 			printClientConf(clientConf)
 		}
 	}
+
+	// updateDNSReg(clientConf.DnsRegConf, &pb.DnsRegConf{
+	// 	DnsRegMethod: dnsRegMethodFromStr(*dnsMethod),
+	// })
 
 	// Print pairs of decoy addresses (ip,sni)
 	if *print_pairs {

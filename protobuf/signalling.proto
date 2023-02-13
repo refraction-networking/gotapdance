@@ -101,9 +101,9 @@ message DnsRegConf {
 }
 
 enum DnsRegMethod {
-    UDP = 0;
-    DOT = 1;
-    DOH = 2;
+    UDP = 1;
+    DOT = 2;
+    DOH = 3;
 }
 
 message DecoyList {
