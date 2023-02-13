@@ -9,10 +9,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/golang/protobuf/proto"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	"github.com/refraction-networking/gotapdance/tapdance"
 	"github.com/sirupsen/logrus"
+	"google.golang.org/protobuf/proto"
 )
 
 // Registration strategy using a centralized REST API to
@@ -53,14 +53,13 @@ type APIRegistrar struct {
 	logger logrus.FieldLogger
 }
 
-func NewAPIRegistrar(endpoint string, httpClient *http.Client, bidirectional bool, connectionDelay time.Duration, maxRetries int, secondaryRegistrar tapdance.Registrar) (*APIRegistrar, error) {
+func NewAPIRegistrar(config *Config) (*APIRegistrar, error) {
 	return &APIRegistrar{
-		endpoint:           endpoint,
-		client:             httpClient,
-		bidirectional:      bidirectional,
-		connectionDelay:    connectionDelay,
-		maxRetries:         maxRetries,
-		secondaryRegistrar: secondaryRegistrar,
+		endpoint:           config.Target,
+		bidirectional:      config.Bidirectional,
+		connectionDelay:    config.Delay,
+		maxRetries:         config.MaxRetries,
+		secondaryRegistrar: config.SecondaryRegistrar,
 		logger:             tapdance.Logger().WithField("registrar", "API"),
 	}, nil
 }
@@ -154,7 +153,7 @@ func (r *APIRegistrar) setHTTPClient(reg *tapdance.ConjureReg) {
 		// or if it's making more than one, is most likely due to an underlying
 		// connection issue rather than an application-level error anyways.
 		t := http.DefaultTransport.(*http.Transport).Clone()
-		t.DialContext = reg.TcpDialer
+		t.DialContext = reg.Dialer
 		r.client = &http.Client{Transport: t}
 	}
 }
