@@ -23,8 +23,6 @@ type assets struct {
 
 	config *pb.ClientConf
 
-	dnsRegConf *pb.DnsRegConf
-
 	roots *x509.CertPool
 
 	filenameRoots      string
@@ -104,13 +102,6 @@ func initAssets(path string) error {
 
 	defaultGeneration := uint32(1)
 	defaultDecoyList := pb.DecoyList{TlsDecoys: defaultDecoys}
-	defaultClientConf := pb.ClientConf{
-		DecoyList:     &defaultDecoyList,
-		DefaultPubkey: &defaultPubKey,
-		ConjurePubkey: &defaultConjurePubKey,
-		Generation:    &defaultGeneration,
-	}
-
 	defaultDnsRegDomain := "r.refraction.network"
 	defaultDnsRegDohUrl := "https://1.1.1.1/dns-query"
 	defaultStunServer := "stun.voip.blackberry.com:3478"
@@ -127,10 +118,17 @@ func initAssets(path string) error {
 		StunServer:       &defaultStunServer,
 	}
 
+	defaultClientConf := pb.ClientConf{
+		DecoyList:     &defaultDecoyList,
+		DefaultPubkey: &defaultPubKey,
+		ConjurePubkey: &defaultConjurePubKey,
+		Generation:    &defaultGeneration,
+		DnsRegConf:    &defaultDnsRegConf,
+	}
+
 	assetsInstance = &assets{
 		path:               path,
 		config:             &defaultClientConf,
-		dnsRegConf:         &defaultDnsRegConf,
 		filenameRoots:      "roots",
 		filenameClientConf: "ClientConf",
 		socksAddr:          "",
@@ -148,7 +146,7 @@ func (a *assets) GetAssetsDir() string {
 func (a *assets) GetDNSRegConf() *pb.DnsRegConf {
 	a.RLock()
 	defer a.RUnlock()
-	return a.dnsRegConf
+	return a.config.DnsRegConf
 }
 
 func (a *assets) readConfigs() error {
