@@ -18,6 +18,9 @@ func TestUpdateDNSReg(t *testing.T) {
 		Domain:       &originalDomain,
 		Pubkey:       originalPubkey,
 	}
+	cc := &pb.ClientConf{
+		DnsRegConf: original,
+	}
 
 	newTarget := "target"
 	newDomain := ""
@@ -30,10 +33,7 @@ func TestUpdateDNSReg(t *testing.T) {
 		Pubkey:       newPubkey,
 	}
 
-	err := updateDNSReg(original, new)
-	if err != nil {
-		t.Fatalf("error during update reg: %v", err)
-	}
+	updateDNSReg(cc, new)
 
 	if *original.Domain != originalDomain {
 		t.Fatalf("domain should not be updated")
