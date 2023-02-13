@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"reflect"
 	"regexp"
 	"strings"
 
@@ -418,6 +419,30 @@ func decoysToDeleteFromFile(filename string, clientConf *pb.ClientConf) error {
 	return nil
 }
 
+func dnsRegMethodFromStr(method string) (pb.DnsRegMethod, error) {
+	switch strings.ToLower(method) {
+	case "udp":
+		return pb.DnsRegMethod_UDP, nil
+	case "dot":
+		return pb.DnsRegMethod_DOT, nil
+	case "doh":
+		return pb.DnsRegMethod_DOH, nil
+	}
+	return 0, fmt.Errorf("unknown reg method: %v", method)
+}
+
+func updateDNSReg(old *pb.DnsRegConf, new *pb.DnsRegConf) error {
+	oldVal := reflect.ValueOf(old).Elem()
+	newVal := reflect.ValueOf(new).Elem()
+
+	for i := 0; i < oldVal.NumField(); i++ {
+		if newVal.Field(i).IsZero() {
+			continue
+		}
+		oldVal.Field(i).Set(newVal.Field(i))
+	}
+	return nil
+}
 
 func main() {
 	var fname = flag.String("f", "", "`ClientConf` file to parse")
@@ -438,6 +463,13 @@ func main() {
 	var ip = flag.String("ip", "", "New/modified IP address")
 	var timeout = flag.Int("timeout", 0, "New/modified timeout")
 	var tcpwin = flag.Int("tcpwin", 0, "New/modified tcpwin")
+
+	// var dnsTarget = flag.String("dns-target", "", "DoH/DoT/UDP address of DNS server to be used in the DNS registrar")
+	// var dnsMethod = flag.String("dns-reg-method", "", "DNS registration method to use in the DNS registrar (one of DoH/DoT/UDP)")
+	// var dnsDomain = flag.String("dns-domain", "", "Domain of target DNS registrar")
+	// var dnsPubkey = flag.String("dns-pubkey", "", "Pubkey of target DNS registrar")
+	// var dnsUTLS = flag.String("dns-utls", "", "UTLS distribution to be used in DoT and DoH connections in the DNS registrar")
+	// var dnsStunServer = flag.String("dns-stun", "", "STUN server to be used in the DNS registrar")
 
 	var add_subnets = flag.String("add-subnets", "", "Add a subnet or list of space-separated subnets between double quotes (\"127.0.0.1/24 2001::/32\" etc.), requires additional weight flag")
 	var delete_subnet = flag.Int("delete-subnet", -1, "Specifies the index of a subnet to delete")
