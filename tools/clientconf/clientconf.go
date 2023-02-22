@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"reflect"
 	"regexp"
 	"strings"
 
@@ -57,6 +58,10 @@ func printClientConf(clientConf *pb.ClientConf) {
 				index++
 			}
 		}
+	}
+
+	if clientConf.DnsRegConf != nil {
+		fmt.Printf("DNS registrar: %+v\n", clientConf.DnsRegConf)
 	}
 }
 
@@ -418,6 +423,42 @@ func decoysToDeleteFromFile(filename string, clientConf *pb.ClientConf) error {
 	return nil
 }
 
+func dnsRegMethodFromStr(method string) (pb.DnsRegMethod, error) {
+	switch strings.ToLower(method) {
+	case "udp":
+		return pb.DnsRegMethod_UDP, nil
+	case "dot":
+		return pb.DnsRegMethod_DOT, nil
+	case "doh":
+		return pb.DnsRegMethod_DOH, nil
+	case "":
+		return 0, nil
+	}
+	return 0, fmt.Errorf("unknown reg method: %v", method)
+}
+
+// updateDNSReg updates fields in cc.DnsRegConf with non-zero fields in new
+func updateDNSReg(cc *pb.ClientConf, new *pb.DnsRegConf) {
+	if cc.DnsRegConf == nil {
+		cc.DnsRegConf = &pb.DnsRegConf{}
+	}
+
+	oldVal := reflect.ValueOf(cc.DnsRegConf).Elem()
+	newVal := reflect.ValueOf(new).Elem()
+
+	for i := 0; i < oldVal.NumField(); i++ {
+		if newVal.Field(i).IsZero() {
+			continue
+		}
+
+		// if field is pointer, also check if the value that it points to is a zero value
+		if newVal.Field(i).Kind() == reflect.Pointer && newVal.Field(i).Elem().IsZero() {
+			continue
+		}
+
+		oldVal.Field(i).Set(newVal.Field(i))
+	}
+}
 
 func main() {
 	var fname = flag.String("f", "", "`ClientConf` file to parse")
@@ -438,6 +479,13 @@ func main() {
 	var ip = flag.String("ip", "", "New/modified IP address")
 	var timeout = flag.Int("timeout", 0, "New/modified timeout")
 	var tcpwin = flag.Int("tcpwin", 0, "New/modified tcpwin")
+
+	var dnsTarget = flag.String("dns-target", "", "DoH/DoT/UDP address of DNS server to be used in the DNS registrar")
+	var dnsMethodStr = flag.String("dns-method", "", "DNS registration method to use in the DNS registrar (one of DoH/DoT/UDP)")
+	var dnsDomain = flag.String("dns-domain", "", "Domain of target DNS registrar")
+	var dnsPubkeyStr = flag.String("dns-pubkey", "", "Pubkey of target DNS registrar")
+	var dnsUTLS = flag.String("dns-utls", "", "UTLS distribution to be used in DoT and DoH connections in the DNS registrar")
+	var dnsStunServer = flag.String("dns-stun", "", "STUN server to be used in the DNS registrar")
 
 	var add_subnets = flag.String("add-subnets", "", "Add a subnet or list of space-separated subnets between double quotes (\"127.0.0.1/24 2001::/32\" etc.), requires additional weight flag")
 	var delete_subnet = flag.Int("delete-subnet", -1, "Specifies the index of a subnet to delete")
@@ -597,6 +645,25 @@ func main() {
 		}
 		clientConf.DecoyList.TlsDecoys = append(clientConf.DecoyList.TlsDecoys, &decoy)
 	}
+
+	dnsRegMethod, err := dnsRegMethodFromStr(*dnsMethodStr)
+	if err != nil {
+		log.Fatalf("Error parsing DNS registration method: %v", err)
+	}
+
+	var dnsPubkey []byte
+	if *dnsPubkeyStr != "" {
+		dnsPubkey = parsePubkey(*dnsPubkeyStr)
+	}
+
+	updateDNSReg(clientConf, &pb.DnsRegConf{
+		DnsRegMethod:     &dnsRegMethod,
+		Target:           dnsTarget,
+		Domain:           dnsDomain,
+		Pubkey:           dnsPubkey,
+		UtlsDistribution: dnsUTLS,
+		StunServer:       dnsStunServer,
+	})
 
 	if !*noout {
 		if *diff != "" {
