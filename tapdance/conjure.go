@@ -46,7 +46,6 @@ func currentClientLibraryVersion() uint32 {
 	// // selection algorithm that is not backwards compatible to older clients.
 	// return 1
 
-
 	// // No client version indicates any client before this change.
 	// return 0
 }
@@ -122,14 +121,14 @@ func Connect(ctx context.Context, reg *ConjureReg) (net.Conn, error) {
 
 // ConjureSession - Create a session with details for registration and connection
 type ConjureSession struct {
-	Keys             *sharedKeys
-	Width            uint
-	V6Support        *V6
-	UseProxyHeader   bool
-	SessionID        uint64
-	Phantom          *net.IP
-	Transport        Transport
-	CovertAddress    string
+	Keys           *sharedKeys
+	Width          uint
+	V6Support      *V6
+	UseProxyHeader bool
+	SessionID      uint64
+	Phantom        *net.IP
+	Transport      Transport
+	CovertAddress  string
 	// rtt			   uint // tracked in stats
 
 	// TcpDialer allows the caller to provide a custom dialer for outgoing proxy connections.
@@ -180,7 +179,7 @@ func LogConjureSession(cjSession *ConjureSession) {
 
 }
 
-func MakeConjureSession(covert string,transport Transport) *ConjureSession {
+func MakeConjureSession(covert string, transport Transport) *ConjureSession {
 
 	cjSession := MakeConjureSessionSilent(covert, transport)
 	if cjSession == nil {
@@ -709,6 +708,9 @@ func (reg *ConjureReg) generateClientToStation() (*pb.ClientToStation, error) {
 	if err != nil {
 		Logger().Debugf("%s failed to marshal transport parameters ", reg.sessionIDStr)
 	}
+
+	// remove type url to save space for DNS registration
+	transportParams.TypeUrl = ""
 
 	initProto := &pb.ClientToStation{
 		ClientLibVersion:    &currentLibVer,
