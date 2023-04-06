@@ -104,6 +104,8 @@ github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
 github.com/kylelemons/godebug v0.0.0-20170820004349-d65d576e9348/go.mod h1:B69LEHPfb2qLo0BaaOLcbitczOKLWTsrBG9LczfCD4k=
 github.com/mroth/weightedrand v0.4.1 h1:rHcbUBopmi/3x4nnrvwGJBhX9d0vk+KgoLUZeDP6YyI=
 github.com/mroth/weightedrand v0.4.1/go.mod h1:3p2SIcC8al1YMzGhAIoXD+r9olo/g/cdJgAD905gyNE=
+github.com/mroth/weightedrand v1.0.0 h1:V8JeHChvl2MP1sAoXq4brElOcza+jxLkRuwvtQu8L3E=
+github.com/mroth/weightedrand v1.0.0/go.mod h1:3p2SIcC8al1YMzGhAIoXD+r9olo/g/cdJgAD905gyNE=
 github.com/naoina/go-stringutil v0.1.0/go.mod h1:XJ2SJL9jCtBh+P9q5btrd/Ylo8XwT/h1USek5+NqSA0=
 github.com/naoina/toml v0.1.1/go.mod h1:NBIhNtsFMo3G2szEBne+bO4gS192HuIYRqfvOWb4i1E=
 github.com/nbio/st v0.0.0-20140626010706-e9e8d9816f32/go.mod h1:9wM+0iRr9ahx58uYLpLIr5fm8diHn0JbqRycJi6w0Ms=
@@ -137,6 +139,8 @@ github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZN
 github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4/go.mod h1:xMI15A0UPsDsEKsMN9yxemIoYk6Tm2C1GtYGdfGttqA=
 github.com/refraction-networking/conjure v0.3.0 h1:E9W3HlTKL8tnVfRNjmbOXFFtCyLiEB5LCPZgRMfnSHA=
 github.com/refraction-networking/conjure v0.3.0/go.mod h1:Juw6CEv3P7c+IkYTl1bOhCCW/K/ykjaO+UYFEzEjpY8=
+github.com/refraction-networking/conjure v0.4.0 h1:YObJ+6L/MnupE82N2+3m93GMzlHjHSHe1ysIYDOpqug=
+github.com/refraction-networking/conjure v0.4.0/go.mod h1:7na+SFWdaTOToNoNrsJRIj4CIMwdGFZ4kwb/CO5Z0rQ=
 github.com/refraction-networking/gotapdance v1.3.1/go.mod h1:8IRTeIDGY+2JbwCOB4IOpQA5LifvuI/dUKippcvhtYw=
 github.com/refraction-networking/utls v1.0.0/go.mod h1:tz9gX959MEFfFN5whTIocCLUG57WiILqtdVxI8c6Wj0=
 github.com/refraction-networking/utls v1.1.0/go.mod h1:tz9gX959MEFfFN5whTIocCLUG57WiILqtdVxI8c6Wj0=
