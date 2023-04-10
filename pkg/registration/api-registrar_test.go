@@ -104,7 +104,7 @@ func TestAPIRegistrarBidirectional(t *testing.T) {
 		}
 
 		regResp := &pb.RegistrationResponse{
-			DstPort:     &port,
+			DstPort:  &port,
 			Ipv4Addr: &addr4,
 			Ipv6Addr: []byte(addr6.To16()),
 		}

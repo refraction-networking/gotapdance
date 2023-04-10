@@ -306,17 +306,13 @@ func newDNSRegistrarFromConf(conf *pb.DnsRegConf, bidirectional bool, delay time
 	if pubkey == nil {
 		pubkey = fallbackKey
 	}
-	target := ""
 	var method registration.DNSTransportMethodType
 	switch *conf.DnsRegMethod {
 	case pb.DnsRegMethod_UDP:
-		target = *conf.UdpAddr
 		method = registration.UDP
 	case pb.DnsRegMethod_DOT:
-		target = *conf.DotAddr
 		method = registration.DoT
 	case pb.DnsRegMethod_DOH:
-		target = *conf.DohUrl
 		method = registration.DoH
 	default:
 		return nil, errors.New("unkown reg method in conf")
@@ -324,7 +320,7 @@ func newDNSRegistrarFromConf(conf *pb.DnsRegConf, bidirectional bool, delay time
 
 	return registration.NewDNSRegistrar(&registration.Config{
 		DNSTransportMethod: method,
-		Target:             target,
+		Target:             *conf.Target,
 		BaseDomain:         *conf.Domain,
 		Pubkey:             pubkey,
 		UTLSDistribution:   *conf.UtlsDistribution,
