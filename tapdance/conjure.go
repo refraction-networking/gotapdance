@@ -710,6 +710,7 @@ func (reg *ConjureReg) generateClientToStation() (*pb.ClientToStation, error) {
 	}
 
 	// remove type url to save space for DNS registration
+	// for server side changes see https://github.com/refraction-networking/conjure/pull/163
 	transportParams.TypeUrl = ""
 
 	initProto := &pb.ClientToStation{
