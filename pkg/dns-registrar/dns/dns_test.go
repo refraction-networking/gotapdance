@@ -2,6 +2,7 @@ package dns
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -82,9 +83,13 @@ func TestName(t *testing.T) {
 		// Test that NewName returns proper error codes, and otherwise
 		// returns an equal slice of labels.
 		name, err := NewName(test.labels)
-		if err != test.err || (err == nil && !namesEqual(name, test.labels)) {
+		if err == nil && !namesEqual(name, test.labels) {
 			t.Errorf("%+q returned (%+q, %v), expected (%+q, %v)",
 				test.labels, name, err, test.labels, test.err)
+			continue
+		} else if !errors.Is(err, test.err) {
+			t.Errorf("%+q returned (%v), expected (%v)",
+				test.labels, err, test.err)
 			continue
 		}
 		if test.err != nil {
