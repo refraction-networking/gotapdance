@@ -40,7 +40,7 @@ type Config struct {
 	SecondaryRegistrar tapdance.Registrar
 
 	// HTTPClient is the HTTP client to use for the API registrar
-	HTTPClient http.Client
+	HTTPClient *http.Client
 }
 
 // DNSTransportMethodType declares the DNS transport method to be used
