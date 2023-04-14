@@ -2,6 +2,7 @@ package registration
 
 import (
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/refraction-networking/gotapdance/tapdance"
@@ -37,6 +38,9 @@ type Config struct {
 
 	// SecondaryRegistrar is the secondary registrar to use when the main one fails
 	SecondaryRegistrar tapdance.Registrar
+
+	// HTTPClient is the HTTP client to use for the API registrar
+	HTTPClient *http.Client
 }
 
 // DNSTransportMethodType declares the DNS transport method to be used
