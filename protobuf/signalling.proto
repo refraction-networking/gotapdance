@@ -159,7 +159,8 @@ enum ErrorReasonS2C {
 enum TransportType {
     Null = 0;
     Min = 1;   // Send a 32-byte HMAC id to let the station distinguish registrations to same host
-    Obfs4 = 2; // Not implemented yet?
+    Obfs4 = 2;
+    Prefix = 3;
     Webrtc = 99; // UDP transport: WebRTC DataChannel
 }
 
@@ -174,7 +175,7 @@ message WebRTCICECandidate {
 
 // Deflated SDP for WebRTC by seed2sdp package
 message WebRTCSDP {
-    required uint32 type = 1; 
+    required uint32 type = 1;
     repeated WebRTCICECandidate candidates = 2; // there could be multiple candidates
 }
 
