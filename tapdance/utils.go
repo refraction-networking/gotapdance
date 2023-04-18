@@ -268,7 +268,7 @@ func obfuscateTagAndProtobuf(stegoPayload []byte, protobuf []byte, stationPubkey
 	if err != nil {
 		return nil, nil, err
 	}
-	representative[31] |= (0x40 & randByte[0])
+	representative[31] |= (0xC0 & randByte[0])
 
 	tagBuf := new(bytes.Buffer) // What we have to encrypt with the shared secret using AES
 	tagBuf.Write(representative[:])
