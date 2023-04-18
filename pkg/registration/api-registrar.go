@@ -60,6 +60,7 @@ func NewAPIRegistrar(config *Config) (*APIRegistrar, error) {
 		connectionDelay:    config.Delay,
 		maxRetries:         config.MaxRetries,
 		secondaryRegistrar: config.SecondaryRegistrar,
+		client:             config.HTTPClient,
 		logger:             tapdance.Logger().WithField("registrar", "API"),
 	}, nil
 }
