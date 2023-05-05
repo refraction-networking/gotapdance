@@ -19,8 +19,9 @@ type Choice struct {
 }
 
 // getSubnets - return EITHER all subnet strings as one composite array if we are
-//		selecting unweighted, or return the array associated with the (seed) selected
-//		array of subnet strings based on the associated weights
+//
+//	selecting unweighted, or return the array associated with the (seed) selected
+//	array of subnet strings based on the associated weights
 func getSubnets(sc *pb.PhantomSubnetsList, seed []byte, weighted bool) []string {
 
 	var out []string = []string{}
@@ -85,9 +86,11 @@ func getSubnets(sc *pb.PhantomSubnetsList, seed []byte, weighted bool) []string 
 }
 
 // SubnetFilter - Filter IP subnets based on whatever to prevent specific subnets from
-//		inclusion in choice. See v4Only and v6Only for reference.
+//
+//	inclusion in choice. See v4Only and v6Only for reference.
 type SubnetFilter func([]*net.IPNet) ([]*net.IPNet, error)
 
+// V4Only - a functor for transforming the subnet list to only include IPv4 subnets
 func V4Only(obj []*net.IPNet) ([]*net.IPNet, error) {
 	var out []*net.IPNet = []*net.IPNet{}
 
