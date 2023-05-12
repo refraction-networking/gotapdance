@@ -88,7 +88,7 @@ func NewName(labels [][]byte) (Name, error) {
 	builder := newMessageBuilder()
 	builder.WriteName(name)
 	if len(builder.Bytes()) > 255 {
-		return nil, ErrNameTooLong
+		return nil, fmt.Errorf("%w, current length: %v", ErrNameTooLong, len(builder.Bytes()))
 	}
 	return name, nil
 }

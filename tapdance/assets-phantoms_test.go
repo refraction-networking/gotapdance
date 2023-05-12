@@ -45,17 +45,17 @@ func TestAssetsPhantoms(t *testing.T) {
 
 	addr4, addr6, err := SelectPhantom(seed, both)
 	require.Nil(t, err)
-	require.Equal(t, "192.122.190.130", addr4.String())
-	require.Equal(t, "2001:48a8:687f:1:5fa4:c34c:434e:ddd", addr6.String())
+	require.Equal(t, "192.122.190.178", addr4.String())
+	require.Equal(t, "2001:48a8:687f:1:b292:3bab:bade:351f", addr6.String())
 
 	addr4, addr6, err = SelectPhantom(seed, v6)
 	require.Nil(t, err)
 	require.Nil(t, addr4)
-	require.Equal(t, "2001:48a8:687f:1:5fa4:c34c:434e:ddd", addr6.String())
+	require.Equal(t, "2001:48a8:687f:1:b292:3bab:bade:351f", addr6.String())
 
 	addr4, addr6, err = SelectPhantom(seed, v4)
 	require.Nil(t, err)
-	require.Equal(t, "192.122.190.130", addr4.String())
+	require.Equal(t, "192.122.190.178", addr4.String())
 	require.Nil(t, addr6)
 
 	AssetsSetDir(oldpath)

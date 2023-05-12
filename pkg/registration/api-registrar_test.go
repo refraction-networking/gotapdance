@@ -10,15 +10,22 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/refraction-networking/gotapdance/pkg/transports"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	"github.com/refraction-networking/gotapdance/tapdance"
 	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 )
 
 func TestAPIRegistrar(t *testing.T) {
 	tapdance.AssetsSetDir("./assets")
-	session := tapdance.MakeConjureSession("1.2.3.4:1234", pb.TransportType_Min)
+
+	transports.EnableDefaultTransports()
+	transport, err := transports.New("min")
+	require.Nil(t, err)
+
+	session := tapdance.MakeConjureSession("1.2.3.4:1234", transport)
 
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
@@ -59,8 +66,11 @@ func TestAPIRegistrar(t *testing.T) {
 
 func TestAPIRegistrarBidirectional(t *testing.T) {
 	tapdance.AssetsSetDir("./assets")
+	transports.EnableDefaultTransports()
+	transport, err := transports.New("min")
+	require.Nil(t, err)
 	// Make Conjure session with covert address
-	session := tapdance.MakeConjureSession("1.2.3.4:1234", pb.TransportType_Min)
+	session := tapdance.MakeConjureSession("1.2.3.4:1234", transport)
 	addr4 := binary.BigEndian.Uint32(net.ParseIP("127.0.0.1").To4())
 	addr6 := net.ParseIP("2001:48a8:687f:1:41d3:ff12:45b:73c8")
 	var port uint32 = 80

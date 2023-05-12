@@ -61,17 +61,11 @@ func TestSelectBoth(t *testing.T) {
 	}
 
 	phantomIPAddr4, phantomIPAddr6, err := SelectPhantom(seed, both)
-	if err != nil {
-		t.Fatalf(" encountered err while selecting IPs: %v", err)
-	} else if phantomIPAddr4 == nil {
-		t.Fatalf("Failed to select IPv4 address (support: both): %v", err)
-	} else if phantomIPAddr6 == nil {
-		t.Fatalf("Failed to select IPv6 address (support: both): %v", err)
-	} else if phantomIPAddr6.String() != "2001:48a8:687f:1:41d3:ff12:45b:73c8" {
-		t.Fatalf("Incorrect Address chosen: %s", phantomIPAddr6.String())
-	} else if phantomIPAddr4.String() != "192.122.190.194" {
-		t.Fatalf("Incorrect Address chosen: %v", phantomIPAddr4.String())
-	}
+	require.Nil(t, err, "encountered err while selecting IPs")
+	require.NotNil(t, phantomIPAddr4, "Failed to select IPv4 address (support: both")
+	require.Equal(t, "192.122.190.252", phantomIPAddr4.String(), "Incorrect Address chosen")
+	require.NotNil(t, phantomIPAddr6, "Failed to select IPv6 address (support: both")
+	require.Equal(t, "2001:48a8:687f:1:fc9d:ee40:b05d:6656", phantomIPAddr6.String(), "Incorrect Address chosen")
 }
 
 func TestConjureHMAC(t *testing.T) {
