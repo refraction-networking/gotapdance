@@ -164,8 +164,9 @@ enum TransportType {
     Prefix = 4; // dynamic prefix transport (and updated Min)
     uTLS = 5; // uTLS based transport
     Format = 6; // Formatting transport - format first, format all
-    FTE = 7; // Format transforming encryption
-    Quic = 8; // quic transport?
+    WASM = 7; // WebAssembly
+    FTE = 8; // Format transforming encryption
+    Quic = 9; // quic transport?
     Webrtc = 99; // UDP transport: WebRTC DataChannel
 }
 
