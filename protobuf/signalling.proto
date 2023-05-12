@@ -160,7 +160,13 @@ enum TransportType {
     Null = 0;
     Min = 1;   // Send a 32-byte HMAC id to let the station distinguish registrations to same host
     Obfs4 = 2;
-    Prefix = 3;
+    DTLS = 3; // UDP transport: DTLS
+    Prefix = 4; // dynamic prefix transport (and updated Min)
+    uTLS = 5; // uTLS based transport
+    Format = 6; // Formatting transport - format first, format all
+    WASM = 7; // WebAssembly
+    FTE = 8; // Format transforming encryption
+    Quic = 9; // quic transport?
     Webrtc = 99; // UDP transport: WebRTC DataChannel
 }
 
