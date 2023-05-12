@@ -89,6 +89,6 @@ func EnableDefaultTransports() error {
 	return nil
 }
 
-// func init() {
-// 	EnableDefaultTransports()
-// }
+func init() {
+	EnableDefaultTransports()
+}

@@ -68,10 +68,9 @@ func main() {
 
 	v6Support := !*excludeV6
 
-	tapdance.AssetsSetDir(*assetsLocation)
-	err := transports.EnableDefaultTransports()
+	_, err := tapdance.AssetsSetDir(*assetsLocation)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to enable transports: %s", err)
+		fmt.Fprintf(os.Stderr, "Failed to parse assets: %s", err)
 		os.Exit(1)
 	}
 
@@ -138,20 +137,10 @@ func main() {
 	}
 
 	err = connectDirect(*td, *APIRegistration, *registrar, *connectTarget, *port, *proxyHeader, v6Support, *width, *transport, *phantomNet, *randomizeDstPort)
-
 	if err != nil {
 		tapdance.Logger().Println(err)
 		os.Exit(1)
 	}
-
-	// Dead code?
-	/*
-		tapdanceProxy := tdproxy.NewTapDanceProxy(*port)
-		err = tapdanceProxy.ListenAndServe()
-		if err != nil {
-			tdproxy.Logger.Errorf("Failed to ListenAndServe(): %v\n", err)
-			os.Exit(1)
-		}*/
 }
 
 func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget string, localPort int, proxyHeader bool, v6Support bool, width int, transport string, phantomNet string, randomizeDstPort bool) error {
@@ -177,8 +166,9 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget 
 		UseProxyHeader:     proxyHeader,
 		V6Support:          v6Support,
 		Width:              width,
-		Transport:          t,
-		PhantomNet:         phantomNet,
+		// Transport:          getTransportFromName(transport), // Still works for backwards compatibility
+		TransportConfig: t,
+		PhantomNet:      phantomNet,
 	}
 
 	switch registrar {
@@ -242,7 +232,7 @@ func manageConn(tdDialer tapdance.Dialer, connectTarget string, clientConn *net.
 	// TODO: go back to pre-dialing after measuring performance
 	tdConn, err := tdDialer.Dial("tcp", connectTarget)
 	if err != nil || tdConn == nil {
-		fmt.Printf("failed to dial %s: %v", connectTarget, err)
+		fmt.Printf("failed to dial %s: %v\n", connectTarget, err)
 		return
 	}
 
@@ -315,7 +305,7 @@ func newDNSRegistrarFromConf(conf *pb.DnsRegConf, bidirectional bool, delay time
 	case pb.DnsRegMethod_DOH:
 		method = registration.DoH
 	default:
-		return nil, errors.New("unkown reg method in conf")
+		return nil, errors.New("unknown reg method in conf")
 	}
 
 	return registration.NewDNSRegistrar(&registration.Config{
@@ -329,4 +319,15 @@ func newDNSRegistrarFromConf(conf *pb.DnsRegConf, bidirectional bool, delay time
 		Delay:              delay,
 		STUNAddr:           *conf.StunServer,
 	})
+}
+
+func getTransportFromName(name string) pb.TransportType {
+	switch name {
+	case "min":
+		return pb.TransportType_Min
+	case "obfs4":
+		return pb.TransportType_Obfs4
+	default:
+		return pb.TransportType_Null
+	}
 }

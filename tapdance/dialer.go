@@ -4,9 +4,14 @@ import (
 	"context"
 	"errors"
 	"net"
+
+	"github.com/refraction-networking/conjure/application/transports/wrapping/min"
+	"github.com/refraction-networking/conjure/application/transports/wrapping/obfs4"
+	pb "github.com/refraction-networking/gotapdance/protobuf"
 )
 
 var sessionsTotal CounterUint64
+var randomizePortDefault = false
 
 // Dialer contains options and implements advanced functions for establishing TapDance connection.
 type Dialer struct {
@@ -23,7 +28,8 @@ type Dialer struct {
 	DarkDecoyRegistrar Registrar
 
 	// The type of transport to use for Conjure connections.
-	Transport Transport
+	Transport       pb.TransportType
+	TransportConfig Transport
 
 	UseProxyHeader bool
 	V6Support      bool
@@ -88,43 +94,51 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 			flow.tdRaw.Dialer = d.Dialer
 			flow.tdRaw.useProxyHeader = d.UseProxyHeader
 			return flow, flow.DialContext(ctx)
-		} else {
-			// Conjure
-			// _, err := makeTdFlow(flowBidirectional, nil, address)
-			// if err != nil {
-			// 	return nil, err
-			// }
-			var cjSession *ConjureSession
-
-			// If specified, only select a phantom from a given range
-			if d.PhantomNet != "" {
-				_, phantomRange, err := net.ParseCIDR(d.PhantomNet)
-				if err != nil {
-					return nil, errors.New("Invalid Phantom network goal")
-				}
-				cjSession = FindConjureSessionInRange(address, d.Transport, phantomRange)
-				if cjSession == nil {
-					return nil, errors.New("Failed to find Phantom in target subnet")
-				}
-			} else {
-				cjSession = MakeConjureSession(address, d.Transport)
-			}
-
-			cjSession.Dialer = d.Dialer
-			cjSession.UseProxyHeader = d.UseProxyHeader
-			cjSession.Width = uint(d.Width)
-
-			if d.V6Support {
-				cjSession.V6Support = &V6{include: both, support: true}
-			} else {
-				cjSession.V6Support = &V6{include: v4, support: false}
-			}
-			if len(address) == 0 {
-				return nil, errors.New("Dark Decoys require target address to be set")
-			}
-			return DialConjure(ctx, cjSession, d.DarkDecoyRegistrar)
 		}
+		// Conjure
+		var cjSession *ConjureSession
+
+		transport := d.TransportConfig
+		if d.TransportConfig == nil {
+			switch d.Transport {
+			case pb.TransportType_Min:
+				transport = &min.ClientTransport{Parameters: &pb.GenericTransportParams{RandomizeDstPort: &randomizePortDefault}}
+			case pb.TransportType_Obfs4:
+				transport = &obfs4.ClientTransport{Parameters: &pb.GenericTransportParams{RandomizeDstPort: &randomizePortDefault}}
+			default:
+				return nil, errors.New("unknown transport by TransportType try using TransportConfig")
+			}
+		}
+
+		// If specified, only select a phantom from a given range
+		if d.PhantomNet != "" {
+			_, phantomRange, err := net.ParseCIDR(d.PhantomNet)
+			if err != nil {
+				return nil, errors.New("Invalid Phantom network goal")
+			}
+			cjSession = FindConjureSessionInRange(address, d.TransportConfig, phantomRange)
+			if cjSession == nil {
+				return nil, errors.New("Failed to find Phantom in target subnet")
+			}
+		} else {
+			cjSession = MakeConjureSession(address, transport)
+		}
+
+		cjSession.Dialer = d.Dialer
+		cjSession.UseProxyHeader = d.UseProxyHeader
+		cjSession.Width = uint(d.Width)
+
+		if d.V6Support {
+			cjSession.V6Support = &V6{include: both, support: true}
+		} else {
+			cjSession.V6Support = &V6{include: v4, support: false}
+		}
+		if len(address) == 0 {
+			return nil, errors.New("Dark Decoys require target address to be set")
+		}
+		return DialConjure(ctx, cjSession, d.DarkDecoyRegistrar)
 	}
+
 	return nil, errors.New("SplitFlows are not supported")
 }
 

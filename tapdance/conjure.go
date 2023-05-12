@@ -318,8 +318,7 @@ func (reg *ConjureReg) connect(ctx context.Context, addr string, dialer dialFunc
 	deadline, deadlineAlreadySet := ctx.Deadline()
 	if !deadlineAlreadySet {
 		//[reference] randomized timeout to Dial dark decoy address
-		deadline = time.Now().Add(reg.GetRandomDuration(0, 1061*2, 1953*3))
-		//[TODO]{priority:@sfrolov} explain these numbers and why they were chosen for the boundaries.
+		deadline = time.Now().Add(reg.GetRandomDuration(0, 1461*2, 2453*3))
 	}
 	childCtx, childCancelFunc := context.WithDeadline(ctx, deadline)
 	defer childCancelFunc()
