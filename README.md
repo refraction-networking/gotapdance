@@ -71,7 +71,7 @@ func main() {
 
  # Links
 
- [Refraction Networking](https://refraction.network) is an umberlla term for the family of similarly working technnologies.
+ [Refraction Networking](https://refraction.network) is an umbrella term for the family of similarly working technnologies.
 
  TapDance station code released for FOCI'17 on github: [refraction-networking/tapdance](https://github.com/refraction-networking/tapdance)
 
