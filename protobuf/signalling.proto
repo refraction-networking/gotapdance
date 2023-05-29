@@ -242,6 +242,11 @@ message ClientToStation {
     // lack therof.
     optional uint32 client_lib_version = 5;
 
+    // Indicates whether the client will allow the registrar to provide alternative parameters that
+    // may work better in substitute for the deterministically selected parameters. This only works
+    // for bidirectional registration methods where the client receives a RegistrationResponse.
+    optional bool allow_registrar_overrides = 6;
+
     // List of decoys that client have unsuccessfully tried in current session.
     // Could be sent in chunks
     repeated string failed_decoys = 10;
@@ -279,10 +284,30 @@ message ClientToStation {
     optional bytes padding = 100;
 }
 
+
+message PrefixTransportParams {
+    // Prefix Identifier
+    optional int32 prefix_id = 1;
+
+    // Prefix bytes (optional - usually sent from station to client as override if allowed by C2S)
+    // as the station cannot take this into account when attempting to identify a connection.
+    optional bytes prefix = 2;
+
+    // // potential future fields
+    // obfuscator ID
+    // tagEncoder ID (&params?, e.g. format-base64 / padding)
+    // streamEncoder ID (&params?, e.g. foramat-base64 / padding)
+
+    // Indicates whether the client has elected to use destination port randomization. Should be
+    // checked against selected transport to ensure that destination port randomization is
+    // supported.
+    optional bool randomize_dst_port = 13;
+}
+
 message GenericTransportParams {
-    // Indicates whether the client has elected to use destination port
-    // randomization. Should be checked against selected transport to ensure
-    // that destination port randomization is supported.
+    // Indicates whether the client has elected to use destination port randomization. Should be
+    // checked against selected transport to ensure that destination port randomization is
+    // supported.
     optional bool randomize_dst_port = 13;
 }
 

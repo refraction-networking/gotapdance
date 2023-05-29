@@ -428,6 +428,18 @@ func (reg *ConjureReg) Connect(ctx context.Context, transport Transport) (net.Co
 		}
 
 		return conn, err
+	case pb.TransportType_Prefix:
+		conn, err := reg.getFirstConnection(ctx, reg.Dialer, phantoms)
+		if err != nil {
+			Logger().Infof("%v failed to form phantom connection: %v", reg.sessionIDStr, err)
+			return nil, err
+		}
+
+		// Send hmac(seed, str) bytes to indicate to station (min transport)
+		connectTag := conjureHMAC(reg.keys.SharedSecret, "MinTrasportHMACString")
+		conn.Write(connectTag)
+		return conn, nil
+
 	case pb.TransportType_Null:
 		// Dial and do nothing to the connection before returning it to the user.
 		return reg.getFirstConnection(ctx, reg.Dialer, phantoms)
