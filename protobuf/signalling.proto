@@ -393,6 +393,9 @@ message RegistrationResponse {
 
   // ClientConf field (optional)
   optional ClientConf clientConf = 6;
+
+  // Transport Params to if `allow_registrar_overrides` is set.
+  optional google.protobuf.Any transport_params = 10;
 }
 
 // response from dns
