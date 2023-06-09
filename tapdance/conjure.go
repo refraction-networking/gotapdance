@@ -2,7 +2,6 @@ package tapdance
 
 import (
 	"context"
-	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
@@ -15,6 +14,8 @@ import (
 	"time"
 
 	pt "git.torproject.org/pluggable-transports/goptlib.git"
+	"github.com/refraction-networking/conjure/application/transports/wrapping/prefix"
+	"github.com/refraction-networking/conjure/pkg/core"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	ps "github.com/refraction-networking/gotapdance/tapdance/phantoms"
 	tls "github.com/refraction-networking/utls"
@@ -83,7 +84,7 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 
 	Logger().Debugf("%v Attempting to Connect ...", cjSession.IDString())
 
-	return registration.Connect(ctx, registration.Transport)
+	return registration.Connect(ctx)
 	// return Connect(cjSession)
 }
 
@@ -116,7 +117,7 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 
 // Connect - Dial the Phantom IP address after registration
 func Connect(ctx context.Context, reg *ConjureReg) (net.Conn, error) {
-	return reg.Connect(ctx, reg.Transport)
+	return reg.Connect(ctx)
 }
 
 // ConjureSession - Create a session with details for registration and connection
@@ -382,7 +383,7 @@ func (reg *ConjureReg) getFirstConnection(ctx context.Context, dialer dialFunc, 
 // Connect - Use a registration (result of calling Register) to connect to a phantom
 // Note: This is hacky but should work for v4, v6, or both as any nil phantom addr will
 // return a dial error and be ignored.
-func (reg *ConjureReg) Connect(ctx context.Context, transport Transport) (net.Conn, error) {
+func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
 	phantoms := []*net.IP{reg.phantom4, reg.phantom6}
 
 	//[reference] Provide chosen transport to sent bytes (or connect) if necessary
@@ -395,7 +396,7 @@ func (reg *ConjureReg) Connect(ctx context.Context, transport Transport) (net.Co
 		}
 
 		// Send hmac(seed, str) bytes to indicate to station (min transport)
-		connectTag := conjureHMAC(reg.keys.SharedSecret, "MinTrasportHMACString")
+		connectTag := core.ConjureHMAC(reg.keys.SharedSecret, "MinTrasportHMACString")
 		conn.Write(connectTag)
 		return conn, nil
 
@@ -433,20 +434,27 @@ func (reg *ConjureReg) Connect(ctx context.Context, transport Transport) (net.Co
 
 		return conn, err
 	case pb.TransportType_Prefix:
+		pt, ok := reg.Transport.(*prefix.ClientTransport)
+		if !ok {
+			return nil, fmt.Errorf("misconfigured prefix transport")
+		}
+
+		err := pt.Prepare(*Assets().GetConjurePubkey(), reg.keys.SharedSecret, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed initialize prefix transport: %w", err)
+		}
+
 		conn, err := reg.getFirstConnection(ctx, reg.Dialer, phantoms)
 		if err != nil {
 			Logger().Infof("%v failed to form phantom connection: %v", reg.sessionIDStr, err)
 			return nil, err
 		}
 
-		// Send hmac(seed, str) bytes to indicate to station (min transport)
-		connectTag := conjureHMAC(reg.keys.SharedSecret, "MinTrasportHMACString")
-		conn.Write(connectTag)
-		return conn, nil
+		return pt.WrapConn(conn)
 
 	case pb.TransportType_Null:
 		// Dial and do nothing to the connection before returning it to the user.
-		return reg.getFirstConnection(ctx, reg.Dialer, phantoms)
+		return nil, fmt.Errorf("unsupported")
 	default:
 		// If transport is unrecognized use min transport.
 		return nil, fmt.Errorf("unknown transport")
@@ -925,7 +933,7 @@ func SelectDecoys(sharedSecret []byte, version uint, width uint) ([]*pb.TLSDecoy
 	//[reference] select decoys
 	for i := uint(0); i < width; i++ {
 		macString := fmt.Sprintf("registrationdecoy%d", i)
-		hmac := conjureHMAC(sharedSecret, macString)
+		hmac := core.ConjureHMAC(sharedSecret, macString)
 		hmacInt = hmacInt.SetBytes(hmac[:8])
 		hmacInt.SetBytes(hmac)
 		hmacInt.Abs(hmacInt)
@@ -1053,12 +1061,6 @@ func generateSharedKeys(pubkey [32]byte) (*sharedKeys, error) {
 	}
 	keys.Obfs4Keys, err = generateObfs4Keys(tdHkdf)
 	return keys, err
-}
-
-func conjureHMAC(key []byte, str string) []byte {
-	hash := hmac.New(sha256.New, key)
-	hash.Write([]byte(str))
-	return hash.Sum(nil)
 }
 
 // RegError - Registration Error passed during registration to indicate failure mode
