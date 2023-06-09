@@ -304,7 +304,7 @@ type resultTuple struct {
 }
 
 // Simple type alias for brevity
-// type dialFunc = func(ctx context.Context, network, addr string) (net.Conn, error)
+type dialFunc = func(ctx context.Context, network, addr string) (net.Conn, error)
 
 func (reg *ConjureReg) connect(ctx context.Context, addr string, dialer dialFunc) (net.Conn, error) {
 	//[reference] Create Context with deadline
