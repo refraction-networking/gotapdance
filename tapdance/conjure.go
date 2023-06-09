@@ -304,7 +304,7 @@ type resultTuple struct {
 }
 
 // Simple type alias for brevity
-type dialFunc = func(ctx context.Context, network, addr string) (net.Conn, error)
+// type dialFunc = func(ctx context.Context, network, addr string) (net.Conn, error)
 
 func (reg *ConjureReg) connect(ctx context.Context, addr string, dialer dialFunc) (net.Conn, error) {
 	//[reference] Create Context with deadline
@@ -366,6 +366,11 @@ func (reg *ConjureReg) getFirstConnection(ctx context.Context, dialer dialFunc, 
 	}
 
 	return nil, fmt.Errorf("no open connections")
+}
+
+// Temporary solution to moving Connect() functionality to station repository
+func (reg *ConjureReg) GetFirstConnection(ctx context.Context, dialer dialFunc, phantoms []*net.IP) (net.Conn, error) {
+	return reg.getFirstConnection(ctx, dialer, phantoms)
 }
 
 // Connect - Use a registration (result of calling Register) to connect to a phantom
@@ -647,6 +652,7 @@ func (reg *ConjureReg) setTLSToDecoy(tlsrtt *uint32) {
 
 func (reg *ConjureReg) getPbTransport() pb.TransportType {
 	return reg.Transport.ID()
+
 }
 
 func (reg *ConjureReg) getPbTransportParams() (*anypb.Any, error) {
@@ -782,6 +788,25 @@ func (reg *ConjureReg) Phantom4() net.IP {
 // Phantom6 returns the ipv6 phantom address
 func (reg *ConjureReg) Phantom6() net.IP {
 	return *reg.phantom6
+}
+
+// Keys returns the ConjureReg keys
+func (reg *ConjureReg) Keys() *sharedKeys {
+	return reg.keys
+}
+
+// GetPhantom4 returns the ipv4 phantom address pointer
+func (reg *ConjureReg) GetPhantom4() *net.IP {
+	return reg.phantom4
+}
+
+// GetPhantom6 returns the ipv6 phantom address pointer
+func (reg *ConjureReg) GetPhantom6() *net.IP {
+	return reg.phantom6
+}
+
+func (reg *ConjureReg) GetSessionIDStr() string {
+	return reg.sessionIDStr
 }
 
 func (reg *ConjureReg) digestStats() string {
