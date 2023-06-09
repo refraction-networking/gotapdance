@@ -14,12 +14,10 @@ import (
 	"sync"
 	"time"
 
-	pt "git.torproject.org/pluggable-transports/goptlib.git"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	ps "github.com/refraction-networking/gotapdance/tapdance/phantoms"
 	tls "github.com/refraction-networking/utls"
 	"gitlab.com/yawning/obfs4.git/common/ntor"
-	"gitlab.com/yawning/obfs4.git/transports/obfs4"
 	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/hkdf"
 	"google.golang.org/protobuf/proto"
@@ -83,8 +81,7 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 
 	Logger().Debugf("%v Attempting to Connect ...", cjSession.IDString())
 
-	return registration.Connect(ctx, registration.Transport)
-	// return Connect(cjSession)
+	return registration.Transport.Connect(ctx)
 }
 
 // // testV6 -- This is over simple and incomplete (currently unused)
@@ -113,11 +110,6 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 // 		return true
 // 	}
 // }
-
-// Connect - Dial the Phantom IP address after registration
-func Connect(ctx context.Context, reg *ConjureReg) (net.Conn, error) {
-	return reg.Connect(ctx, reg.Transport)
-}
 
 // ConjureSession - Create a session with details for registration and connection
 type ConjureSession struct {
@@ -311,7 +303,7 @@ type resultTuple struct {
 }
 
 // Simple type alias for brevity
-// type dialFunc = func(ctx context.Context, network, addr string) (net.Conn, error)
+type dialFunc = func(ctx context.Context, network, addr string) (net.Conn, error)
 
 func (reg *ConjureReg) connect(ctx context.Context, addr string, dialer dialFunc) (net.Conn, error) {
 	//[reference] Create Context with deadline
@@ -383,64 +375,64 @@ func (reg *ConjureReg) GetFirstConnection(ctx context.Context, dialer dialFunc, 
 // Connect - Use a registration (result of calling Register) to connect to a phantom
 // Note: This is hacky but should work for v4, v6, or both as any nil phantom addr will
 // return a dial error and be ignored.
-func (reg *ConjureReg) Connect(ctx context.Context, transport Transport) (net.Conn, error) {
-	phantoms := []*net.IP{reg.phantom4, reg.phantom6}
+// func (reg *ConjureReg) Connect(ctx context.Context, transport Transport) (net.Conn, error) {
+// 	phantoms := []*net.IP{reg.phantom4, reg.phantom6}
 
-	//[reference] Provide chosen transport to sent bytes (or connect) if necessary
-	switch reg.Transport.ID() {
-	case pb.TransportType_Min:
-		conn, err := reg.getFirstConnection(ctx, reg.Dialer, phantoms)
-		if err != nil {
-			Logger().Infof("%v failed to form phantom connection: %v", reg.sessionIDStr, err)
-			return nil, err
-		}
+// 	//[reference] Provide chosen transport to sent bytes (or connect) if necessary
+// 	switch reg.Transport.ID() {
+// 	case pb.TransportType_Min:
+// 		conn, err := reg.getFirstConnection(ctx, reg.Dialer, phantoms)
+// 		if err != nil {
+// 			Logger().Infof("%v failed to form phantom connection: %v", reg.sessionIDStr, err)
+// 			return nil, err
+// 		}
 
-		// Send hmac(seed, str) bytes to indicate to station (min transport)
-		connectTag := conjureHMAC(reg.keys.SharedSecret, "MinTrasportHMACString")
-		conn.Write(connectTag)
-		return conn, nil
+// 		// Send hmac(seed, str) bytes to indicate to station (min transport)
+// 		connectTag := conjureHMAC(reg.keys.SharedSecret, "MinTrasportHMACString")
+// 		conn.Write(connectTag)
+// 		return conn, nil
 
-	case pb.TransportType_Obfs4:
-		args := pt.Args{}
-		args.Add("node-id", reg.keys.Obfs4Keys.NodeID.Hex())
-		args.Add("public-key", reg.keys.Obfs4Keys.PublicKey.Hex())
-		args.Add("iat-mode", "1")
+// 	case pb.TransportType_Obfs4:
+// 		args := pt.Args{}
+// 		args.Add("node-id", reg.keys.Obfs4Keys.NodeID.Hex())
+// 		args.Add("public-key", reg.keys.Obfs4Keys.PublicKey.Hex())
+// 		args.Add("iat-mode", "1")
 
-		Logger().Infof("%v node_id = %s; public key = %s", reg.sessionIDStr, reg.keys.Obfs4Keys.NodeID.Hex(), reg.keys.Obfs4Keys.PublicKey.Hex())
+// 		Logger().Infof("%v node_id = %s; public key = %s", reg.sessionIDStr, reg.keys.Obfs4Keys.NodeID.Hex(), reg.keys.Obfs4Keys.PublicKey.Hex())
 
-		t := obfs4.Transport{}
-		c, err := t.ClientFactory("")
-		if err != nil {
-			Logger().Infof("%v failed to create client factory: %v", reg.sessionIDStr, err)
-			return nil, err
-		}
+// 		t := obfs4.Transport{}
+// 		c, err := t.ClientFactory("")
+// 		if err != nil {
+// 			Logger().Infof("%v failed to create client factory: %v", reg.sessionIDStr, err)
+// 			return nil, err
+// 		}
 
-		parsedArgs, err := c.ParseArgs(&args)
-		if err != nil {
-			Logger().Infof("%v failed to parse obfs4 args: %v", reg.sessionIDStr, err)
-			return nil, err
-		}
+// 		parsedArgs, err := c.ParseArgs(&args)
+// 		if err != nil {
+// 			Logger().Infof("%v failed to parse obfs4 args: %v", reg.sessionIDStr, err)
+// 			return nil, err
+// 		}
 
-		dialer := func(dialContext context.Context, network string, address string) (net.Conn, error) {
-			d := func(network, address string) (net.Conn, error) { return reg.Dialer(dialContext, network, address) }
-			return c.Dial("tcp", address, d, parsedArgs)
-		}
+// 		dialer := func(dialContext context.Context, network string, address string) (net.Conn, error) {
+// 			d := func(network, address string) (net.Conn, error) { return reg.Dialer(dialContext, network, address) }
+// 			return c.Dial("tcp", address, d, parsedArgs)
+// 		}
 
-		conn, err := reg.getFirstConnection(ctx, dialer, phantoms)
-		if err != nil {
-			Logger().Infof("%v failed to form obfs4 connection: %v", reg.sessionIDStr, err)
-			return nil, err
-		}
+// 		conn, err := reg.getFirstConnection(ctx, dialer, phantoms)
+// 		if err != nil {
+// 			Logger().Infof("%v failed to form obfs4 connection: %v", reg.sessionIDStr, err)
+// 			return nil, err
+// 		}
 
-		return conn, err
-	case pb.TransportType_Null:
-		// Dial and do nothing to the connection before returning it to the user.
-		return reg.getFirstConnection(ctx, reg.Dialer, phantoms)
-	default:
-		// If transport is unrecognized use min transport.
-		return nil, fmt.Errorf("unknown transport")
-	}
-}
+// 		return conn, err
+// 	case pb.TransportType_Null:
+// 		// Dial and do nothing to the connection before returning it to the user.
+// 		return reg.getFirstConnection(ctx, reg.Dialer, phantoms)
+// 	default:
+// 		// If transport is unrecognized use min transport.
+// 		return nil, fmt.Errorf("unknown transport")
+// 	}
+// }
 
 // ConjureReg - Registration structure created for each individual registration within a session.
 type ConjureReg struct {
