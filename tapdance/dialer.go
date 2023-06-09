@@ -5,8 +5,7 @@ import (
 	"errors"
 	"net"
 
-	"github.com/refraction-networking/conjure/application/transports/wrapping/min"
-	"github.com/refraction-networking/conjure/application/transports/wrapping/obfs4"
+	// "github.com/refraction-networking/gotapdance/pkg/transports"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 )
 
@@ -99,16 +98,9 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 		var cjSession *ConjureSession
 
 		transport := d.TransportConfig
-		if d.TransportConfig == nil {
-			switch d.Transport {
-			case pb.TransportType_Min:
-				transport = &min.ClientTransport{Parameters: &pb.GenericTransportParams{RandomizeDstPort: &randomizePortDefault}}
-			case pb.TransportType_Obfs4:
-				transport = &obfs4.ClientTransport{Parameters: &pb.GenericTransportParams{RandomizeDstPort: &randomizePortDefault}}
-			default:
-				return nil, errors.New("unknown transport by TransportType try using TransportConfig")
-			}
-		}
+		// if d.TransportConfig == nil {
+		// 	transport, err = transports.ConfigFromTransportType(d.Transport, randomizePortDefault)
+		// }
 
 		// If specified, only select a phantom from a given range
 		if d.PhantomNet != "" {
