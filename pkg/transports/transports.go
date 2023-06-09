@@ -5,9 +5,14 @@ import (
 
 	"github.com/refraction-networking/conjure/application/transports/wrapping/min"
 	"github.com/refraction-networking/conjure/application/transports/wrapping/obfs4"
+	cj "github.com/refraction-networking/gotapdance/pkg/interfaces"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
-	cj "github.com/refraction-networking/gotapdance/tapdance"
 )
+
+// move dialer.go functionality needed here, import interfaces /import/pkg/interfaces -
+// create pkg/interfaces/interfaces.go
+// do type alias
+// remove lib/transportlib.go
 
 var transportsByName map[string]cj.Transport = make(map[string]cj.Transport)
 var transportsByID map[pb.TransportType]cj.Transport = make(map[pb.TransportType]cj.Transport)
@@ -91,4 +96,15 @@ func EnableDefaultTransports() error {
 
 func init() {
 	EnableDefaultTransports()
+}
+
+func ConfigFromTransportType(transportType pb.TransportType, randomizePortDefault bool) (cj.Transport, error) {
+	switch transportType {
+	case pb.TransportType_Min:
+		return &min.ClientTransport{Parameters: &pb.GenericTransportParams{RandomizeDstPort: &randomizePortDefault}}, nil
+	case pb.TransportType_Obfs4:
+		return &obfs4.ClientTransport{Parameters: &pb.GenericTransportParams{RandomizeDstPort: &randomizePortDefault}}, nil
+	default:
+		return nil, errors.New("unknown transport by TransportType try using TransportConfig")
+	}
 }
