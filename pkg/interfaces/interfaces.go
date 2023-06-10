@@ -1,13 +1,10 @@
 package interfaces
 
 import (
-	"context"
 	"io"
 	"net"
-	"sync"
 
 	pb "github.com/refraction-networking/gotapdance/protobuf"
-	"gitlab.com/yawning/obfs4.git/common/ntor"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -45,44 +42,7 @@ type Transport interface {
 
 	// Connect returns a net.Conn connection given a context and ConjureReg
 	// Creates dependency on ConjureReg depends on tapdance depends on interfaces (move ConjureReg here or create new interface)
-	Connect(ctx context.Context, reg *ConjureReg) (net.Conn, error)
-}
+	Connect(conn net.Conn) (net.Conn, error)
 
-type Obfs4Keys struct {
-	PrivateKey *ntor.PrivateKey
-	PublicKey  *ntor.PublicKey
-	NodeID     *ntor.NodeID
-}
-
-type sharedKeys struct {
-	SharedSecret, Representative                               []byte
-	FspKey, FspIv, VspKey, VspIv, NewMasterSecret, ConjureSeed []byte
-	Obfs4Keys                                                  Obfs4Keys
-}
-
-// Simple type alias for brevity
-type dialFunc = func(ctx context.Context, network, addr string) (net.Conn, error)
-
-// ConjureReg - Registration structure created for each individual registration within a session.
-type ConjureReg struct {
-	Transport
-
-	seed           []byte
-	sessionIDStr   string
-	phantom4       *net.IP
-	phantom6       *net.IP
-	phantomDstPort uint16
-	useProxyHeader bool
-	covertAddress  string
-	phantomSNI     string
-	v6Support      uint
-
-	// THIS IS REQUIRED TO INTERFACE WITH PSIPHON ANDROID
-	//		we use their dialer to prevent connection loopback into our own proxy
-	//		connection when tunneling the whole device.
-	Dialer dialFunc
-
-	stats *pb.SessionStats
-	keys  *sharedKeys
-	m     sync.Mutex
+	// WrapConn(conn net.Conn) (net.Conn, error)
 }
