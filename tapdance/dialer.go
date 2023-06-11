@@ -110,7 +110,7 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 			case pb.TransportType_Obfs4:
 				transport = &obfs4.ClientTransport{Parameters: &pb.GenericTransportParams{RandomizeDstPort: &randomizePortDefault}}
 			default:
-				return nil, errors.New("unknown transport by TransportType try using TransportConfig")
+				return nil, errors.New("unknown transport by TransportType - try using TransportConfig")
 			}
 		}
 
