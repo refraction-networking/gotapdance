@@ -50,7 +50,6 @@ func main() {
 	var registrar = flag.String("registrar", "decoy", "One of decoy, api, bdapi, dns, bddns.")
 	var transport = flag.String("transport", "min", `The transport to use for Conjure connections. Current values include "min" and "obfs4".`)
 	var randomizeDstPort = flag.Bool("rand-dst-port", true, `enable destination port randomization for the transport connection`)
-
 	var phantomNet = flag.String("phantom", "", "Target phantom subnet. Must overlap with ClientConf, and will be achieved by brute force of seeds until satisified")
 
 	flag.Usage = func() {
@@ -229,7 +228,6 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget 
 }
 
 func manageConn(tdDialer tapdance.Dialer, connectTarget string, clientConn *net.TCPConn) {
-	// TODO: go back to pre-dialing after measuring performance
 	tdConn, err := tdDialer.Dial("tcp", connectTarget)
 	if err != nil || tdConn == nil {
 		fmt.Printf("failed to dial %s: %v\n", connectTarget, err)
@@ -237,7 +235,6 @@ func manageConn(tdDialer tapdance.Dialer, connectTarget string, clientConn *net.
 	}
 
 	// Copy data from the client application into the DarkDecoy connection.
-	// 		TODO: Make sure this works
 	// 		TODO: proper connection management with idle timeout
 	var wg sync.WaitGroup
 	wg.Add(2)

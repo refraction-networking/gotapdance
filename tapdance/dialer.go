@@ -26,6 +26,10 @@ type Dialer struct {
 
 	// The type of registrar to use when performing Conjure registrations.
 	DarkDecoyRegistrar Registrar
+	// Indicates whether the client will allow the registrar to provide alternative parameters that
+	// may work better in substitute for the deterministically selected parameters. This only works
+	// for bidirectional registration methods where the client receives a RegistrationResponse.
+	AllowRegistrarOverrides bool
 
 	// The type of transport to use for Conjure connections.
 	Transport       pb.TransportType
@@ -106,7 +110,7 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 			case pb.TransportType_Obfs4:
 				transport = &obfs4.ClientTransport{Parameters: &pb.GenericTransportParams{RandomizeDstPort: &randomizePortDefault}}
 			default:
-				return nil, errors.New("unknown transport by TransportType try using TransportConfig")
+				return nil, errors.New("unknown transport by TransportType - try using TransportConfig")
 			}
 		}
 
@@ -127,6 +131,7 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 		cjSession.Dialer = d.Dialer
 		cjSession.UseProxyHeader = d.UseProxyHeader
 		cjSession.Width = uint(d.Width)
+		cjSession.AllowRegistrarOverrides = d.AllowRegistrarOverrides
 
 		if d.V6Support {
 			cjSession.V6Support = &V6{include: both, support: true}

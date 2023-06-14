@@ -2,7 +2,6 @@ package tapdance
 
 import (
 	"context"
-	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
@@ -15,6 +14,8 @@ import (
 	"time"
 
 	pt "git.torproject.org/pluggable-transports/goptlib.git"
+	"github.com/refraction-networking/conjure/application/transports/wrapping/prefix"
+	"github.com/refraction-networking/conjure/pkg/core"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	ps "github.com/refraction-networking/gotapdance/tapdance/phantoms"
 	tls "github.com/refraction-networking/utls"
@@ -83,7 +84,7 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 
 	Logger().Debugf("%v Attempting to Connect ...", cjSession.IDString())
 
-	return registration.Connect(ctx, registration.Transport)
+	return registration.Connect(ctx)
 	// return Connect(cjSession)
 }
 
@@ -116,7 +117,7 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 
 // Connect - Dial the Phantom IP address after registration
 func Connect(ctx context.Context, reg *ConjureReg) (net.Conn, error) {
-	return reg.Connect(ctx, reg.Transport)
+	return reg.Connect(ctx)
 }
 
 // ConjureSession - Create a session with details for registration and connection
@@ -130,6 +131,8 @@ type ConjureSession struct {
 	Transport      Transport
 	CovertAddress  string
 	// rtt			   uint // tracked in stats
+
+	AllowRegistrarOverrides bool
 
 	// TcpDialer allows the caller to provide a custom dialer for outgoing proxy connections.
 	//
@@ -151,13 +154,14 @@ func MakeConjureSessionSilent(covert string, transport Transport) *ConjureSessio
 	}
 	//[TODO]{priority:NOW} move v6support initialization to assets so it can be tracked across dials
 	cjSession := &ConjureSession{
-		Keys:           keys,
-		Width:          defaultRegWidth,
-		V6Support:      &V6{support: true, include: both},
-		UseProxyHeader: false,
-		Transport:      transport,
-		CovertAddress:  covert,
-		SessionID:      sessionsTotal.GetAndInc(),
+		Keys:                    keys,
+		Width:                   defaultRegWidth,
+		V6Support:               &V6{support: true, include: both},
+		UseProxyHeader:          false,
+		Transport:               transport,
+		CovertAddress:           covert,
+		SessionID:               sessionsTotal.GetAndInc(),
+		AllowRegistrarOverrides: true,
 	}
 
 	return cjSession
@@ -243,6 +247,7 @@ func (cjSession *ConjureSession) String() string {
 // conjureReg generates ConjureReg from the corresponding ConjureSession
 func (cjSession *ConjureSession) conjureReg() *ConjureReg {
 	return &ConjureReg{
+		ConjureSession: cjSession,
 		sessionIDStr:   cjSession.IDString(),
 		keys:           cjSession.Keys,
 		stats:          &pb.SessionStats{},
@@ -378,7 +383,7 @@ func (reg *ConjureReg) getFirstConnection(ctx context.Context, dialer dialFunc, 
 // Connect - Use a registration (result of calling Register) to connect to a phantom
 // Note: This is hacky but should work for v4, v6, or both as any nil phantom addr will
 // return a dial error and be ignored.
-func (reg *ConjureReg) Connect(ctx context.Context, transport Transport) (net.Conn, error) {
+func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
 	phantoms := []*net.IP{reg.phantom4, reg.phantom6}
 
 	//[reference] Provide chosen transport to sent bytes (or connect) if necessary
@@ -391,7 +396,7 @@ func (reg *ConjureReg) Connect(ctx context.Context, transport Transport) (net.Co
 		}
 
 		// Send hmac(seed, str) bytes to indicate to station (min transport)
-		connectTag := conjureHMAC(reg.keys.SharedSecret, "MinTrasportHMACString")
+		connectTag := core.ConjureHMAC(reg.keys.SharedSecret, "MinTrasportHMACString")
 		conn.Write(connectTag)
 		return conn, nil
 
@@ -428,9 +433,28 @@ func (reg *ConjureReg) Connect(ctx context.Context, transport Transport) (net.Co
 		}
 
 		return conn, err
+	case pb.TransportType_Prefix:
+		pt, ok := reg.Transport.(*prefix.ClientTransport)
+		if !ok {
+			return nil, fmt.Errorf("misconfigured prefix transport")
+		}
+
+		err := pt.Prepare(*Assets().GetConjurePubkey(), reg.keys.SharedSecret, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed initialize prefix transport: %w", err)
+		}
+
+		conn, err := reg.getFirstConnection(ctx, reg.Dialer, phantoms)
+		if err != nil {
+			Logger().Infof("%v failed to form phantom connection: %v", reg.sessionIDStr, err)
+			return nil, err
+		}
+
+		return pt.WrapConn(conn)
+
 	case pb.TransportType_Null:
 		// Dial and do nothing to the connection before returning it to the user.
-		return reg.getFirstConnection(ctx, reg.Dialer, phantoms)
+		return nil, fmt.Errorf("unsupported")
 	default:
 		// If transport is unrecognized use min transport.
 		return nil, fmt.Errorf("unknown transport")
@@ -440,6 +464,7 @@ func (reg *ConjureReg) Connect(ctx context.Context, transport Transport) (net.Co
 // ConjureReg - Registration structure created for each individual registration within a session.
 type ConjureReg struct {
 	Transport
+	*ConjureSession
 
 	seed           []byte
 	sessionIDStr   string
@@ -461,6 +486,10 @@ type ConjureReg struct {
 	m     sync.Mutex
 }
 
+// UnpackRegResp unpacks the RegistrationResponse message sent back by the station. This unpacks
+// any field overrides sent by the registrar. When using a bidirectional registration method
+// the server chooses the phantom IP and Port by default. Overrides to transport parameters
+// are applied when reg.AllowRegistrarOverrides is enabled.
 func (reg *ConjureReg) UnpackRegResp(regResp *pb.RegistrationResponse) error {
 	if reg.v6Support == v4 {
 		// Save the ipv4address in the Conjure Reg struct (phantom4) to return
@@ -484,11 +513,25 @@ func (reg *ConjureReg) UnpackRegResp(regResp *pb.RegistrationResponse) error {
 		addr6 := net.IP(regResp.GetIpv6Addr())
 		reg.phantom6 = &addr6
 	}
-	reg.phantomDstPort = uint16(regResp.GetDstPort())
-	if reg.phantomDstPort == 0 {
+
+	p := uint16(regResp.GetDstPort())
+	if p != 0 {
+		reg.phantomDstPort = p
+	} else if reg.phantomDstPort == 0 {
 		// If a bidirectional registrar does not support randomization (or doesn't set the port in the
 		// registration response we default to the original port we used for all transports).
 		reg.phantomDstPort = 443
+	}
+
+	maybeTP := regResp.GetTransportParams()
+	if maybeTP != nil && reg.AllowRegistrarOverrides {
+		err := reg.Transport.SetParams(maybeTP)
+		if err != nil {
+			// If an error occurs while setting transport parameters give up as continuing would
+			// likely lead to incongruence between the client and station and an unserviceable
+			// connection.
+			return err
+		}
 	}
 
 	// Client config -- check if not nil in the registration response
@@ -903,7 +946,7 @@ func SelectDecoys(sharedSecret []byte, version uint, width uint) ([]*pb.TLSDecoy
 	//[reference] select decoys
 	for i := uint(0); i < width; i++ {
 		macString := fmt.Sprintf("registrationdecoy%d", i)
-		hmac := conjureHMAC(sharedSecret, macString)
+		hmac := core.ConjureHMAC(sharedSecret, macString)
 		hmacInt = hmacInt.SetBytes(hmac[:8])
 		hmacInt.SetBytes(hmac)
 		hmacInt.Abs(hmacInt)
@@ -1031,12 +1074,6 @@ func generateSharedKeys(pubkey [32]byte) (*sharedKeys, error) {
 	}
 	keys.Obfs4Keys, err = generateObfs4Keys(tdHkdf)
 	return keys, err
-}
-
-func conjureHMAC(key []byte, str string) []byte {
-	hash := hmac.New(sha256.New, key)
-	hash.Write([]byte(str))
-	return hash.Sum(nil)
 }
 
 // RegError - Registration Error passed during registration to indicate failure mode

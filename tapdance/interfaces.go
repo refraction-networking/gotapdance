@@ -2,6 +2,7 @@ package tapdance
 
 import (
 	"context"
+	"io"
 
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	"google.golang.org/protobuf/proto"
@@ -39,4 +40,9 @@ type Transport interface {
 
 	// GetDstPort returns the destination port that the client should open the phantom connection with.
 	GetDstPort(seed []byte, params any) (uint16, error)
+
+	// Prepare provides an opportunity for the transport to integrate the station public key
+	// as well as bytes from the deterministic random generator associated with the registration
+	// that this ClientTransport is attached to.
+	Prepare(pubkey [32]byte, sharedSecret []byte, dRand io.Reader) error
 }

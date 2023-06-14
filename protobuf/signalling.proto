@@ -323,7 +323,7 @@ enum RegistrationSource {
 
 message C2SWrapper {
   optional bytes shared_secret = 1;
-	optional ClientToStation registration_payload = 3;
+  optional ClientToStation registration_payload = 3;
   optional RegistrationSource registration_source = 4;
 
   // client source address when receiving a registration
@@ -332,7 +332,19 @@ message C2SWrapper {
   // Decoy address used when registering over Decoy registrar
   optional bytes decoy_address = 7;
 
+  // The next three fields allow an independent registrar (trusted by a station w/ a zmq keypair) to
+  // share the registration overrides that it assigned to the client with the station(s).
+  // Registration Respose is here to allow a parsed object with direct access to the fields within.
+  // RegRespBytes provides a serialized verion of the Registration response so that the signature of
+  // the Bidirectional registrar can be validated before a station applies any overrides present in
+  // the Registration Response.
+  //
+  // If you are reading this in the future and you want to extend the functionality here it might
+  // make sense to make the RegistrationResponse that is sent to the client a distinct message from
+  // the one that gets sent to the stations.
   optional RegistrationResponse registration_response = 8;
+  optional bytes RegRespBytes = 9;
+  optional bytes RegRespSignature = 10;
 }
 
 message SessionStats {
