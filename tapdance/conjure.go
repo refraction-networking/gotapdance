@@ -486,6 +486,10 @@ type ConjureReg struct {
 	m     sync.Mutex
 }
 
+// UnpackRegResp unpacks the RegistrationResponse message sent back by the station. This unpacks
+// any field overrides sent by the registrar. When using a bidirectional registration method
+// the server chooses the phantom IP and Port by default. Overrides to transport parameters
+// are applied when reg.AllowRegistrarOverrides is enabled.
 func (reg *ConjureReg) UnpackRegResp(regResp *pb.RegistrationResponse) error {
 	if reg.v6Support == v4 {
 		// Save the ipv4address in the Conjure Reg struct (phantom4) to return
@@ -509,8 +513,11 @@ func (reg *ConjureReg) UnpackRegResp(regResp *pb.RegistrationResponse) error {
 		addr6 := net.IP(regResp.GetIpv6Addr())
 		reg.phantom6 = &addr6
 	}
-	reg.phantomDstPort = uint16(regResp.GetDstPort())
-	if reg.phantomDstPort == 0 {
+
+	p := uint16(regResp.GetDstPort())
+	if p != 0 {
+		reg.phantomDstPort = p
+	} else if reg.phantomDstPort == 0 {
 		// If a bidirectional registrar does not support randomization (or doesn't set the port in the
 		// registration response we default to the original port we used for all transports).
 		reg.phantomDstPort = 443
@@ -518,7 +525,13 @@ func (reg *ConjureReg) UnpackRegResp(regResp *pb.RegistrationResponse) error {
 
 	maybeTP := regResp.GetTransportParams()
 	if maybeTP != nil && reg.AllowRegistrarOverrides {
-		reg.Transport.SetParams(maybeTP)
+		err := reg.Transport.SetParams(maybeTP)
+		if err != nil {
+			// If an error occurs while setting transport parameters give up as continuing would
+			// likely lead to incongruence between the client and station and an unserviceable
+			// connection.
+			return err
+		}
 	}
 
 	// Client config -- check if not nil in the registration response
