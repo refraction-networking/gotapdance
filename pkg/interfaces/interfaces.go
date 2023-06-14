@@ -16,10 +16,6 @@ type Transport interface {
 	// String returns a string identifier for the Transport for logging (including string formatters)
 	String() string
 
-	// // Connect creates the connection to the phantom address negotiated in the registration phase of
-	// // Conjure connection establishment.
-	// Connect(ctx context.Context, reg *ConjureReg) (net.Conn, error)
-
 	// ID provides an identifier that will be sent to the conjure station during the registration so
 	// that the station knows what transport to expect connecting to the chosen phantom.
 	ID() pb.TransportType
@@ -41,8 +37,5 @@ type Transport interface {
 	Prepare(pubkey [32]byte, sharedSecret []byte, dRand io.Reader) error
 
 	// Connect returns a net.Conn connection given a context and ConjureReg
-	// Creates dependency on ConjureReg depends on tapdance depends on interfaces (move ConjureReg here or create new interface)
 	Connect(conn net.Conn) (net.Conn, error)
-
-	// WrapConn(conn net.Conn) (net.Conn, error)
 }
