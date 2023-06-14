@@ -9,11 +9,6 @@ import (
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 )
 
-// move dialer.go functionality needed here, import interfaces /import/pkg/interfaces -
-// create pkg/interfaces/interfaces.go
-// do type alias
-// remove lib/transportlib.go
-
 var transportsByName map[string]cj.Transport = make(map[string]cj.Transport)
 var transportsByID map[pb.TransportType]cj.Transport = make(map[pb.TransportType]cj.Transport)
 

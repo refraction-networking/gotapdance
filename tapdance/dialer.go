@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net"
 
-	// "github.com/refraction-networking/gotapdance/pkg/transports"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 )
 
