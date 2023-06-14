@@ -652,7 +652,6 @@ func (reg *ConjureReg) setTLSToDecoy(tlsrtt *uint32) {
 
 func (reg *ConjureReg) getPbTransport() pb.TransportType {
 	return reg.Transport.ID()
-
 }
 
 func (reg *ConjureReg) getPbTransportParams() (*anypb.Any, error) {
@@ -788,25 +787,6 @@ func (reg *ConjureReg) Phantom4() net.IP {
 // Phantom6 returns the ipv6 phantom address
 func (reg *ConjureReg) Phantom6() net.IP {
 	return *reg.phantom6
-}
-
-// Keys returns the ConjureReg keys
-func (reg *ConjureReg) Keys() *sharedKeys {
-	return reg.keys
-}
-
-// GetPhantom4 returns the ipv4 phantom address pointer
-func (reg *ConjureReg) GetPhantom4() *net.IP {
-	return reg.phantom4
-}
-
-// GetPhantom6 returns the ipv6 phantom address pointer
-func (reg *ConjureReg) GetPhantom6() *net.IP {
-	return reg.phantom6
-}
-
-func (reg *ConjureReg) GetSessionIDStr() string {
-	return reg.sessionIDStr
 }
 
 func (reg *ConjureReg) digestStats() string {
