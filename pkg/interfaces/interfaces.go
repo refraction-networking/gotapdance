@@ -37,5 +37,5 @@ type Transport interface {
 	Prepare(pubkey [32]byte, sharedSecret []byte, dRand io.Reader) error
 
 	// Connect returns a net.Conn connection given a context and ConjureReg
-	Connect(conn net.Conn) (net.Conn, error)
+	WrapConn(conn net.Conn) (net.Conn, error)
 }

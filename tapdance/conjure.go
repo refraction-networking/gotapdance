@@ -377,14 +377,18 @@ func (reg *ConjureReg) GetFirstConnection(ctx context.Context, dialer dialFunc, 
 func (reg *ConjureReg) Connect(ctx context.Context, transport Transport) (net.Conn, error) {
 	phantoms := []*net.IP{reg.phantom4, reg.phantom6}
 
+	// Prepare the transport by generating any necessary keys
+	pubKey := getStationKey()
+	// Change Preapre() to PrepareKeys() in the future, make dRand not nil
+	transport.Prepare(pubKey, reg.keys.SharedSecret, nil)
+
 	conn, err := reg.getFirstConnection(ctx, reg.Dialer, phantoms)
 	if err != nil {
 		Logger().Infof("%v failed to form phantom connection: %v", reg.sessionIDStr, err)
 		return nil, err
 	}
 
-	// Rename to WrapConn() to avoid reuse of "connect"?
-	conn, err = transport.Connect(conn)
+	conn, err = transport.WrapConn(conn)
 	if err != nil {
 		Logger().Infof("WrapConn failed")
 		return nil, err
