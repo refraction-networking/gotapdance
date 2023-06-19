@@ -368,11 +368,6 @@ func (reg *ConjureReg) getFirstConnection(ctx context.Context, dialer dialFunc, 
 	return nil, fmt.Errorf("no open connections")
 }
 
-// Temporary solution to moving Connect() functionality to station repository
-func (reg *ConjureReg) GetFirstConnection(ctx context.Context, dialer dialFunc, phantoms []*net.IP) (net.Conn, error) {
-	return reg.getFirstConnection(ctx, dialer, phantoms)
-}
-
 // Connect - Use a registration (result of calling Register) to connect to a phantom
 // Note: This is hacky but should work for v4, v6, or both as any nil phantom addr will
 // return a dial error and be ignored.
