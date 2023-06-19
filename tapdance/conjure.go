@@ -366,11 +366,6 @@ func (reg *ConjureReg) getFirstConnection(ctx context.Context, dialer dialFunc, 
 	return nil, fmt.Errorf("no open connections")
 }
 
-// Temporary solution to moving Connect() functionality to station repository
-func (reg *ConjureReg) GetFirstConnection(ctx context.Context, dialer dialFunc, phantoms []*net.IP) (net.Conn, error) {
-	return reg.getFirstConnection(ctx, dialer, phantoms)
-}
-
 // Connect - Use a registration (result of calling Register) to connect to a phantom
 // Note: This is hacky but should work for v4, v6, or both as any nil phantom addr will
 // return a dial error and be ignored.
@@ -394,13 +389,6 @@ func (reg *ConjureReg) Connect(ctx context.Context, transport Transport) (net.Co
 		return nil, err
 	}
 	return conn, nil
-	// case pb.TransportType_Null:
-	// 	// Dial and do nothing to the connection before returning it to the user.
-	// 	return reg.getFirstConnection(ctx, reg.Dialer, phantoms)
-	// default:
-	// 	// If transport is unrecognized use min transport.
-	// 	return nil, fmt.Errorf("unknown transport")
-	// }
 }
 
 // ConjureReg - Registration structure created for each individual registration within a session.
