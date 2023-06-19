@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 
+	"github.com/refraction-networking/gotapdance/pkg/transports"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 )
 
@@ -97,9 +98,13 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 		var cjSession *ConjureSession
 
 		transport := d.TransportConfig
-		// if d.TransportConfig == nil {
-		// 	transport, err = transports.ConfigFromTransportType(d.Transport, randomizePortDefault)
-		// }
+		var err error
+		if d.TransportConfig == nil {
+			transport, err = transports.ConfigFromTransportType(d.Transport, randomizePortDefault)
+		}
+		if err != nil {
+			return nil, err
+		}
 
 		// If specified, only select a phantom from a given range
 		if d.PhantomNet != "" {
