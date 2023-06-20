@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/refraction-networking/conjure/pkg/core"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	tls "github.com/refraction-networking/utls"
 	"github.com/stretchr/testify/assert"
@@ -77,7 +78,7 @@ func TestConjureHMAC(t *testing.T) {
 	soln1 := make([]byte, hex.DecodedLen(len(soln1Str)))
 	hex.Decode(soln1, []byte(soln1Str))
 
-	test1 := conjureHMAC([]byte("1abcd2efgh3ijkl4"), "customString")
+	test1 := core.ConjureHMAC([]byte("1abcd2efgh3ijkl4"), "customString")
 	test1Str := make([]byte, hex.EncodedLen(len(test1)))
 	hex.Encode(test1Str, test1)
 

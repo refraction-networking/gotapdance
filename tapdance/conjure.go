@@ -2,7 +2,6 @@ package tapdance
 
 import (
 	"context"
-	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
@@ -14,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/refraction-networking/conjure/pkg/core"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	ps "github.com/refraction-networking/gotapdance/tapdance/phantoms"
 	tls "github.com/refraction-networking/utls"
@@ -120,6 +120,8 @@ type ConjureSession struct {
 	CovertAddress  string
 	// rtt			   uint // tracked in stats
 
+	AllowRegistrarOverrides bool
+
 	// TcpDialer allows the caller to provide a custom dialer for outgoing proxy connections.
 	//
 	// THIS IS REQUIRED TO INTERFACE WITH PSIPHON ANDROID
@@ -140,13 +142,14 @@ func MakeConjureSessionSilent(covert string, transport Transport) *ConjureSessio
 	}
 	//[TODO]{priority:NOW} move v6support initialization to assets so it can be tracked across dials
 	cjSession := &ConjureSession{
-		Keys:           keys,
-		Width:          defaultRegWidth,
-		V6Support:      &V6{support: true, include: both},
-		UseProxyHeader: false,
-		Transport:      transport,
-		CovertAddress:  covert,
-		SessionID:      sessionsTotal.GetAndInc(),
+		Keys:                    keys,
+		Width:                   defaultRegWidth,
+		V6Support:               &V6{support: true, include: both},
+		UseProxyHeader:          false,
+		Transport:               transport,
+		CovertAddress:           covert,
+		SessionID:               sessionsTotal.GetAndInc(),
+		AllowRegistrarOverrides: true,
 	}
 
 	return cjSession
@@ -232,6 +235,7 @@ func (cjSession *ConjureSession) String() string {
 // conjureReg generates ConjureReg from the corresponding ConjureSession
 func (cjSession *ConjureSession) conjureReg() *ConjureReg {
 	return &ConjureReg{
+		ConjureSession: cjSession,
 		sessionIDStr:   cjSession.IDString(),
 		keys:           cjSession.Keys,
 		stats:          &pb.SessionStats{},
@@ -391,6 +395,7 @@ func (reg *ConjureReg) Connect(ctx context.Context, transport Transport) (net.Co
 // ConjureReg - Registration structure created for each individual registration within a session.
 type ConjureReg struct {
 	Transport
+	*ConjureSession
 
 	seed           []byte
 	sessionIDStr   string
@@ -412,6 +417,10 @@ type ConjureReg struct {
 	m     sync.Mutex
 }
 
+// UnpackRegResp unpacks the RegistrationResponse message sent back by the station. This unpacks
+// any field overrides sent by the registrar. When using a bidirectional registration method
+// the server chooses the phantom IP and Port by default. Overrides to transport parameters
+// are applied when reg.AllowRegistrarOverrides is enabled.
 func (reg *ConjureReg) UnpackRegResp(regResp *pb.RegistrationResponse) error {
 	if reg.v6Support == v4 {
 		// Save the ipv4address in the Conjure Reg struct (phantom4) to return
@@ -435,11 +444,25 @@ func (reg *ConjureReg) UnpackRegResp(regResp *pb.RegistrationResponse) error {
 		addr6 := net.IP(regResp.GetIpv6Addr())
 		reg.phantom6 = &addr6
 	}
-	reg.phantomDstPort = uint16(regResp.GetDstPort())
-	if reg.phantomDstPort == 0 {
+
+	p := uint16(regResp.GetDstPort())
+	if p != 0 {
+		reg.phantomDstPort = p
+	} else if reg.phantomDstPort == 0 {
 		// If a bidirectional registrar does not support randomization (or doesn't set the port in the
 		// registration response we default to the original port we used for all transports).
 		reg.phantomDstPort = 443
+	}
+
+	maybeTP := regResp.GetTransportParams()
+	if maybeTP != nil && reg.AllowRegistrarOverrides {
+		err := reg.Transport.SetParams(maybeTP)
+		if err != nil {
+			// If an error occurs while setting transport parameters give up as continuing would
+			// likely lead to incongruence between the client and station and an unserviceable
+			// connection.
+			return err
+		}
 	}
 
 	// Client config -- check if not nil in the registration response
@@ -854,7 +877,7 @@ func SelectDecoys(sharedSecret []byte, version uint, width uint) ([]*pb.TLSDecoy
 	//[reference] select decoys
 	for i := uint(0); i < width; i++ {
 		macString := fmt.Sprintf("registrationdecoy%d", i)
-		hmac := conjureHMAC(sharedSecret, macString)
+		hmac := core.ConjureHMAC(sharedSecret, macString)
 		hmacInt = hmacInt.SetBytes(hmac[:8])
 		hmacInt.SetBytes(hmac)
 		hmacInt.Abs(hmacInt)
@@ -950,12 +973,6 @@ func generateSharedKeys(pubkey [32]byte) (*sharedKeys, error) {
 		return keys, err
 	}
 	return keys, err
-}
-
-func conjureHMAC(key []byte, str string) []byte {
-	hash := hmac.New(sha256.New, key)
-	hash.Write([]byte(str))
-	return hash.Sum(nil)
 }
 
 // RegError - Registration Error passed during registration to indicate failure mode

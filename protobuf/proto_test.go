@@ -3,8 +3,8 @@ package tdproto
 import (
 	"testing"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 )
 
 // Write a small go test using your APIMessage (serialize/deserialize)
