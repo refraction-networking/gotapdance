@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/refraction-networking/conjure/application/transports/wrapping/min"
+	cj "github.com/refraction-networking/gotapdance/pkg/interfaces"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
-	cj "github.com/refraction-networking/gotapdance/tapdance"
 	"github.com/stretchr/testify/require"
 )
 

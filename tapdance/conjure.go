@@ -13,15 +13,10 @@ import (
 	"sync"
 	"time"
 
-	pt "git.torproject.org/pluggable-transports/goptlib.git"
-	"github.com/refraction-networking/conjure/application/transports/wrapping/prefix"
 	"github.com/refraction-networking/conjure/pkg/core"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	ps "github.com/refraction-networking/gotapdance/tapdance/phantoms"
 	tls "github.com/refraction-networking/utls"
-	"gitlab.com/yawning/obfs4.git/common/ntor"
-	"gitlab.com/yawning/obfs4.git/transports/obfs4"
-	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/hkdf"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -83,9 +78,7 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 	}
 
 	Logger().Debugf("%v Attempting to Connect ...", cjSession.IDString())
-
 	return registration.Connect(ctx)
-	// return Connect(cjSession)
 }
 
 // // testV6 -- This is over simple and incomplete (currently unused)
@@ -114,11 +107,6 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 // 		return true
 // 	}
 // }
-
-// Connect - Dial the Phantom IP address after registration
-func Connect(ctx context.Context, reg *ConjureReg) (net.Conn, error) {
-	return reg.Connect(ctx)
-}
 
 // ConjureSession - Create a session with details for registration and connection
 type ConjureSession struct {
@@ -386,79 +374,22 @@ func (reg *ConjureReg) getFirstConnection(ctx context.Context, dialer dialFunc, 
 func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
 	phantoms := []*net.IP{reg.phantom4, reg.phantom6}
 
-	//[reference] Provide chosen transport to sent bytes (or connect) if necessary
-	switch reg.Transport.ID() {
-	case pb.TransportType_Min:
-		conn, err := reg.getFirstConnection(ctx, reg.Dialer, phantoms)
-		if err != nil {
-			Logger().Infof("%v failed to form phantom connection: %v", reg.sessionIDStr, err)
-			return nil, err
-		}
+	// Prepare the transport by generating any necessary keys
+	pubKey := getStationKey()
+	reg.Transport.PrepareKeys(pubKey, reg.keys.SharedSecret, reg.keys.reader)
 
-		// Send hmac(seed, str) bytes to indicate to station (min transport)
-		connectTag := core.ConjureHMAC(reg.keys.SharedSecret, "MinTrasportHMACString")
-		conn.Write(connectTag)
-		return conn, nil
-
-	case pb.TransportType_Obfs4:
-		args := pt.Args{}
-		args.Add("node-id", reg.keys.Obfs4Keys.NodeID.Hex())
-		args.Add("public-key", reg.keys.Obfs4Keys.PublicKey.Hex())
-		args.Add("iat-mode", "1")
-
-		Logger().Infof("%v node_id = %s; public key = %s", reg.sessionIDStr, reg.keys.Obfs4Keys.NodeID.Hex(), reg.keys.Obfs4Keys.PublicKey.Hex())
-
-		t := obfs4.Transport{}
-		c, err := t.ClientFactory("")
-		if err != nil {
-			Logger().Infof("%v failed to create client factory: %v", reg.sessionIDStr, err)
-			return nil, err
-		}
-
-		parsedArgs, err := c.ParseArgs(&args)
-		if err != nil {
-			Logger().Infof("%v failed to parse obfs4 args: %v", reg.sessionIDStr, err)
-			return nil, err
-		}
-
-		dialer := func(dialContext context.Context, network string, address string) (net.Conn, error) {
-			d := func(network, address string) (net.Conn, error) { return reg.Dialer(dialContext, network, address) }
-			return c.Dial("tcp", address, d, parsedArgs)
-		}
-
-		conn, err := reg.getFirstConnection(ctx, dialer, phantoms)
-		if err != nil {
-			Logger().Infof("%v failed to form obfs4 connection: %v", reg.sessionIDStr, err)
-			return nil, err
-		}
-
-		return conn, err
-	case pb.TransportType_Prefix:
-		pt, ok := reg.Transport.(*prefix.ClientTransport)
-		if !ok {
-			return nil, fmt.Errorf("misconfigured prefix transport")
-		}
-
-		err := pt.Prepare(*Assets().GetConjurePubkey(), reg.keys.SharedSecret, nil)
-		if err != nil {
-			return nil, fmt.Errorf("failed initialize prefix transport: %w", err)
-		}
-
-		conn, err := reg.getFirstConnection(ctx, reg.Dialer, phantoms)
-		if err != nil {
-			Logger().Infof("%v failed to form phantom connection: %v", reg.sessionIDStr, err)
-			return nil, err
-		}
-
-		return pt.WrapConn(conn)
-
-	case pb.TransportType_Null:
-		// Dial and do nothing to the connection before returning it to the user.
-		return nil, fmt.Errorf("unsupported")
-	default:
-		// If transport is unrecognized use min transport.
-		return nil, fmt.Errorf("unknown transport")
+	conn, err := reg.getFirstConnection(ctx, reg.Dialer, phantoms)
+	if err != nil {
+		Logger().Infof("%v failed to form phantom connection: %v", reg.sessionIDStr, err)
+		return nil, err
 	}
+
+	conn, err = reg.Transport.WrapConn(conn)
+	if err != nil {
+		Logger().Infof("WrapConn failed")
+		return nil, err
+	}
+	return conn, nil
 }
 
 // ConjureReg - Registration structure created for each individual registration within a session.
@@ -998,42 +929,10 @@ func getStationKey() [32]byte {
 	return *Assets().GetConjurePubkey()
 }
 
-type Obfs4Keys struct {
-	PrivateKey *ntor.PrivateKey
-	PublicKey  *ntor.PublicKey
-	NodeID     *ntor.NodeID
-}
-
-func generateObfs4Keys(rand io.Reader) (Obfs4Keys, error) {
-	keys := Obfs4Keys{
-		PrivateKey: new(ntor.PrivateKey),
-		PublicKey:  new(ntor.PublicKey),
-		NodeID:     new(ntor.NodeID),
-	}
-
-	_, err := rand.Read(keys.PrivateKey[:])
-	if err != nil {
-		return keys, err
-	}
-
-	keys.PrivateKey[0] &= 248
-	keys.PrivateKey[31] &= 127
-	keys.PrivateKey[31] |= 64
-
-	pub, err := curve25519.X25519(keys.PrivateKey[:], curve25519.Basepoint)
-	if err != nil {
-		return keys, err
-	}
-	copy(keys.PublicKey[:], pub)
-
-	_, err = rand.Read(keys.NodeID[:])
-	return keys, err
-}
-
 type sharedKeys struct {
 	SharedSecret, Representative                               []byte
 	FspKey, FspIv, VspKey, VspIv, NewMasterSecret, ConjureSeed []byte
-	Obfs4Keys                                                  Obfs4Keys
+	reader                                                     io.Reader
 }
 
 func generateSharedKeys(pubkey [32]byte) (*sharedKeys, error) {
@@ -1052,6 +951,7 @@ func generateSharedKeys(pubkey [32]byte) (*sharedKeys, error) {
 		VspIv:           make([]byte, 12),
 		NewMasterSecret: make([]byte, 48),
 		ConjureSeed:     make([]byte, 16),
+		reader:          tdHkdf,
 	}
 
 	if _, err := tdHkdf.Read(keys.FspKey); err != nil {
@@ -1072,7 +972,6 @@ func generateSharedKeys(pubkey [32]byte) (*sharedKeys, error) {
 	if _, err := tdHkdf.Read(keys.ConjureSeed); err != nil {
 		return keys, err
 	}
-	keys.Obfs4Keys, err = generateObfs4Keys(tdHkdf)
 	return keys, err
 }
 
