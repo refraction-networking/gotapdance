@@ -17,8 +17,6 @@ import (
 	pb "github.com/refraction-networking/gotapdance/protobuf"
 	ps "github.com/refraction-networking/gotapdance/tapdance/phantoms"
 	tls "github.com/refraction-networking/utls"
-	"gitlab.com/yawning/obfs4.git/common/ntor"
-	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/hkdf"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -374,8 +372,7 @@ func (reg *ConjureReg) Connect(ctx context.Context, transport Transport) (net.Co
 
 	// Prepare the transport by generating any necessary keys
 	pubKey := getStationKey()
-	// Change Preapre() to PrepareKeys() in the future, make dRand not nil
-	transport.Prepare(pubKey, reg.keys.SharedSecret, nil)
+	transport.PrepareKeys(pubKey, reg.keys.SharedSecret, reg.keys.reader)
 
 	conn, err := reg.getFirstConnection(ctx, reg.Dialer, phantoms)
 	if err != nil {
@@ -909,42 +906,10 @@ func getStationKey() [32]byte {
 	return *Assets().GetConjurePubkey()
 }
 
-type Obfs4Keys struct {
-	PrivateKey *ntor.PrivateKey
-	PublicKey  *ntor.PublicKey
-	NodeID     *ntor.NodeID
-}
-
-func generateObfs4Keys(rand io.Reader) (Obfs4Keys, error) {
-	keys := Obfs4Keys{
-		PrivateKey: new(ntor.PrivateKey),
-		PublicKey:  new(ntor.PublicKey),
-		NodeID:     new(ntor.NodeID),
-	}
-
-	_, err := rand.Read(keys.PrivateKey[:])
-	if err != nil {
-		return keys, err
-	}
-
-	keys.PrivateKey[0] &= 248
-	keys.PrivateKey[31] &= 127
-	keys.PrivateKey[31] |= 64
-
-	pub, err := curve25519.X25519(keys.PrivateKey[:], curve25519.Basepoint)
-	if err != nil {
-		return keys, err
-	}
-	copy(keys.PublicKey[:], pub)
-
-	_, err = rand.Read(keys.NodeID[:])
-	return keys, err
-}
-
 type sharedKeys struct {
 	SharedSecret, Representative                               []byte
 	FspKey, FspIv, VspKey, VspIv, NewMasterSecret, ConjureSeed []byte
-	Obfs4Keys                                                  Obfs4Keys
+	reader                                                     io.Reader
 }
 
 func generateSharedKeys(pubkey [32]byte) (*sharedKeys, error) {
@@ -963,6 +928,7 @@ func generateSharedKeys(pubkey [32]byte) (*sharedKeys, error) {
 		VspIv:           make([]byte, 12),
 		NewMasterSecret: make([]byte, 48),
 		ConjureSeed:     make([]byte, 16),
+		reader:          tdHkdf,
 	}
 
 	if _, err := tdHkdf.Read(keys.FspKey); err != nil {
@@ -983,7 +949,6 @@ func generateSharedKeys(pubkey [32]byte) (*sharedKeys, error) {
 	if _, err := tdHkdf.Read(keys.ConjureSeed); err != nil {
 		return keys, err
 	}
-	keys.Obfs4Keys, err = generateObfs4Keys(tdHkdf)
 	return keys, err
 }
 
