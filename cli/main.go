@@ -50,7 +50,9 @@ func main() {
 	var registrar = flag.String("registrar", "decoy", "One of decoy, api, bdapi, dns, bddns.")
 	var transport = flag.String("transport", "min", `The transport to use for Conjure connections. Current values include "min" and "obfs4".`)
 	var randomizeDstPort = flag.Bool("rand-dst-port", true, `enable destination port randomization for the transport connection`)
-	var phantomNet = flag.String("phantom", "", "Target phantom subnet. Must overlap with ClientConf, and will be achieved by brute force of seeds until satisified")
+	var prefixID = flag.Int("prefix-id", -1, "ID of the prefix to send, used with the `transport=\"prefix\"` option. Default is Random. See prefix transport for options")
+
+	var phantomNet = flag.String("phantom", "", "Target phantom subnet. Must overlap with ClientConf, and will be achieved by brute force of seeds until satisfied")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Dark Decoy CLI\n$./cli -connect-addr=<decoy_address> [OPTIONS] \n\nOptions:\n")
@@ -135,14 +137,31 @@ func main() {
 		fmt.Printf("Using Station Pubkey: %s\n", hex.EncodeToString(tapdance.Assets().GetConjurePubkey()[:]))
 	}
 
-	err = connectDirect(*td, *APIRegistration, *registrar, *connectTarget, *port, *proxyHeader, v6Support, *width, *transport, *phantomNet, *randomizeDstPort)
+	var params any
+	var t tapdance.Transport
+	switch *transport {
+	case "prefix":
+		pID := int32(*prefixID)
+		params = &pb.PrefixTransportParams{RandomizeDstPort: randomizeDstPort, PrefixId: &pID}
+	default:
+		params = &pb.GenericTransportParams{RandomizeDstPort: randomizeDstPort}
+	}
+
+	t, err = transports.NewWithParams(*transport, params)
+	if err != nil {
+		e := fmt.Errorf("error finding or creating transport %v: %v", *transport, err)
+		tapdance.Logger().Println(e)
+		os.Exit(1)
+	}
+
+	err = connectDirect(*td, *APIRegistration, *registrar, *connectTarget, *port, *proxyHeader, v6Support, *width, t, *phantomNet)
 	if err != nil {
 		tapdance.Logger().Println(err)
 		os.Exit(1)
 	}
 }
 
-func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget string, localPort int, proxyHeader bool, v6Support bool, width int, transport string, phantomNet string, randomizeDstPort bool) error {
+func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget string, localPort int, proxyHeader bool, v6Support bool, width int, t tapdance.Transport, phantomNet string) error {
 	if _, _, err := net.SplitHostPort(connectTarget); err != nil {
 		return fmt.Errorf("failed to parse host and port from connectTarget %s: %v",
 			connectTarget, err)
@@ -152,11 +171,6 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget 
 	l, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: localPort})
 	if err != nil {
 		return fmt.Errorf("error listening on port %v: %v", localPort, err)
-	}
-
-	t, err := transports.NewWithParams(transport, &pb.GenericTransportParams{RandomizeDstPort: &randomizeDstPort})
-	if err != nil {
-		return fmt.Errorf("error finding or creating transport %v: %v", transport, err)
 	}
 
 	tdDialer := tapdance.Dialer{
