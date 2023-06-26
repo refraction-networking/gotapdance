@@ -77,7 +77,7 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 		return nil, err
 	}
 
-	Logger().Debugf("%v Attempting to Connect ...", cjSession.IDString())
+	Logger().Debugf("%v Attempting to Connect using %s ...", cjSession.IDString(), registration.Transport.Name())
 	return registration.Connect(ctx)
 }
 
@@ -276,7 +276,7 @@ func (cjSession *ConjureSession) UnidirectionalRegData(regSource *pb.Registratio
 
 	reg.phantom4 = phantom4
 	reg.phantom6 = phantom6
-	reg.phantomDstPort, err = cjSession.Transport.GetDstPort(reg.keys.ConjureSeed, nil)
+	reg.phantomDstPort, err = cjSession.Transport.GetDstPort(reg.keys.ConjureSeed)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -642,7 +642,13 @@ func (reg *ConjureReg) getPbTransport() pb.TransportType {
 }
 
 func (reg *ConjureReg) getPbTransportParams() (*anypb.Any, error) {
-	var m proto.Message = reg.Transport.GetParams()
+	var m proto.Message
+	m, err := reg.Transport.GetParams()
+	if err != nil {
+		return nil, err
+	} else if m == nil {
+		return nil, nil
+	}
 	return anypb.New(m)
 }
 
