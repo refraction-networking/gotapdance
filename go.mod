@@ -11,7 +11,7 @@ require (
 	github.com/pion/stun v0.3.5
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.7.0
-	github.com/refraction-networking/conjure v0.4.1
+	github.com/refraction-networking/conjure v0.4.2
 	github.com/refraction-networking/utls v1.2.0
 	github.com/sergeyfrolov/bsbuffer v0.0.0-20180903213811-94e85abb8507
 	github.com/sirupsen/logrus v1.9.0
