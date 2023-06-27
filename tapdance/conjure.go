@@ -463,6 +463,8 @@ func (reg *ConjureReg) UnpackRegResp(regResp *pb.RegistrationResponse) error {
 			// connection.
 			return err
 		}
+	} else if maybeTP != nil && !reg.AllowRegistrarOverrides {
+		return fmt.Errorf("registrar failed to respect AllowOverrides")
 	}
 
 	// Client config -- check if not nil in the registration response
