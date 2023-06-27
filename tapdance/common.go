@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/refraction-networking/gotapdance/ed25519/extra25519"
+	"github.com/refraction-networking/conjure/pkg/ed25519/extra25519"
 	"golang.org/x/crypto/curve25519"
 )
 
@@ -130,8 +130,9 @@ var default_flags = tdFlagUseTIL
 //
 // Requests station to send client's IP to covert in following form:
 // PROXY TCP4 x.x.x.x 127.0.0.1 1111 1234\r\n
-//       ^__^ ^_____^ ^_________________^
-//      proto clientIP      garbage
+//
+//	 ^__^ ^_____^ ^_________________^
+//	proto clientIP      garbage
 func EnableProxyProtocol() {
 	Logger().Println("tapdance.EnableProxyProtocol() is deprecated, " +
 		"use tapdance.Dialer with UseProxyHeader flag instead.")

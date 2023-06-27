@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/refraction-networking/conjure/pkg/core"
-	pb "github.com/refraction-networking/gotapdance/protobuf"
+	pb "github.com/refraction-networking/conjure/proto"
 	tls "github.com/refraction-networking/utls"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

@@ -13,8 +13,8 @@ import (
 	"sync"
 
 	"github.com/golang/protobuf/proto"
+	ps "github.com/refraction-networking/conjure/pkg/phantoms"
 	pb "github.com/refraction-networking/gotapdance/protobuf"
-	ps "github.com/refraction-networking/gotapdance/tapdance/phantoms"
 )
 
 type assets struct {

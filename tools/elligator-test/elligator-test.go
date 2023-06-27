@@ -2,15 +2,15 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//package extra25519
+// package extra25519
 package main
 
 import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	//"github.com/refraction-networking/gotapdance/ed25519"
-	"github.com/refraction-networking/gotapdance/ed25519/extra25519"
+
+	"github.com/refraction-networking/conjure/pkg/ed25519/extra25519"
 )
 
 func main() {
