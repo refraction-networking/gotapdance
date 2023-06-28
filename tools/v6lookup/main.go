@@ -14,7 +14,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/jinzhu/copier"
-	pb "github.com/refraction-networking/gotapdance/protobuf"
+	pb "github.com/refraction-networking/conjure/proto"
 )
 
 func main() {

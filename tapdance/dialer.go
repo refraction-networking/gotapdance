@@ -6,7 +6,7 @@ import (
 	"net"
 
 	transports "github.com/refraction-networking/conjure/pkg/transports/client"
-	pb "github.com/refraction-networking/gotapdance/protobuf"
+	pb "github.com/refraction-networking/conjure/proto"
 )
 
 var sessionsTotal CounterUint64

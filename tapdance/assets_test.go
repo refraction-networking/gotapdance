@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
-	pb "github.com/refraction-networking/gotapdance/protobuf"
+	pb "github.com/refraction-networking/conjure/proto"
 )
 
 func TestAssets_Decoys(t *testing.T) {

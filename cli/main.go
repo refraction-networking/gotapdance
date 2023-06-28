@@ -16,7 +16,7 @@ import (
 	"github.com/refraction-networking/conjure/pkg/phantoms"
 	"github.com/refraction-networking/conjure/pkg/registrars/registration"
 	transports "github.com/refraction-networking/conjure/pkg/transports/client"
-	pb "github.com/refraction-networking/gotapdance/protobuf"
+	pb "github.com/refraction-networking/conjure/proto"
 	"github.com/refraction-networking/gotapdance/tapdance"
 	"github.com/refraction-networking/gotapdance/tdproxy"
 	"github.com/sirupsen/logrus"
