@@ -180,8 +180,9 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget 
 		V6Support:          v6Support,
 		Width:              width,
 		// Transport:          getTransportFromName(transport), // Still works for backwards compatibility
-		TransportConfig: t,
-		PhantomNet:      phantomNet,
+		TransportConfig:           t,
+		PhantomNet:                phantomNet,
+		DisableRegistrarOverrides: false,
 	}
 
 	switch registrar {

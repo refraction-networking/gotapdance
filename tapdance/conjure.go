@@ -422,6 +422,9 @@ type ConjureReg struct {
 // the server chooses the phantom IP and Port by default. Overrides to transport parameters
 // are applied when reg.DisableRegistrarOverrides is false.
 func (reg *ConjureReg) UnpackRegResp(regResp *pb.RegistrationResponse) error {
+	if regResp == nil {
+		return nil
+	}
 	if reg.v6Support == v4 {
 		// Save the ipv4address in the Conjure Reg struct (phantom4) to return
 		ip4 := make(net.IP, 4)
@@ -456,12 +459,15 @@ func (reg *ConjureReg) UnpackRegResp(regResp *pb.RegistrationResponse) error {
 
 	maybeTP := regResp.GetTransportParams()
 	if maybeTP != nil && !reg.DisableRegistrarOverrides {
-		err := reg.Transport.SetParams(maybeTP)
+		// If an error occurs while setting transport parameters give up as continuing would likely
+		// lead to incongruence between the client and station and an unserviceable connection.
+		params, err := reg.Transport.ParseParams(maybeTP)
 		if err != nil {
-			// If an error occurs while setting transport parameters give up as continuing would
-			// likely lead to incongruence between the client and station and an unserviceable
-			// connection.
-			return err
+			return fmt.Errorf("Param Parse error: %w", err)
+		}
+		err = reg.Transport.SetParams(params, true)
+		if err != nil {
+			return fmt.Errorf("Param Parse error: %w", err)
 		}
 	} else if maybeTP != nil && reg.DisableRegistrarOverrides {
 		return fmt.Errorf("registrar failed to respect disabled overrides")
