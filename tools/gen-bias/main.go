@@ -11,11 +11,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/refraction-networking/conjure/pkg/phantoms"
-<<<<<<< HEAD
 	pb "github.com/refraction-networking/conjure/proto"
-=======
-	pb "github.com/refraction-networking/gotapdance/protobuf"
->>>>>>> b122111 (whole repo: move many files to conjure, change imports)
 	"golang.org/x/crypto/hkdf"
 )
 
