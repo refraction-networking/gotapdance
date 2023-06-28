@@ -28,7 +28,7 @@ type Dialer struct {
 	// Indicates whether the client will allow the registrar to provide alternative parameters that
 	// may work better in substitute for the deterministically selected parameters. This only works
 	// for bidirectional registration methods where the client receives a RegistrationResponse.
-	AllowRegistrarOverrides bool
+	DisableRegistrarOverrides bool
 
 	// The type of transport to use for Conjure connections.
 	Transport       pb.TransportType
@@ -127,7 +127,7 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 		cjSession.Dialer = d.Dialer
 		cjSession.UseProxyHeader = d.UseProxyHeader
 		cjSession.Width = uint(d.Width)
-		cjSession.AllowRegistrarOverrides = d.AllowRegistrarOverrides
+		cjSession.DisableRegistrarOverrides = d.DisableRegistrarOverrides
 
 		if d.V6Support {
 			cjSession.V6Support = &V6{include: both, support: true}

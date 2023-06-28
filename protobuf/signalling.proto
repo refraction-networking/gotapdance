@@ -245,7 +245,7 @@ message ClientToStation {
     // Indicates whether the client will allow the registrar to provide alternative parameters that
     // may work better in substitute for the deterministically selected parameters. This only works
     // for bidirectional registration methods where the client receives a RegistrationResponse.
-    optional bool allow_registrar_overrides = 6;
+    optional bool disable_registrar_overrides = 6;
 
     // List of decoys that client have unsuccessfully tried in current session.
     // Could be sent in chunks
