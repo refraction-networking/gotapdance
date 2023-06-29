@@ -77,8 +77,8 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 		return nil, err
 	}
 
-	Logger().Debugf("%v Attempting to Connect ...", cjSession.IDString())
-	return registration.Connect(ctx, registration.Transport)
+	Logger().Debugf("%v Attempting to Connect using %s ...", cjSession.IDString(), registration.Transport.Name())
+	return registration.Connect(ctx)
 }
 
 // // testV6 -- This is over simple and incomplete (currently unused)
@@ -276,7 +276,7 @@ func (cjSession *ConjureSession) UnidirectionalRegData(regSource *pb.Registratio
 
 	reg.phantom4 = phantom4
 	reg.phantom6 = phantom6
-	reg.phantomDstPort, err = cjSession.Transport.GetDstPort(reg.keys.ConjureSeed, nil)
+	reg.phantomDstPort, err = cjSession.Transport.GetDstPort(reg.keys.ConjureSeed)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -371,12 +371,12 @@ func (reg *ConjureReg) getFirstConnection(ctx context.Context, dialer dialFunc, 
 // Connect - Use a registration (result of calling Register) to connect to a phantom
 // Note: This is hacky but should work for v4, v6, or both as any nil phantom addr will
 // return a dial error and be ignored.
-func (reg *ConjureReg) Connect(ctx context.Context, transport Transport) (net.Conn, error) {
+func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
 	phantoms := []*net.IP{reg.phantom4, reg.phantom6}
 
 	// Prepare the transport by generating any necessary keys
 	pubKey := getStationKey()
-	transport.PrepareKeys(pubKey, reg.keys.SharedSecret, reg.keys.reader)
+	reg.Transport.PrepareKeys(pubKey, reg.keys.SharedSecret, reg.keys.reader)
 
 	conn, err := reg.getFirstConnection(ctx, reg.Dialer, phantoms)
 	if err != nil {
@@ -384,7 +384,7 @@ func (reg *ConjureReg) Connect(ctx context.Context, transport Transport) (net.Co
 		return nil, err
 	}
 
-	conn, err = transport.WrapConn(conn)
+	conn, err = reg.Transport.WrapConn(conn)
 	if err != nil {
 		Logger().Infof("WrapConn failed")
 		return nil, err
@@ -642,7 +642,13 @@ func (reg *ConjureReg) getPbTransport() pb.TransportType {
 }
 
 func (reg *ConjureReg) getPbTransportParams() (*anypb.Any, error) {
-	var m proto.Message = reg.Transport.GetParams()
+	var m proto.Message
+	m, err := reg.Transport.GetParams()
+	if err != nil {
+		return nil, err
+	} else if m == nil {
+		return nil, nil
+	}
 	return anypb.New(m)
 }
 
