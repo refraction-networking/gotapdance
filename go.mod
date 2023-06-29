@@ -18,7 +18,7 @@ require (
 	github.com/stretchr/testify v1.8.1
 	golang.org/x/crypto v0.9.0
 	golang.org/x/net v0.10.0
-	google.golang.org/protobuf v1.30.0
+	google.golang.org/protobuf v1.31.0
 )
 
 require (
@@ -42,7 +42,7 @@ require (
 	github.com/pebbe/zmq4 v1.2.9 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	gitlab.com/yawning/edwards25519-extra.git v0.0.0-20220726154925-def713fd18e4 // indirect
-	gitlab.com/yawning/obfs4.git v0.0.0-20220904064028-336a71d6e4cf // indirect
+	gitlab.com/yawning/obfs4.git v0.0.0-20230113193642-07b111e6b208 // indirect
 	golang.org/x/sys v0.8.0 // indirect
 	golang.org/x/text v0.9.0 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
