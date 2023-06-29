@@ -710,6 +710,8 @@ func (reg *ConjureReg) generateClientToStation() (*pb.ClientToStation, error) {
 		Flags:               reg.generateFlags(),
 		TransportParams:     transportParams,
 
+		DisableRegistrarOverrides: &reg.ConjureSession.DisableRegistrarOverrides,
+
 		//[TODO]{priority:medium} specify width in C2S because different width might
 		// 		be useful in different regions (constant for now.)
 	}

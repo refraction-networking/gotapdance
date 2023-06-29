@@ -25,9 +25,11 @@ type Dialer struct {
 
 	// The type of registrar to use when performing Conjure registrations.
 	DarkDecoyRegistrar Registrar
-	// Indicates whether the client will allow the registrar to provide alternative parameters that
-	// may work better in substitute for the deterministically selected parameters. This only works
-	// for bidirectional registration methods where the client receives a RegistrationResponse.
+
+	// DisableRegistrarOverrides Indicates whether the client will allow the registrar to provide
+	// alternative parameters that may work better in substitute for the deterministically selected
+	// parameters. This only works for bidirectional registration methods where the client receives
+	// a RegistrationResponse.
 	DisableRegistrarOverrides bool
 
 	// The type of transport to use for Conjure connections.
