@@ -120,7 +120,7 @@ type ConjureSession struct {
 	CovertAddress  string
 	// rtt			   uint // tracked in stats
 
-	AllowRegistrarOverrides bool
+	DisableRegistrarOverrides bool
 
 	// TcpDialer allows the caller to provide a custom dialer for outgoing proxy connections.
 	//
@@ -142,14 +142,14 @@ func MakeConjureSessionSilent(covert string, transport Transport) *ConjureSessio
 	}
 	//[TODO]{priority:NOW} move v6support initialization to assets so it can be tracked across dials
 	cjSession := &ConjureSession{
-		Keys:                    keys,
-		Width:                   defaultRegWidth,
-		V6Support:               &V6{support: true, include: both},
-		UseProxyHeader:          false,
-		Transport:               transport,
-		CovertAddress:           covert,
-		SessionID:               sessionsTotal.GetAndInc(),
-		AllowRegistrarOverrides: true,
+		Keys:                      keys,
+		Width:                     defaultRegWidth,
+		V6Support:                 &V6{support: true, include: both},
+		UseProxyHeader:            false,
+		Transport:                 transport,
+		CovertAddress:             covert,
+		SessionID:                 sessionsTotal.GetAndInc(),
+		DisableRegistrarOverrides: false,
 	}
 
 	return cjSession
@@ -420,8 +420,11 @@ type ConjureReg struct {
 // UnpackRegResp unpacks the RegistrationResponse message sent back by the station. This unpacks
 // any field overrides sent by the registrar. When using a bidirectional registration method
 // the server chooses the phantom IP and Port by default. Overrides to transport parameters
-// are applied when reg.AllowRegistrarOverrides is enabled.
+// are applied when reg.DisableRegistrarOverrides is false.
 func (reg *ConjureReg) UnpackRegResp(regResp *pb.RegistrationResponse) error {
+	if regResp == nil {
+		return nil
+	}
 	if reg.v6Support == v4 {
 		// Save the ipv4address in the Conjure Reg struct (phantom4) to return
 		ip4 := make(net.IP, 4)
@@ -455,14 +458,19 @@ func (reg *ConjureReg) UnpackRegResp(regResp *pb.RegistrationResponse) error {
 	}
 
 	maybeTP := regResp.GetTransportParams()
-	if maybeTP != nil && reg.AllowRegistrarOverrides {
-		err := reg.Transport.SetParams(maybeTP)
+	if maybeTP != nil && !reg.DisableRegistrarOverrides {
+		// If an error occurs while setting transport parameters give up as continuing would likely
+		// lead to incongruence between the client and station and an unserviceable connection.
+		params, err := reg.Transport.ParseParams(maybeTP)
 		if err != nil {
-			// If an error occurs while setting transport parameters give up as continuing would
-			// likely lead to incongruence between the client and station and an unserviceable
-			// connection.
-			return err
+			return fmt.Errorf("Param Parse error: %w", err)
 		}
+		err = reg.Transport.SetParams(params, true)
+		if err != nil {
+			return fmt.Errorf("Param Parse error: %w", err)
+		}
+	} else if maybeTP != nil && reg.DisableRegistrarOverrides {
+		return fmt.Errorf("registrar failed to respect disabled overrides")
 	}
 
 	// Client config -- check if not nil in the registration response
@@ -701,6 +709,8 @@ func (reg *ConjureReg) generateClientToStation() (*pb.ClientToStation, error) {
 		Transport:           &transport,
 		Flags:               reg.generateFlags(),
 		TransportParams:     transportParams,
+
+		DisableRegistrarOverrides: &reg.ConjureSession.DisableRegistrarOverrides,
 
 		//[TODO]{priority:medium} specify width in C2S because different width might
 		// 		be useful in different regions (constant for now.)
