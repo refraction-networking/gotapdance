@@ -13,11 +13,11 @@ import (
 	"time"
 
 	"github.com/pkg/profile"
-	"github.com/refraction-networking/gotapdance/pkg/registration"
-	"github.com/refraction-networking/gotapdance/pkg/transports"
-	pb "github.com/refraction-networking/gotapdance/protobuf"
+	"github.com/refraction-networking/conjure/pkg/phantoms"
+	"github.com/refraction-networking/conjure/pkg/registrars/registration"
+	transports "github.com/refraction-networking/conjure/pkg/transports/client"
+	pb "github.com/refraction-networking/conjure/proto"
 	"github.com/refraction-networking/gotapdance/tapdance"
-	"github.com/refraction-networking/gotapdance/tapdance/phantoms"
 	"github.com/refraction-networking/gotapdance/tdproxy"
 	"github.com/sirupsen/logrus"
 )

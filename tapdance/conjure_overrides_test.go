@@ -3,8 +3,8 @@ package tapdance
 import (
 	"testing"
 
-	"github.com/refraction-networking/conjure/application/transports/wrapping/prefix"
-	pb "github.com/refraction-networking/gotapdance/protobuf"
+	"github.com/refraction-networking/conjure/pkg/transports/wrapping/prefix"
+	pb "github.com/refraction-networking/conjure/proto"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/anypb"
 )

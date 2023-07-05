@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"testing"
 
-	ps "github.com/refraction-networking/gotapdance/tapdance/phantoms"
+	ps "github.com/refraction-networking/conjure/pkg/phantoms"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

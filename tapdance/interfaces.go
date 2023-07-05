@@ -3,7 +3,7 @@ package tapdance
 import (
 	"context"
 
-	"github.com/refraction-networking/gotapdance/pkg/interfaces"
+	"github.com/refraction-networking/conjure/pkg/core/interfaces"
 )
 
 type Transport interfaces.Transport

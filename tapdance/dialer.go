@@ -5,8 +5,8 @@ import (
 	"errors"
 	"net"
 
-	"github.com/refraction-networking/gotapdance/pkg/transports"
-	pb "github.com/refraction-networking/gotapdance/protobuf"
+	transports "github.com/refraction-networking/conjure/pkg/transports/client"
+	pb "github.com/refraction-networking/conjure/proto"
 )
 
 var sessionsTotal CounterUint64

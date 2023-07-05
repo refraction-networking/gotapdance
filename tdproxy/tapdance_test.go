@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	pb "github.com/refraction-networking/gotapdance/protobuf"
+	pb "github.com/refraction-networking/conjure/proto"
 	"github.com/refraction-networking/gotapdance/tapdance"
 	"golang.org/x/net/websocket"
 )

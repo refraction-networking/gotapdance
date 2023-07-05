@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/refraction-networking/conjure/pkg/core"
-	pb "github.com/refraction-networking/gotapdance/protobuf"
-	ps "github.com/refraction-networking/gotapdance/tapdance/phantoms"
+	ps "github.com/refraction-networking/conjure/pkg/phantoms"
+	pb "github.com/refraction-networking/conjure/proto"
 	tls "github.com/refraction-networking/utls"
 	"golang.org/x/crypto/hkdf"
 	"google.golang.org/protobuf/proto"

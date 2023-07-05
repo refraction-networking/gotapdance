@@ -10,8 +10,8 @@ import (
 	"os"
 
 	"github.com/golang/protobuf/proto"
-	pb "github.com/refraction-networking/gotapdance/protobuf"
-	"github.com/refraction-networking/gotapdance/tapdance/phantoms"
+	"github.com/refraction-networking/conjure/pkg/phantoms"
+	pb "github.com/refraction-networking/conjure/proto"
 	"golang.org/x/crypto/hkdf"
 )
 
