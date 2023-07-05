@@ -48,10 +48,10 @@ func main() {
 	var td = flag.Bool("td", false, "Enable tapdance cli mode for compatibility")
 	var APIRegistration = flag.String("api-endpoint", "", "If set, API endpoint to use when performing API registration. Defaults to https://registration.refraction.network/api/register (or register-bidirectional for bdapi)")
 	var registrar = flag.String("registrar", "decoy", "One of decoy, api, bdapi, dns, bddns.")
-	var transport = flag.String("transport", "min", `The transport to use for Conjure connections. Current values include "min" and "obfs4".`)
+	var transport = flag.String("transport", "min", `The transport to use for Conjure connections. Current values include "prefix", "min" and "obfs4".`)
 	var randomizeDstPort = flag.Bool("rand-dst-port", true, `enable destination port randomization for the transport connection`)
 	var prefixID = flag.Int("prefix-id", -1, "ID of the prefix to send, used with the `transport=\"prefix\"` option. Default is Random. See prefix transport for options")
-
+	var disableOverrides = flag.Bool("disable-overrides", false, "Informs the registrar that chosen parameters will be used, only applicable to bidirectional reg methods")
 	var phantomNet = flag.String("phantom", "", "Target phantom subnet. Must overlap with ClientConf, and will be achieved by brute force of seeds until satisfied")
 
 	flag.Usage = func() {
@@ -154,14 +154,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	err = connectDirect(*td, *APIRegistration, *registrar, *connectTarget, *port, *proxyHeader, v6Support, *width, t, *phantomNet)
+	err = connectDirect(*td, *APIRegistration, *registrar, *connectTarget, *port, *proxyHeader, v6Support, *width, t, *disableOverrides, *phantomNet)
 	if err != nil {
 		tapdance.Logger().Println(err)
 		os.Exit(1)
 	}
 }
 
-func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget string, localPort int, proxyHeader bool, v6Support bool, width int, t tapdance.Transport, phantomNet string) error {
+func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget string, localPort int, proxyHeader bool, v6Support bool, width int, t tapdance.Transport, disableOverrides bool, phantomNet string) error {
 	if _, _, err := net.SplitHostPort(connectTarget); err != nil {
 		return fmt.Errorf("failed to parse host and port from connectTarget %s: %v",
 			connectTarget, err)
@@ -180,8 +180,9 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget 
 		V6Support:          v6Support,
 		Width:              width,
 		// Transport:          getTransportFromName(transport), // Still works for backwards compatibility
-		TransportConfig: t,
-		PhantomNet:      phantomNet,
+		TransportConfig:           t,
+		PhantomNet:                phantomNet,
+		DisableRegistrarOverrides: disableOverrides,
 	}
 
 	switch registrar {
