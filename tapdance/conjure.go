@@ -710,6 +710,12 @@ func (reg *ConjureReg) generateClientToStation() (*pb.ClientToStation, error) {
 	currentGen := Assets().GetGeneration()
 	currentLibVer := currentClientLibraryVersion()
 	transport := reg.getPbTransport()
+
+	err := reg.Transport.Prepare(reg.ConjureSession.Dialer)
+	if err != nil {
+		return nil, fmt.Errorf("error preparing transport: %v", err)
+	}
+
 	transportParams, err := reg.getPbTransportParams()
 	if err != nil {
 		Logger().Debugf("%s failed to marshal transport parameters ", reg.sessionIDStr)
