@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/refraction-networking/conjure/pkg/core"
+	"github.com/refraction-networking/conjure/pkg/core/interfaces"
 	ps "github.com/refraction-networking/conjure/pkg/phantoms"
 	pb "github.com/refraction-networking/conjure/proto"
 	tls "github.com/refraction-networking/utls"
@@ -323,7 +324,7 @@ func (reg *ConjureReg) connect(ctx context.Context, addr string, dialer dialFunc
 	return dialer(childCtx, "tcp", "", phantomAddr)
 }
 
-func getFirstConnection(ctx context.Context, reg *ConjureReg, dialer dialFunc, phantoms []*net.IP) (net.Conn, error) {
+func (reg *ConjureReg) getFirstConnection(ctx context.Context, dialer dialFunc, phantoms []*net.IP) (net.Conn, error) {
 	connChannel := make(chan resultTuple, len(phantoms))
 	for _, p := range phantoms {
 		if p == nil {
@@ -378,18 +379,36 @@ func (reg *ConjureReg) Connect(ctx context.Context, dialer dialFunc) (net.Conn, 
 	pubKey := getStationKey()
 	reg.Transport.PrepareKeys(pubKey, reg.keys.SharedSecret, reg.keys.reader)
 
-	conn, err := getFirstConnection(ctx, reg, dialer, phantoms)
-	if err != nil {
-		Logger().Infof("%v failed to form phantom connection: %v", reg.sessionIDStr, err)
-		return nil, err
+	switch transport := reg.Transport.(type) {
+	case interfaces.WrappingTransport:
+		conn, err := reg.getFirstConnection(ctx, dialer, phantoms)
+		if err != nil {
+			Logger().Infof("%v failed to form phantom connection: %v", reg.sessionIDStr, err)
+			return nil, err
+		}
+
+		conn, err = transport.WrapConn(conn)
+		if err != nil {
+			Logger().Infof("WrapConn failed")
+			return nil, err
+		}
+
+		return conn, nil
+	case interfaces.ConnectingTransport:
+		transportDialer, err := transport.WrapDial(dialer)
+		if err != nil {
+			return nil, fmt.Errorf("error wrapping transport dialer: %v", err)
+		}
+
+		conn, err := reg.getFirstConnection(ctx, transportDialer, phantoms)
+		if err != nil {
+			return nil, fmt.Errorf("failed to dialing connecting transport: %v", err)
+		}
+
+		return conn, nil
 	}
 
-	conn, err = reg.Transport.WrapConn(conn)
-	if err != nil {
-		Logger().Infof("WrapConn failed")
-		return nil, err
-	}
-	return conn, nil
+	return nil, fmt.Errorf("transport does not implement any transport interface")
 }
 
 // ConjureReg - Registration structure created for each individual registration within a session.
