@@ -78,6 +78,15 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 		return nil, err
 	}
 
+	tp, isconnecting := cjSession.Transport.(interfaces.ConnectingTransport)
+	if isconnecting {
+		if tp.DisableRegDelay() {
+			cjSession.RegDelay = 0
+		}
+	}
+
+	sleepWithContext(ctx, cjSession.RegDelay)
+
 	Logger().Debugf("%v Attempting to Connect using %s ...", cjSession.IDString(), registration.Transport.Name())
 	return registration.Connect(ctx, cjSession.Dialer)
 }
@@ -129,6 +138,9 @@ type ConjureSession struct {
 	//		we use their dialer to prevent connection loopback into our own proxy
 	//		connection when tunneling the whole device.
 	Dialer dialFunc
+
+	// RegDelay is the delay duration to wait for registration ingest.
+	RegDelay time.Duration
 
 	// performance tracking
 	stats *pb.SessionStats

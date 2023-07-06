@@ -7,6 +7,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	transports "github.com/refraction-networking/conjure/pkg/transports/client"
 	pb "github.com/refraction-networking/conjure/proto"
@@ -48,6 +49,9 @@ type Dialer struct {
 	// The type of transport to use for Conjure connections.
 	Transport       pb.TransportType
 	TransportConfig Transport
+
+	// RegDelay is the delay duration to wait for registration ingest.
+	RegDelay time.Duration
 
 	UseProxyHeader bool
 	V6Support      bool
@@ -169,6 +173,7 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 		cjSession.UseProxyHeader = d.UseProxyHeader
 		cjSession.Width = uint(d.Width)
 		cjSession.DisableRegistrarOverrides = d.DisableRegistrarOverrides
+		cjSession.RegDelay = d.RegDelay
 
 		if d.V6Support {
 			cjSession.V6Support = &V6{include: both, support: true}
