@@ -31,6 +31,7 @@ require (
 	github.com/felixge/fgprof v0.9.3 // indirect
 	github.com/flynn/noise v1.0.0 // indirect
 	github.com/go-redis/redis/v8 v8.11.5 // indirect
+	github.com/google/gopacket v1.1.19 // indirect
 	github.com/google/pprof v0.0.0-20211214055906-6f57359322fd // indirect
 	github.com/hashicorp/golang-lru v0.6.0 // indirect
 	github.com/keltia/proxy v0.9.3 // indirect
@@ -55,4 +56,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/refraction-networking/conjure => github.com/mingyech/conjure v0.2.1-0.20230706182232-4e268d56dabf
+replace github.com/refraction-networking/conjure => github.com/mingyech/conjure v0.2.1-0.20230706201622-d2fc1a8adb82
