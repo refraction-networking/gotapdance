@@ -16,35 +16,10 @@ import (
 	"github.com/refraction-networking/conjure/pkg/core"
 	ps "github.com/refraction-networking/conjure/pkg/phantoms"
 	pb "github.com/refraction-networking/conjure/proto"
-	tls "github.com/refraction-networking/utls"
 	"golang.org/x/crypto/hkdf"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 )
-
-// CurrentClientLibraryVersion returns the current client library version used
-// for feature compatibility support between client and server. Currently I
-// don't intend to connect this to the library tag version in any way.
-//
-// When adding new client versions comment out older versions and add new
-// version below with a description of the reason for the new version.
-func currentClientLibraryVersion() uint32 {
-	// Support for randomizing destination port for phantom connection
-	// https://github.com/refraction-networking/gotapdance/pull/108
-	return 3
-
-	// // Selection algorithm update - Oct 27, 2022 -- Phantom selection version rework again to use
-	// // hkdf for actual uniform distribution across phantom subnets.
-	// // https://github.com/refraction-networking/conjure/pull/145
-	// return 2
-
-	// // Initial inclusion of client version - added due to update in phantom
-	// // selection algorithm that is not backwards compatible to older clients.
-	// return 1
-
-	// // No client version indicates any client before this change.
-	// return 0
-}
 
 // V6 - Struct to track V6 support and cache result across sessions
 type V6 struct {
@@ -79,6 +54,30 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 
 	Logger().Debugf("%v Attempting to Connect using %s ...", cjSession.IDString(), registration.Transport.Name())
 	return registration.Connect(ctx)
+}
+
+// CurrentClientLibraryVersion returns the current client library version used
+// for feature compatibility support between client and server. Currently I
+// don't intend to connect this to the library tag version in any way.
+//
+// When adding new client versions comment out older versions and add new
+// version below with a description of the reason for the new version.
+func currentClientLibraryVersion() uint32 {
+	// Support for randomizing destination port for phantom connection
+	// https://github.com/refraction-networking/gotapdance/pull/108
+	return 3
+
+	// // Selection algorithm update - Oct 27, 2022 -- Phantom selection version rework again to use
+	// // hkdf for actual uniform distribution across phantom subnets.
+	// // https://github.com/refraction-networking/conjure/pull/145
+	// return 2
+
+	// // Initial inclusion of client version - added due to update in phantom
+	// // selection algorithm that is not backwards compatible to older clients.
+	// return 1
+
+	// // No client version indicates any client before this change.
+	// return 0
 }
 
 // // testV6 -- This is over simple and incomplete (currently unused)
@@ -298,6 +297,25 @@ func (cjSession *ConjureSession) Decoys() ([]*pb.TLSDecoySpec, error) {
 	return SelectDecoys(cjSession.Keys.SharedSecret, cjSession.V6Support.include, cjSession.Width)
 }
 
+// new: created for the sake of removing ConjureReg
+func (cjSession *ConjureSession) GetV6Support() *bool {
+	support := true
+	if cjSession.V6Support.include == v4 {
+		support = false
+	}
+	return &support
+}
+
+// new: created for the sake of removing ConjureReg
+func (cjSession *ConjureSession) GetV4Support() *bool {
+	// for now return true and register both
+	support := true
+	if cjSession.V6Support.include == v6 {
+		support = false
+	}
+	return &support
+}
+
 type resultTuple struct {
 	conn net.Conn
 	err  error
@@ -490,161 +508,6 @@ func (reg *ConjureReg) UnpackRegResp(regResp *pb.RegistrationResponse) error {
 	return nil
 }
 
-func (reg *ConjureReg) createRequest(tlsConn *tls.UConn, decoy *pb.TLSDecoySpec) ([]byte, error) {
-	//[reference] generate and encrypt variable size payload
-	vsp, err := reg.generateVSP()
-	if err != nil {
-		return nil, err
-	}
-	if len(vsp) > int(^uint16(0)) {
-		return nil, fmt.Errorf("Variable-Size Payload exceeds %v", ^uint16(0))
-	}
-	encryptedVsp, err := aesGcmEncrypt(vsp, reg.keys.VspKey, reg.keys.VspIv)
-	if err != nil {
-		return nil, err
-	}
-
-	//[reference] generate and encrypt fixed size payload
-	fsp := reg.generateFSP(uint16(len(encryptedVsp)))
-	encryptedFsp, err := aesGcmEncrypt(fsp, reg.keys.FspKey, reg.keys.FspIv)
-	if err != nil {
-		return nil, err
-	}
-
-	var tag []byte // tag will be base-64 style encoded
-	tag = append(encryptedVsp, reg.keys.Representative...)
-	tag = append(tag, encryptedFsp...)
-
-	httpRequest := generateHTTPRequestBeginning(decoy.GetHostname())
-	keystreamOffset := len(httpRequest)
-	keystreamSize := (len(tag)/3+1)*4 + keystreamOffset // we can't use first 2 bits of every byte
-	wholeKeystream, err := tlsConn.GetOutKeystream(keystreamSize)
-	if err != nil {
-		return nil, err
-	}
-	keystreamAtTag := wholeKeystream[keystreamOffset:]
-	httpRequest = append(httpRequest, reverseEncrypt(tag, keystreamAtTag)...)
-	httpRequest = append(httpRequest, []byte("\r\n\r\n")...)
-	return httpRequest, nil
-}
-
-// Being called in parallel -> no changes to ConjureReg allowed in this function
-func (reg *ConjureReg) Send(ctx context.Context, decoy *pb.TLSDecoySpec, dialError chan error) {
-
-	deadline, deadlineAlreadySet := ctx.Deadline()
-	if !deadlineAlreadySet {
-		deadline = time.Now().Add(getRandomDuration(deadlineTCPtoDecoyMin, deadlineTCPtoDecoyMax))
-	}
-	childCtx, childCancelFunc := context.WithDeadline(ctx, deadline)
-	defer childCancelFunc()
-
-	//[reference] TCP to decoy
-	tcpToDecoyStartTs := time.Now()
-
-	//[Note] decoy.GetIpAddrStr() will get only v4 addr if a decoy has both
-	dialConn, err := reg.Dialer(childCtx, "tcp", decoy.GetIpAddrStr())
-
-	reg.setTCPToDecoy(durationToU32ptrMs(time.Since(tcpToDecoyStartTs)))
-	if err != nil {
-		if opErr, ok := err.(*net.OpError); ok && opErr.Err.Error() == "connect: network is unreachable" {
-			dialError <- RegError{msg: err.Error(), code: Unreachable}
-			return
-		}
-		dialError <- err
-		return
-	}
-
-	//[reference] connection stats tracking
-	rtt := rttInt(uint32(time.Since(tcpToDecoyStartTs).Milliseconds()))
-	delay := getRandomDuration(1061*rtt*2, 1953*rtt*3) //[TODO]{priority:@sfrolov} why these values??
-	TLSDeadline := time.Now().Add(delay)
-
-	tlsToDecoyStartTs := time.Now()
-	tlsConn, err := reg.createTLSConn(dialConn, decoy.GetIpAddrStr(), decoy.GetHostname(), TLSDeadline)
-	if err != nil {
-		dialConn.Close()
-		msg := fmt.Sprintf("%v - %v createConn: %v", decoy.GetHostname(), decoy.GetIpAddrStr(), err.Error())
-		dialError <- RegError{msg: msg, code: TLSError}
-		return
-	}
-	reg.setTLSToDecoy(durationToU32ptrMs(time.Since(tlsToDecoyStartTs)))
-
-	//[reference] Create the HTTP request for the registration
-	httpRequest, err := reg.createRequest(tlsConn, decoy)
-	if err != nil {
-		msg := fmt.Sprintf("%v - %v createReq: %v", decoy.GetHostname(), decoy.GetIpAddrStr(), err.Error())
-		dialError <- RegError{msg: msg, code: TLSError}
-		return
-	}
-
-	//[reference] Write reg into conn
-	_, err = tlsConn.Write(httpRequest)
-	if err != nil {
-		// // This will not get printed because it is executed in a goroutine.
-		// Logger().Errorf("%v - %v Could not send Conjure registration request, error: %v", decoy.GetHostname(), decoy.GetIpAddrStr(), err.Error())
-		tlsConn.Close()
-		msg := fmt.Sprintf("%v - %v Write: %v", decoy.GetHostname(), decoy.GetIpAddrStr(), err.Error())
-		dialError <- RegError{msg: msg, code: TLSError}
-		return
-	}
-
-	dialError <- nil
-	readAndClose(dialConn, time.Second*15)
-}
-
-func (reg *ConjureReg) createTLSConn(dialConn net.Conn, address string, hostname string, deadline time.Time) (*tls.UConn, error) {
-	var err error
-	//[reference] TLS to Decoy
-	config := tls.Config{ServerName: hostname}
-	if config.ServerName == "" {
-		// if SNI is unset -- try IP
-		config.ServerName, _, err = net.SplitHostPort(address)
-		if err != nil {
-			return nil, err
-		}
-		Logger().Debugf("%v SNI was nil. Setting it to %v ", reg.sessionIDStr, config.ServerName)
-	}
-	//[TODO]{priority:medium} parroting Chrome 62 ClientHello -- parrot newer.
-	tlsConn := tls.UClient(dialConn, &config, tls.HelloChrome_62)
-
-	err = tlsConn.BuildHandshakeState()
-	if err != nil {
-		return nil, err
-	}
-	err = tlsConn.MarshalClientHello()
-	if err != nil {
-		return nil, err
-	}
-
-	tlsConn.SetDeadline(deadline)
-	err = tlsConn.Handshake()
-	if err != nil {
-		return nil, err
-	}
-
-	return tlsConn, nil
-}
-
-func (reg *ConjureReg) setTCPToDecoy(tcprtt *uint32) {
-	reg.m.Lock()
-	defer reg.m.Unlock()
-
-	if reg.stats == nil {
-		reg.stats = &pb.SessionStats{}
-	}
-	reg.stats.TcpToDecoy = tcprtt
-}
-
-func (reg *ConjureReg) setTLSToDecoy(tlsrtt *uint32) {
-	reg.m.Lock()
-	defer reg.m.Unlock()
-
-	if reg.stats == nil {
-		reg.stats = &pb.SessionStats{}
-	}
-	reg.stats.TlsToDecoy = tlsrtt
-}
-
 func (reg *ConjureReg) getPbTransport() pb.TransportType {
 	return reg.Transport.ID()
 }
@@ -704,8 +567,8 @@ func (reg *ConjureReg) generateClientToStation() (*pb.ClientToStation, error) {
 		ClientLibVersion:    &currentLibVer,
 		CovertAddress:       covert,
 		DecoyListGeneration: &currentGen,
-		V6Support:           reg.getV6Support(),
-		V4Support:           reg.getV4Support(),
+		V6Support:           reg.ConjureSession.GetV6Support(),
+		V4Support:           reg.ConjureSession.GetV4Support(),
 		Transport:           &transport,
 		Flags:               reg.generateFlags(),
 		TransportParams:     transportParams,
@@ -725,40 +588,6 @@ func (reg *ConjureReg) generateClientToStation() (*pb.ClientToStation, error) {
 	}
 
 	return initProto, nil
-}
-
-func (reg *ConjureReg) generateVSP() ([]byte, error) {
-	c2s, err := reg.generateClientToStation()
-	if err != nil {
-		return nil, err
-	}
-
-	//[reference] Marshal ClientToStation protobuf
-	return proto.Marshal(c2s)
-}
-
-func (reg *ConjureReg) generateFSP(espSize uint16) []byte {
-	buf := make([]byte, 6)
-	binary.BigEndian.PutUint16(buf[0:2], espSize)
-
-	return buf
-}
-
-func (reg *ConjureReg) getV4Support() *bool {
-	// for now return true and register both
-	support := true
-	if reg.v6Support == v6 {
-		support = false
-	}
-	return &support
-}
-
-func (reg *ConjureReg) getV6Support() *bool {
-	support := true
-	if reg.v6Support == v4 {
-		support = false
-	}
-	return &support
 }
 
 func (reg *ConjureReg) v6SupportStr() string {
@@ -798,24 +627,6 @@ func (reg *ConjureReg) digestStats() string {
 		reg.stats.GetTotalTimeToConnect())
 }
 
-// GetRandomDuration returns a random duration that
-func (reg *ConjureReg) GetRandomDuration(base, min, max int) time.Duration {
-	addon := getRandInt(min, max) / 1000 // why this min and max???
-	rtt := rttInt(reg.getTcpToDecoy())
-	return time.Millisecond * time.Duration(base+rtt*addon)
-}
-
-func (reg *ConjureReg) getTcpToDecoy() uint32 {
-	reg.m.Lock()
-	defer reg.m.Unlock()
-	if reg != nil {
-		if reg.stats != nil {
-			return reg.stats.GetTcpToDecoy()
-		}
-	}
-	return 0
-}
-
 func (cjSession *ConjureSession) setV6Support(support uint) {
 	switch support {
 	case v4:
@@ -833,21 +644,6 @@ func (cjSession *ConjureSession) setV6Support(support uint) {
 	}
 }
 
-func (cjSession *ConjureSession) getRandomDuration(base, min, max int) time.Duration {
-	addon := getRandInt(min, max) / 1000 // why this min and max???
-	rtt := rttInt(cjSession.getTcpToDecoy())
-	return time.Millisecond * time.Duration(base+rtt*addon)
-}
-
-func (cjSession *ConjureSession) getTcpToDecoy() uint32 {
-	if cjSession != nil {
-		if cjSession.stats != nil {
-			return cjSession.stats.GetTcpToDecoy()
-		}
-	}
-	return 0
-}
-
 func sleepWithContext(ctx context.Context, duration time.Duration) {
 	timer := time.NewTimer(duration)
 	defer timer.Stop()
@@ -855,14 +651,6 @@ func sleepWithContext(ctx context.Context, duration time.Duration) {
 	case <-timer.C:
 	case <-ctx.Done():
 	}
-}
-
-func rttInt(millis uint32) int {
-	defaultValue := 300
-	if millis == 0 {
-		return defaultValue
-	}
-	return int(millis)
 }
 
 // SelectDecoys - Get an array of `width` decoys to be used for registration
@@ -946,9 +734,35 @@ func getStationKey() [32]byte {
 }
 
 type sharedKeys struct {
-	SharedSecret, Representative                               []byte
-	FspKey, FspIv, VspKey, VspIv, NewMasterSecret, ConjureSeed []byte
-	reader                                                     io.Reader
+	SharedSecret, Representative []byte
+	ConjureSeed                  []byte
+	reader                       io.Reader
+}
+
+// GetRandomDuration returns a random duration that
+func (reg *ConjureReg) GetRandomDuration(base, min, max int) time.Duration {
+	addon := getRandInt(min, max) / 1000 // why this min and max???
+	rtt := rttInt(reg.getTcpToDecoy())
+	return time.Millisecond * time.Duration(base+rtt*addon)
+}
+
+func (reg *ConjureReg) getTcpToDecoy() uint32 {
+	reg.m.Lock()
+	defer reg.m.Unlock()
+	if reg != nil {
+		if reg.stats != nil {
+			return reg.stats.GetTcpToDecoy()
+		}
+	}
+	return 0
+}
+
+func rttInt(millis uint32) int {
+	defaultValue := 300
+	if millis == 0 {
+		return defaultValue
+	}
+	return int(millis)
 }
 
 func generateSharedKeys(pubkey [32]byte) (*sharedKeys, error) {
@@ -959,31 +773,10 @@ func generateSharedKeys(pubkey [32]byte) (*sharedKeys, error) {
 
 	tdHkdf := hkdf.New(sha256.New, sharedSecret, []byte("conjureconjureconjureconjure"), nil)
 	keys := &sharedKeys{
-		SharedSecret:    sharedSecret,
-		Representative:  representative,
-		FspKey:          make([]byte, 16),
-		FspIv:           make([]byte, 12),
-		VspKey:          make([]byte, 16),
-		VspIv:           make([]byte, 12),
-		NewMasterSecret: make([]byte, 48),
-		ConjureSeed:     make([]byte, 16),
-		reader:          tdHkdf,
-	}
-
-	if _, err := tdHkdf.Read(keys.FspKey); err != nil {
-		return keys, err
-	}
-	if _, err := tdHkdf.Read(keys.FspIv); err != nil {
-		return keys, err
-	}
-	if _, err := tdHkdf.Read(keys.VspKey); err != nil {
-		return keys, err
-	}
-	if _, err := tdHkdf.Read(keys.VspIv); err != nil {
-		return keys, err
-	}
-	if _, err := tdHkdf.Read(keys.NewMasterSecret); err != nil {
-		return keys, err
+		SharedSecret:   sharedSecret,
+		Representative: representative,
+		ConjureSeed:    make([]byte, 16),
+		reader:         tdHkdf,
 	}
 	if _, err := tdHkdf.Read(keys.ConjureSeed); err != nil {
 		return keys, err
