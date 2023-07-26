@@ -1,5 +1,3 @@
-git.torproject.org/pluggable-transports/goptlib.git v1.3.0 h1:G+iuRUblCCC2xnO+0ag1/4+aaM98D5mjWP1M0v9s8a0=
-git.torproject.org/pluggable-transports/goptlib.git v1.3.0/go.mod h1:4PBMl1dg7/3vMWSoWb46eGWlrxkUyn/CAJmxhDLAlDs=
 github.com/BurntSushi/toml v1.2.1 h1:9F2/+DoOYIOksmaJFPw1tGFy1eDnIJXg+UHjuD8lTak=
 github.com/BurntSushi/toml v1.2.1/go.mod h1:CxXYINrC8qIiEnFrOxCa7Jy5BFHlXnUU2pbicEuybxQ=
 github.com/andybalholm/brotli v1.0.5-0.20220518190645-786ec621f618 h1:kaHHkLhLE0tRP2uiqVdNtOkQ82XMPDH/SE2ixiXdAYs=
@@ -39,8 +37,6 @@ github.com/hashicorp/golang-lru v0.6.0/go.mod h1:iADmTwqILo4mZ8BN3D2Q6+9jd8WM5uG
 github.com/ianlancetaylor/demangle v0.0.0-20210905161508-09a460cdf81d/go.mod h1:aYm2/VgdVmcIU8iMfdMvDMsRAQjcfZSKFby6HOFvi/w=
 github.com/jinzhu/copier v0.3.5 h1:GlvfUwHk62RokgqVNvYsku0TATCF7bAHVwEXoBh3iJg=
 github.com/jinzhu/copier v0.3.5/go.mod h1:DfbEm0FYsaqBcKcFuvmOZb218JkPGtvSHsKg8S8hyyg=
-github.com/jmwample/obfs4 v0.0.0-20230725223418-2d2e5b4a16ba h1:95viXWL8giMADqP9xVcfHV7d74iRD9wueSVpmFMhkzE=
-github.com/jmwample/obfs4 v0.0.0-20230725223418-2d2e5b4a16ba/go.mod h1:EETqSXTuxLU9pRyEHKfYJKaprjh8573XRoSTQdR1g/8=
 github.com/keltia/proxy v0.9.3 h1:Cpv6VA50SXSY+JxQ6q+BHpPMNAfWGZU4Qb5kdwUR1TY=
 github.com/keltia/proxy v0.9.3/go.mod h1:fLU4DmBPG0oh0md9fWggE2oG2m7Lchv3eim+GiO3pZY=
 github.com/keltia/ripe-atlas v0.0.0-20211221125000-f6eb808d5dc6 h1:9bEIiZu9Vonja7prDPBNMJRP9cLqVSKojqqrMhLiTeg=
@@ -56,8 +52,8 @@ github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
 github.com/kylelemons/godebug v0.0.0-20170820004349-d65d576e9348/go.mod h1:B69LEHPfb2qLo0BaaOLcbitczOKLWTsrBG9LczfCD4k=
 github.com/libp2p/go-reuseport v0.3.0 h1:iiZslO5byUYZEg9iCwJGf5h+sf1Agmqx2V2FDjPyvUw=
 github.com/libp2p/go-reuseport v0.3.0/go.mod h1:laea40AimhtfEqysZ71UpYj4S+R9VpH8PgqLo7L+SwI=
-github.com/mingyech/conjure v0.2.1-0.20230717230628-994484567d96 h1:2rNRt02fArKtHIoUZDO8ytIYpIwmFsy9TfVnrKh2JBs=
-github.com/mingyech/conjure v0.2.1-0.20230717230628-994484567d96/go.mod h1:381fI6vOYafex2ghjR9e9jgpP9Rz3aPds6xkbNWC3KI=
+github.com/mingyech/conjure v0.2.1-0.20230726185015-dede9037af56 h1:O5hJRifOzSETb+iCr15w3RkiLuPj//oZFo7ETfLBe+o=
+github.com/mingyech/conjure v0.2.1-0.20230726185015-dede9037af56/go.mod h1:nqbfYqeGZ5BNUhwpC6s6ATUmuyQGLBRiLeKtBOkAyz8=
 github.com/mingyech/dtls v0.1.0 h1:AdYeTIbgBK+gPquewN1HdZ6EM7GkuHoa5UNU77Ob1Ns=
 github.com/mingyech/dtls v0.1.0/go.mod h1:YStHDz+DrppG95Sruyv/ohTLpFupgFZW9xqYlzJ7vSs=
 github.com/mingyech/transport v0.1.1 h1:nvIMoQIe48xM/K30G6WIhsCEti7B+FodMhKiLgk3YXk=
@@ -97,6 +93,8 @@ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZb
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/refraction-networking/ed25519 v0.1.2 h1:08kJZUkAlY7a7cZGosl1teGytV+QEoNxPO7NnRvAB+g=
 github.com/refraction-networking/ed25519 v0.1.2/go.mod h1:nxYLUAYt/hmNpAh64PNSQ/tQ9gTIB89wCaGKJlRtZ9I=
+github.com/refraction-networking/obfs4 v0.1.1 h1:9AmxHFbafOZzXTGidKI2EeL0FGkIramIlB4dPLg3d+4=
+github.com/refraction-networking/obfs4 v0.1.1/go.mod h1:wAl/+gWiLsrcykJA3nKJHx89f5/gXGM8UKvty7+mvbM=
 github.com/refraction-networking/utls v1.2.0 h1:U5f8wkij2NVinfLuJdFP3gCMwIHs+EzvhxmYdXgiapo=
 github.com/refraction-networking/utls v1.2.0/go.mod h1:NPq+cVqzH7D1BeOkmOcb5O/8iVewAsiVt2x1/eO0hgQ=
 github.com/sergeyfrolov/bsbuffer v0.0.0-20180903213811-94e85abb8507 h1:ML7ZNtcln5UBo5Wv7RIv9Xg3Pr5VuRCWLFXEwda54Y4=

@@ -23,7 +23,6 @@ require (
 )
 
 require (
-	git.torproject.org/pluggable-transports/goptlib.git v1.3.0 // indirect
 	github.com/BurntSushi/toml v1.2.1 // indirect
 	github.com/andybalholm/brotli v1.0.5-0.20220518190645-786ec621f618 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
@@ -50,7 +49,7 @@ require (
 	github.com/pion/sctp v1.8.7 // indirect
 	github.com/pion/stun v0.3.5 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	gitlab.com/yawning/obfs4.git v0.0.0-20230519154740-645026c2ada4 // indirect
+	github.com/refraction-networking/obfs4 v0.1.1 // indirect
 	gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/goptlib v1.4.0 // indirect
 	golang.org/x/sys v0.10.0 // indirect
 	golang.org/x/text v0.11.0 // indirect
@@ -58,4 +57,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/refraction-networking/conjure => github.com/mingyech/conjure v0.2.1-0.20230717230628-994484567d96
+replace github.com/refraction-networking/conjure => github.com/mingyech/conjure v0.2.1-0.20230726185015-dede9037af56
