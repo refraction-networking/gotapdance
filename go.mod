@@ -16,7 +16,7 @@ require (
 	github.com/refraction-networking/utls v1.2.0
 	github.com/sergeyfrolov/bsbuffer v0.0.0-20180903213811-94e85abb8507
 	github.com/sirupsen/logrus v1.9.0
-	github.com/stretchr/testify v1.8.1
+	github.com/stretchr/testify v1.8.4
 	golang.org/x/crypto v0.11.0
 	golang.org/x/net v0.12.0
 	google.golang.org/protobuf v1.31.0
@@ -32,14 +32,21 @@ require (
 	github.com/felixge/fgprof v0.9.3 // indirect
 	github.com/flynn/noise v1.0.0 // indirect
 	github.com/go-redis/redis/v8 v8.11.5 // indirect
+	github.com/google/gopacket v1.1.19 // indirect
 	github.com/google/pprof v0.0.0-20211214055906-6f57359322fd // indirect
 	github.com/hashicorp/golang-lru v0.6.0 // indirect
 	github.com/keltia/proxy v0.9.3 // indirect
 	github.com/klauspost/compress v1.15.12 // indirect
+	github.com/libp2p/go-reuseport v0.3.0 // indirect
+	github.com/mingyech/dtls v0.1.0 // indirect
+	github.com/mingyech/transport v0.1.1 // indirect
 	github.com/mroth/weightedrand v1.0.0 // indirect
 	github.com/oschwald/geoip2-golang v1.8.0 // indirect
 	github.com/oschwald/maxminddb-golang v1.10.0 // indirect
 	github.com/pebbe/zmq4 v1.2.9 // indirect
+	github.com/pion/logging v0.2.2 // indirect
+	github.com/pion/randutil v0.1.0 // indirect
+	github.com/pion/sctp v1.8.7 // indirect
 	github.com/pion/stun v0.3.5 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/refraction-networking/obfs4 v0.1.1 // indirect
@@ -49,3 +56,5 @@ require (
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/refraction-networking/conjure => github.com/mingyech/conjure v0.2.1-0.20230726185015-dede9037af56

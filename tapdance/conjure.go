@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/refraction-networking/conjure/pkg/core"
+	"github.com/refraction-networking/conjure/pkg/core/interfaces"
 	ps "github.com/refraction-networking/conjure/pkg/phantoms"
 	pb "github.com/refraction-networking/conjure/proto"
 	tls "github.com/refraction-networking/utls"
@@ -77,8 +78,17 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 		return nil, err
 	}
 
+	tp, isconnecting := cjSession.Transport.(interfaces.ConnectingTransport)
+	if isconnecting {
+		if tp.DisableRegDelay() {
+			cjSession.RegDelay = 0
+		}
+	}
+
+	sleepWithContext(ctx, cjSession.RegDelay)
+
 	Logger().Debugf("%v Attempting to Connect using %s ...", cjSession.IDString(), registration.Transport.Name())
-	return registration.Connect(ctx)
+	return registration.Connect(ctx, cjSession.Dialer)
 }
 
 // // testV6 -- This is over simple and incomplete (currently unused)
@@ -128,6 +138,9 @@ type ConjureSession struct {
 	//		we use their dialer to prevent connection loopback into our own proxy
 	//		connection when tunneling the whole device.
 	Dialer dialFunc
+
+	// RegDelay is the delay duration to wait for registration ingest.
+	RegDelay time.Duration
 
 	// performance tracking
 	stats *pb.SessionStats
@@ -242,7 +255,7 @@ func (cjSession *ConjureSession) conjureReg() *ConjureReg {
 		v6Support:      cjSession.V6Support.include,
 		covertAddress:  cjSession.CovertAddress,
 		Transport:      cjSession.Transport,
-		Dialer:         cjSession.Dialer,
+		Dialer:         removeLaddr(cjSession.Dialer),
 		useProxyHeader: cjSession.UseProxyHeader,
 	}
 }
@@ -304,7 +317,7 @@ type resultTuple struct {
 }
 
 // Simple type alias for brevity
-type dialFunc = func(ctx context.Context, network, addr string) (net.Conn, error)
+type dialFunc = func(ctx context.Context, network, laddr, raddr string) (net.Conn, error)
 
 func (reg *ConjureReg) connect(ctx context.Context, addr string, dialer dialFunc) (net.Conn, error) {
 	//[reference] Create Context with deadline
@@ -320,7 +333,7 @@ func (reg *ConjureReg) connect(ctx context.Context, addr string, dialer dialFunc
 	phantomAddr := net.JoinHostPort(addr, strconv.Itoa(int(reg.phantomDstPort)))
 
 	// conn, err := reg.Dialer(childCtx, "tcp", phantomAddr)
-	return dialer(childCtx, "tcp", phantomAddr)
+	return dialer(childCtx, "tcp", "", phantomAddr)
 }
 
 func (reg *ConjureReg) getFirstConnection(ctx context.Context, dialer dialFunc, phantoms []*net.IP) (net.Conn, error) {
@@ -371,25 +384,43 @@ func (reg *ConjureReg) getFirstConnection(ctx context.Context, dialer dialFunc, 
 // Connect - Use a registration (result of calling Register) to connect to a phantom
 // Note: This is hacky but should work for v4, v6, or both as any nil phantom addr will
 // return a dial error and be ignored.
-func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
+func (reg *ConjureReg) Connect(ctx context.Context, dialer dialFunc) (net.Conn, error) {
 	phantoms := []*net.IP{reg.phantom4, reg.phantom6}
 
 	// Prepare the transport by generating any necessary keys
 	pubKey := getStationKey()
 	reg.Transport.PrepareKeys(pubKey, reg.keys.SharedSecret, reg.keys.reader)
 
-	conn, err := reg.getFirstConnection(ctx, reg.Dialer, phantoms)
-	if err != nil {
-		Logger().Infof("%v failed to form phantom connection: %v", reg.sessionIDStr, err)
-		return nil, err
+	switch transport := reg.Transport.(type) {
+	case interfaces.WrappingTransport:
+		conn, err := reg.getFirstConnection(ctx, dialer, phantoms)
+		if err != nil {
+			Logger().Infof("%v failed to form phantom connection: %v", reg.sessionIDStr, err)
+			return nil, err
+		}
+
+		conn, err = transport.WrapConn(conn)
+		if err != nil {
+			Logger().Infof("WrapConn failed")
+			return nil, err
+		}
+
+		return conn, nil
+	case interfaces.ConnectingTransport:
+		transportDialer, err := transport.WrapDial(dialer)
+		if err != nil {
+			return nil, fmt.Errorf("error wrapping transport dialer: %v", err)
+		}
+
+		conn, err := reg.getFirstConnection(ctx, transportDialer, phantoms)
+		if err != nil {
+			return nil, fmt.Errorf("failed to dialing connecting transport: %v", err)
+		}
+
+		return conn, nil
 	}
 
-	conn, err = reg.Transport.WrapConn(conn)
-	if err != nil {
-		Logger().Infof("WrapConn failed")
-		return nil, err
-	}
-	return conn, nil
+	return nil, fmt.Errorf("transport does not implement any transport interface")
 }
 
 // ConjureReg - Registration structure created for each individual registration within a session.
@@ -410,7 +441,7 @@ type ConjureReg struct {
 	// THIS IS REQUIRED TO INTERFACE WITH PSIPHON ANDROID
 	//		we use their dialer to prevent connection loopback into our own proxy
 	//		connection when tunneling the whole device.
-	Dialer dialFunc
+	Dialer func(context.Context, string, string) (net.Conn, error)
 
 	stats *pb.SessionStats
 	keys  *sharedKeys
@@ -691,6 +722,12 @@ func (reg *ConjureReg) generateClientToStation() (*pb.ClientToStation, error) {
 	currentGen := Assets().GetGeneration()
 	currentLibVer := currentClientLibraryVersion()
 	transport := reg.getPbTransport()
+
+	err := reg.Transport.Prepare(reg.ConjureSession.Dialer)
+	if err != nil {
+		return nil, fmt.Errorf("error preparing transport: %v", err)
+	}
+
 	transportParams, err := reg.getPbTransportParams()
 	if err != nil {
 		Logger().Debugf("%s failed to marshal transport parameters ", reg.sessionIDStr)
@@ -1022,6 +1059,13 @@ func (err RegError) CodeStr() string {
 		return "TLS_ERROR"
 	default:
 		return "UNKNOWN"
+	}
+}
+
+// removeLaddr removes the laddr field in dialer
+func removeLaddr(dialer func(ctx context.Context, network, laddr, raddr string) (net.Conn, error)) func(ctx context.Context, network, raddr string) (net.Conn, error) {
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		return dialer(ctx, network, "", addr)
 	}
 }
 

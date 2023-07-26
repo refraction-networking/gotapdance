@@ -3,7 +3,11 @@ package tapdance
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
+	"strings"
+	"sync"
+	"time"
 
 	transports "github.com/refraction-networking/conjure/pkg/transports/client"
 	pb "github.com/refraction-networking/conjure/proto"
@@ -19,7 +23,17 @@ type Dialer struct {
 	// THIS IS REQUIRED TO INTERFACE WITH PSIPHON ANDROID
 	//		we use their dialer to prevent connection loopback into our own proxy
 	//		connection when tunneling the whole device.
+	//
+	// Deprecated: Dialer does not allow specifying the local address used for NAT traversal in
+	// some transports. Use DialerWithLaddr instead.
 	Dialer func(context.Context, string, string) (net.Conn, error)
+
+	// DialerWithLaddr allows a custom dialer to be used for the underlying TCP/UDP connection.
+	//
+	// THIS IS REQUIRED TO INTERFACE WITH PSIPHON ANDROID
+	//		we use their dialer to prevent connection loopback into our own proxy
+	//		connection when tunneling the whole device.
+	DialerWithLaddr dialFunc
 
 	DarkDecoy bool
 
@@ -35,6 +49,9 @@ type Dialer struct {
 	// The type of transport to use for Conjure connections.
 	Transport       pb.TransportType
 	TransportConfig Transport
+
+	// RegDelay is the delay duration to wait for registration ingest.
+	RegDelay time.Duration
 
 	UseProxyHeader bool
 	V6Support      bool
@@ -84,10 +101,36 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 		}
 	}
 
-	if d.Dialer == nil {
+	if d.DialerWithLaddr != nil && d.Dialer != nil {
+		return nil, fmt.Errorf("both DialerWithLaddr and Dialer are defined, only define DialerWithLaddr")
+	}
+
+	if d.Dialer != nil {
+		d.DialerWithLaddr = func(ctx context.Context, network, laddr, raddr string) (net.Conn, error) {
+			if laddr != "" {
+				return nil, errUnsupportedLaddr
+			}
+			return d.Dialer(ctx, network, raddr)
+		}
+	}
+
+	if d.DialerWithLaddr == nil {
 		// custom dialer is not set, use default
 		defaultDialer := net.Dialer{}
-		d.Dialer = defaultDialer.DialContext
+		dialMutex := sync.Mutex{}
+		d.DialerWithLaddr = func(ctx context.Context, network, laddr, raddr string) (net.Conn, error) {
+			localAddr, err := resolveAddr(network, laddr)
+			if err != nil {
+				return nil, fmt.Errorf("error resolving laddr: %v", err)
+			}
+
+			dialMutex.Lock()
+			defer dialMutex.Unlock()
+
+			defaultDialer.LocalAddr = localAddr
+
+			return defaultDialer.DialContext(ctx, network, raddr)
+		}
 	}
 
 	if !d.SplitFlows {
@@ -126,10 +169,11 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 			cjSession = MakeConjureSession(address, transport)
 		}
 
-		cjSession.Dialer = d.Dialer
+		cjSession.Dialer = d.DialerWithLaddr
 		cjSession.UseProxyHeader = d.UseProxyHeader
 		cjSession.Width = uint(d.Width)
 		cjSession.DisableRegistrarOverrides = d.DisableRegistrarOverrides
+		cjSession.RegDelay = d.RegDelay
 
 		if d.V6Support {
 			cjSession.V6Support = &V6{include: both, support: true}
@@ -156,3 +200,17 @@ func (d *Dialer) DialProxy() (net.Conn, error) {
 func (d *Dialer) DialProxyContext(ctx context.Context) (net.Conn, error) {
 	return d.DialContext(ctx, "tcp", "")
 }
+
+func resolveAddr(network, addrStr string) (net.Addr, error) {
+	if addrStr == "" {
+		return nil, nil
+	}
+
+	if strings.Contains(network, "tcp") {
+		return net.ResolveTCPAddr(network, addrStr)
+	}
+
+	return net.ResolveUDPAddr(network, addrStr)
+}
+
+var errUnsupportedLaddr = fmt.Errorf("dialer does not support laddr")
