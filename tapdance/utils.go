@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/refraction-networking/conjure/pkg/ed25519/extra25519"
+	"github.com/refraction-networking/ed25519/extra25519"
 	"golang.org/x/crypto/curve25519"
 )
 
