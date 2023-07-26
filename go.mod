@@ -11,7 +11,7 @@ require (
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.7.0
-	github.com/refraction-networking/conjure v0.4.6-1
+	github.com/refraction-networking/conjure v0.6.0-dtlsbeta
 	github.com/refraction-networking/ed25519 v0.1.2
 	github.com/refraction-networking/utls v1.2.0
 	github.com/sergeyfrolov/bsbuffer v0.0.0-20180903213811-94e85abb8507
@@ -56,5 +56,3 @@ require (
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/refraction-networking/conjure => github.com/mingyech/conjure v0.2.1-0.20230726185015-dede9037af56
