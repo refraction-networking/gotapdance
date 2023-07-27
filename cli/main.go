@@ -179,7 +179,6 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget 
 		DarkDecoyRegistrar: decoyreg.NewDecoyRegistrar(),
 		UseProxyHeader:     proxyHeader,
 		V6Support:          v6Support,
-		Width:              width,
 		// Transport:          getTransportFromName(transport), // Still works for backwards compatibility
 		TransportConfig:           t,
 		PhantomNet:                phantomNet,

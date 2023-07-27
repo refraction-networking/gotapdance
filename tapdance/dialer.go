@@ -38,7 +38,6 @@ type Dialer struct {
 
 	UseProxyHeader bool
 	V6Support      bool
-	Width          int
 
 	// Subnet that we want to limit to (or empty if they're all fine)
 	PhantomNet string
@@ -128,7 +127,6 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 
 		cjSession.Dialer = d.Dialer
 		cjSession.UseProxyHeader = d.UseProxyHeader
-		cjSession.Width = uint(d.Width)
 		cjSession.DisableRegistrarOverrides = d.DisableRegistrarOverrides
 
 		if d.V6Support {

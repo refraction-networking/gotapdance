@@ -7,13 +7,11 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"math/big"
 	"net"
 	"strconv"
 	"sync"
 	"time"
 
-	"github.com/refraction-networking/conjure/pkg/core"
 	ps "github.com/refraction-networking/conjure/pkg/phantoms"
 	pb "github.com/refraction-networking/conjure/proto"
 	"golang.org/x/crypto/hkdf"
@@ -44,7 +42,8 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 	}
 
 	//cjSession.setV6Support(both)	 // We don't want to override this here; defaults set in MakeConjureSession
-
+	// Prepare registrar specific keys
+	registrationMethod.PrepareKeys(getStationKey())
 	// Choose Phantom Address in Register depending on v6 support.
 	registration, err := registrationMethod.Register(cjSession, ctx)
 	if err != nil {
@@ -110,7 +109,6 @@ func currentClientLibraryVersion() uint32 {
 // ConjureSession - Create a session with details for registration and connection
 type ConjureSession struct {
 	Keys           *sharedKeys
-	Width          uint
 	V6Support      *V6
 	UseProxyHeader bool
 	SessionID      uint64
@@ -142,7 +140,6 @@ func MakeConjureSessionSilent(covert string, transport Transport) *ConjureSessio
 	//[TODO]{priority:NOW} move v6support initialization to assets so it can be tracked across dials
 	cjSession := &ConjureSession{
 		Keys:                      keys,
-		Width:                     defaultRegWidth,
 		V6Support:                 &V6{support: true, include: both},
 		UseProxyHeader:            false,
 		Transport:                 transport,
@@ -292,11 +289,6 @@ func (cjSession *ConjureSession) UnidirectionalRegData(regSource *pb.Registratio
 	}, nil
 }
 
-// Decoys returns the set of usable decoys for a given conjure session.
-func (cjSession *ConjureSession) Decoys() ([]*pb.TLSDecoySpec, error) {
-	return SelectDecoys(cjSession.Keys.SharedSecret, cjSession.V6Support.include, cjSession.Width)
-}
-
 // new: created for the sake of removing ConjureReg
 func (cjSession *ConjureSession) GetV6Support() *bool {
 	support := true
@@ -314,6 +306,10 @@ func (cjSession *ConjureSession) GetV4Support() *bool {
 		support = false
 	}
 	return &support
+}
+
+func (cjSession *ConjureSession) GetV6Include() uint {
+	return cjSession.V6Support.include
 }
 
 type resultTuple struct {
@@ -651,44 +647,6 @@ func sleepWithContext(ctx context.Context, duration time.Duration) {
 	case <-timer.C:
 	case <-ctx.Done():
 	}
-}
-
-// SelectDecoys - Get an array of `width` decoys to be used for registration
-func SelectDecoys(sharedSecret []byte, version uint, width uint) ([]*pb.TLSDecoySpec, error) {
-
-	//[reference] prune to v6 only decoys if useV6 is true
-	var allDecoys []*pb.TLSDecoySpec
-	switch version {
-	case v6:
-		allDecoys = Assets().GetV6Decoys()
-	case v4:
-		allDecoys = Assets().GetV4Decoys()
-	case both:
-		allDecoys = Assets().GetAllDecoys()
-	default:
-		allDecoys = Assets().GetAllDecoys()
-	}
-
-	if len(allDecoys) == 0 {
-		return nil, fmt.Errorf("no decoys")
-	}
-
-	decoys := make([]*pb.TLSDecoySpec, width)
-	numDecoys := big.NewInt(int64(len(allDecoys)))
-	hmacInt := new(big.Int)
-	idx := new(big.Int)
-
-	//[reference] select decoys
-	for i := uint(0); i < width; i++ {
-		macString := fmt.Sprintf("registrationdecoy%d", i)
-		hmac := core.ConjureHMAC(sharedSecret, macString)
-		hmacInt = hmacInt.SetBytes(hmac[:8])
-		hmacInt.SetBytes(hmac)
-		hmacInt.Abs(hmacInt)
-		idx.Mod(hmacInt, numDecoys)
-		decoys[i] = allDecoys[int(idx.Int64())]
-	}
-	return decoys, nil
 }
 
 // var phantomSubnets = []conjurePhantomSubnet{

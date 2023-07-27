@@ -12,4 +12,7 @@ type Transport interfaces.Transport
 // decoy registrations.
 type Registrar interface {
 	Register(*ConjureSession, context.Context) (*ConjureReg, error)
+
+	// Prepare key materials specific to the registrar
+	PrepareKeys(pubkey [32]byte) error
 }
