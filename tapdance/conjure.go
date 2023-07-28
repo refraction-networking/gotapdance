@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -336,10 +337,14 @@ func (reg *ConjureReg) connect(ctx context.Context, addr string, dialer dialFunc
 	return dialer(childCtx, "tcp", "", phantomAddr)
 }
 
+// ErrNoOpenConns indicates that the client Failed to establish a connection with any phantom addr
+var ErrNoOpenConns = errors.New("no open connections")
+
 func (reg *ConjureReg) getFirstConnection(ctx context.Context, dialer dialFunc, phantoms []*net.IP) (net.Conn, error) {
 	connChannel := make(chan resultTuple, len(phantoms))
 	for _, p := range phantoms {
 		if p == nil {
+			connChannel <- resultTuple{nil, fmt.Errorf("nil addr")}
 			continue
 		}
 		go func(phantom *net.IP) {
@@ -378,7 +383,7 @@ func (reg *ConjureReg) getFirstConnection(ctx context.Context, dialer dialFunc, 
 		return rt.conn, nil
 	}
 
-	return nil, fmt.Errorf("no open connections")
+	return nil, ErrNoOpenConns
 }
 
 // Connect - Use a registration (result of calling Register) to connect to a phantom

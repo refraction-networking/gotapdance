@@ -1,6 +1,7 @@
 package tapdance
 
 import (
+	"context"
 	"crypto/hmac"
 	"encoding/hex"
 	"fmt"
@@ -249,4 +250,55 @@ func TestSelectDecoysErrorHandling(t *testing.T) {
 	require.Nil(t, err)
 	require.NotNil(t, decoy)
 	assert.Equal(t, "tapdance1.freeaeskey.xyz", decoy[0].GetHostname())
+}
+
+func TestGetFirstConnection(t *testing.T) {
+	type params struct {
+		ips     []*net.IP
+		dialErr error
+		retErr  error
+	}
+
+	ip1 := net.IPv4(1, 1, 1, 1)
+	ip2 := net.IPv6loopback
+
+	testCases := []params{
+		{nil, nil, ErrNoOpenConns},
+		{[]*net.IP{}, nil, ErrNoOpenConns},
+		{[]*net.IP{&ip1}, nil, nil},
+		{[]*net.IP{nil}, nil, ErrNoOpenConns},
+		{[]*net.IP{&ip1, &ip1}, nil, nil},
+		{[]*net.IP{&ip1, &ip2}, nil, nil},
+		{[]*net.IP{&ip2, &ip1}, nil, nil},
+		{[]*net.IP{&ip2, &ip2}, nil, nil},
+		{[]*net.IP{&ip1, nil}, nil, nil},
+		{[]*net.IP{nil, &ip1}, nil, nil},
+		{[]*net.IP{&ip2, nil}, nil, nil},
+	}
+
+	for i, c := range testCases {
+		testGetFirstConn(t, c.ips, c.dialErr, c.retErr, i)
+	}
+}
+
+func testGetFirstConn(t *testing.T, addrList []*net.IP, dialErr error, retErr error, i int) {
+	reg := ConjureReg{
+		sessionIDStr:   "test",
+		phantomDstPort: 443,
+	}
+
+	cl, _ := net.Pipe()
+	defer cl.Close()
+
+	dialFn := func(ctx context.Context, network, laddr, raddr string) (net.Conn, error) {
+		return cl, dialErr
+	}
+
+	c, err := reg.getFirstConnection(context.Background(), dialFn, addrList)
+	if retErr != nil {
+		require.ErrorIs(t, err, retErr, i)
+	} else {
+		require.Nil(t, err, i)
+		require.NotNil(t, c, i)
+	}
 }
