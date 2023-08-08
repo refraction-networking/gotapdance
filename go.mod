@@ -57,4 +57,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/refraction-networking/conjure => github.com/refraction-networking/conjure v0.6.3-0.20230731143330-9de7f6db3cd1
+replace github.com/refraction-networking/conjure => github.com/refraction-networking/conjure v0.6.3-0.20230807104938-15248aa01476
