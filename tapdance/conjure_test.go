@@ -62,7 +62,7 @@ func TestSelectBoth(t *testing.T) {
 		0x8, 0x9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF,
 	}
 
-	phantomIPAddr4, phantomIPAddr6, err := SelectPhantom(seed, both)
+	phantomIPAddr4, phantomIPAddr6, _, err := SelectPhantom(seed, both)
 	require.Nil(t, err, "encountered err while selecting IPs")
 	require.NotNil(t, phantomIPAddr4, "Failed to select IPv4 address (support: both")
 	require.Equal(t, "192.122.190.252", phantomIPAddr4.String(), "Incorrect Address chosen")
