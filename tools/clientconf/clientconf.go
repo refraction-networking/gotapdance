@@ -52,7 +52,7 @@ func printClientConf(clientConf *pb.ClientConf) {
 		fmt.Printf("\nPhantom Subnets List:\n")
 		var index uint = 0
 		for _, block := range phantoms.GetWeightedSubnets() {
-			fmt.Printf("\nweight: %d, subnets:\n", block.GetWeight())
+			fmt.Printf("\nweight: %d, support random port: %v, subnets:\n", block.GetWeight(), block.GetRandomizeDstPort())
 			for _, subnet := range block.GetSubnets() {
 				fmt.Printf(" %d: %s\n", index, subnet)
 				index++
@@ -296,7 +296,7 @@ func updateDecoy(decoy *pb.TLSDecoySpec, host string, ip string, pubkey string, 
 	}
 }
 
-func addSubnets(subnets []string, weight *uint, clientConf *pb.ClientConf) {
+func addSubnets(subnets []string, weight *uint, randomizeDstPort *bool, clientConf *pb.ClientConf) {
 	if *weight == 0 {
 		log.Fatal("Error: -add-subnet requires the weight flag to be set to a non-zero 32-bit unsinged integer")
 	}
@@ -310,8 +310,9 @@ func addSubnets(subnets []string, weight *uint, clientConf *pb.ClientConf) {
 
 	// add new item to PhantomSubnetsList.WeightedSubnets
 	var newPhantomSubnet = pb.PhantomSubnets{
-		Weight:  &weight32,
-		Subnets: subnets,
+		Weight:           &weight32,
+		Subnets:          subnets,
+		RandomizeDstPort: randomizeDstPort,
 	}
 	clientConf.PhantomSubnetsList.WeightedSubnets = append(clientConf.PhantomSubnetsList.WeightedSubnets, &newPhantomSubnet)
 }
@@ -490,6 +491,7 @@ func main() {
 	var add_subnets = flag.String("add-subnets", "", "Add a subnet or list of space-separated subnets between double quotes (\"127.0.0.1/24 2001::/32\" etc.), requires additional weight flag")
 	var delete_subnet = flag.Int("delete-subnet", -1, "Specifies the index of a subnet to delete")
 	var weight = flag.Uint("weight", 0, "Subnet weight when add-subnets is used")
+	var randomizeDstPort = flag.Bool("randomize-dst-port", true, "Specifies if the subnet supports randomized port")
 	var subnet_file = flag.String("subnet-file", "", "Path to TOML file containing lists of subnets to use in config. TOML should be formatted like: \n"+
 		"[[WeightedSubnets]] \n\tWeight = 9 \n\tSubnets = [\"192.122.190.0/24\", \"2001:48a8:687f:1::/64\"] \n"+
 		"[[WeightedSubnets]] \n\tWeight = 1 \n\tSubnets = [\"141.219.0.0/16\", \"35.8.0.0/16\"]",
@@ -516,7 +518,7 @@ func main() {
 	// Use subnet-file
 	if *subnet_file != "" {
 
-		data, err := ioutil.ReadFile(*subnet_file)
+		data, err := os.ReadFile(*subnet_file)
 		if err != nil {
 			log.Fatalf("error opening configuration file: %v", err)
 		}
@@ -560,7 +562,7 @@ func main() {
 	// Add a subnet
 	if *add_subnets != "" {
 		subnets := strings.Split(*add_subnets, " ")
-		addSubnets(subnets, weight, clientConf)
+		addSubnets(subnets, weight, randomizeDstPort, clientConf)
 	}
 
 	// Update generation
