@@ -14,9 +14,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/golang/protobuf/proto"
 	toml "github.com/pelletier/go-toml"
 	pb "github.com/refraction-networking/conjure/proto"
+	"google.golang.org/protobuf/proto"
 )
 
 func printClientConf(clientConf *pb.ClientConf) {
@@ -66,7 +66,7 @@ func printClientConf(clientConf *pb.ClientConf) {
 }
 
 // Single line, not nice for printing, but good for diffs
-func decoyToStr(decoy pb.TLSDecoySpec) string {
+func decoyToStr(decoy *pb.TLSDecoySpec) string {
 	ip := make(net.IP, 4)
 	binary.BigEndian.PutUint32(ip, decoy.GetIpv4Addr())
 	ip6 := net.IP(decoy.GetIpv6Addr())
@@ -172,15 +172,13 @@ func printDiff(old *pb.ClientConf, new_fn string) {
 	all_decoys := make(map[string]int) // List of all decoys (union of both)
 
 	for i := 0; i < n; i++ {
-		od := pb.TLSDecoySpec{} // Old Decoy
-		nd := pb.TLSDecoySpec{} // New Decoy
 		if i < len(odecoys) {
-			od = *odecoys[i]
+			od := odecoys[i] // Old Decoy
 			old_decoys[decoyToStr(od)] = i
 			all_decoys[decoyToStr(od)] = 1
 		}
 		if i < len(ndecoys) {
-			nd = *ndecoys[i]
+			nd := ndecoys[i] // New Decoy
 			new_decoys[decoyToStr(nd)] = i
 			all_decoys[decoyToStr(nd)] = 1
 		}
@@ -209,15 +207,12 @@ func printDiff(old *pb.ClientConf, new_fn string) {
 		_, add := added_idxs[i]
 
 		if del {
-			fmt.Printf("- %d:  %s\n", i, decoyToStr(*odecoys[i]))
+			fmt.Printf("- %d:  %s\n", i, decoyToStr(odecoys[i]))
 		}
 		if add {
-			fmt.Printf("+ %d:  %s\n", i, decoyToStr(*ndecoys[i]))
+			fmt.Printf("+ %d:  %s\n", i, decoyToStr(ndecoys[i]))
 		}
 
-		if !del && !add {
-			//fmt.Printf("%d\n  %s\n", i, decoyToStr(*odecoys[i]))
-		}
 	}
 
 	old_phantom_map, old_phantoms := phantomsToMap(old.GetPhantomSubnetsList())
