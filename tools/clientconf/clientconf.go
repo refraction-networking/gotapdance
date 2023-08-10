@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -236,7 +235,7 @@ func printDiff(old *pb.ClientConf, new_fn string) {
 func parseClientConf(fname string) *pb.ClientConf {
 
 	clientConf := &pb.ClientConf{}
-	buf, err := ioutil.ReadFile(fname)
+	buf, err := os.ReadFile(fname)
 	if err != nil {
 		log.Fatal("Error reading file:", err)
 	}
@@ -680,7 +679,7 @@ func main() {
 		if err != nil {
 			log.Fatal("Error writing output:", err)
 		}
-		err = ioutil.WriteFile(*out_fname, buf[:], 0644)
+		err = os.WriteFile(*out_fname, buf[:], 0644)
 		if err != nil {
 			log.Fatal("Error writing output:", err)
 		}
