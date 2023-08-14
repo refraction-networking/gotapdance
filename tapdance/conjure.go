@@ -290,7 +290,7 @@ func (cjSession *ConjureSession) UnidirectionalRegData(regSource *pb.Registratio
 
 	reg.phantom4 = phantom4
 	reg.phantom6 = phantom6
-	cjSession.Transport.SetParams(pb.GenericTransportParams{RandomizeDstPort: proto.Bool(supportRandomPort)}, true)
+	cjSession.Transport.SetParams(&pb.GenericTransportParams{RandomizeDstPort: proto.Bool(supportRandomPort)}, true)
 	reg.phantomDstPort, err = cjSession.Transport.GetDstPort(reg.keys.ConjureSeed)
 	if err != nil {
 		return nil, nil, err
