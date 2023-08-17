@@ -208,7 +208,7 @@ func FindConjureSessionInRange(covert string, transport Transport, phantomSubnet
 		count += 1
 
 		// Get the phantoms this seed would generate
-		phantom4, phantom6, err := SelectPhantom(cjSession.Keys.ConjureSeed, cjSession.V6Support.include)
+		phantom4, phantom6, _, err := SelectPhantom(cjSession.Keys.ConjureSeed, cjSession.V6Support.include)
 		if err != nil {
 			Logger().Warnf("%v failed to select Phantom: %v", cjSession.IDString(), err)
 		}
@@ -282,7 +282,7 @@ func (cjSession *ConjureSession) BidirectionalRegData(regSource *pb.Registration
 func (cjSession *ConjureSession) UnidirectionalRegData(regSource *pb.RegistrationSource) (*ConjureReg, *pb.C2SWrapper, error) {
 	reg := cjSession.conjureReg()
 
-	phantom4, phantom6, err := SelectPhantom(cjSession.Keys.ConjureSeed, cjSession.V6Support.include)
+	phantom4, phantom6, supportRandomPort, err := SelectPhantom(cjSession.Keys.ConjureSeed, cjSession.V6Support.include)
 	if err != nil {
 		Logger().Warnf("%v failed to select Phantom: %v", cjSession.IDString(), err)
 		return nil, nil, err
@@ -290,6 +290,7 @@ func (cjSession *ConjureSession) UnidirectionalRegData(regSource *pb.Registratio
 
 	reg.phantom4 = phantom4
 	reg.phantom6 = phantom6
+	cjSession.Transport.SetParams(&pb.GenericTransportParams{RandomizeDstPort: proto.Bool(supportRandomPort)}, true)
 	reg.phantomDstPort, err = cjSession.Transport.GetDstPort(reg.keys.ConjureSeed)
 	if err != nil {
 		return nil, nil, err
@@ -953,33 +954,33 @@ func SelectDecoys(sharedSecret []byte, version uint, width uint) ([]*pb.TLSDecoy
 // }
 
 // SelectPhantom - select one phantom IP address based on shared secret
-func SelectPhantom(seed []byte, support uint) (*net.IP, *net.IP, error) {
+func SelectPhantom(seed []byte, support uint) (*net.IP, *net.IP, bool, error) {
 	phantomSubnets := Assets().GetPhantomSubnets()
 	switch support {
 	case v4:
 		phantomIPv4, err := ps.SelectPhantom(seed, phantomSubnets, ps.V4Only, true)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, false, err
 		}
-		return phantomIPv4, nil, nil
+		return phantomIPv4.IP(), nil, phantomIPv4.SupportRandomPort(), nil
 	case v6:
 		phantomIPv6, err := ps.SelectPhantom(seed, phantomSubnets, ps.V6Only, true)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, false, err
 		}
-		return nil, phantomIPv6, nil
+		return nil, phantomIPv6.IP(), phantomIPv6.SupportRandomPort(), nil
 	case both:
 		phantomIPv4, err := ps.SelectPhantom(seed, phantomSubnets, ps.V4Only, true)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, false, err
 		}
 		phantomIPv6, err := ps.SelectPhantom(seed, phantomSubnets, ps.V6Only, true)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, false, err
 		}
-		return phantomIPv4, phantomIPv6, nil
+		return phantomIPv4.IP(), phantomIPv6.IP(), phantomIPv4.SupportRandomPort() && phantomIPv6.SupportRandomPort(), nil
 	default:
-		return nil, nil, fmt.Errorf("unknown v4/v6 support")
+		return nil, nil, false, fmt.Errorf("unknown v4/v6 support")
 	}
 }
 

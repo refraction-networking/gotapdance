@@ -43,17 +43,17 @@ func TestAssetsPhantoms(t *testing.T) {
 	seed, err := hex.DecodeString("5a87133b68da3468988a21659a12ed2ece07345c8c1a5b08459ffdea4218d12f")
 	require.Nil(t, err)
 
-	addr4, addr6, err := SelectPhantom(seed, both)
+	addr4, addr6, _, err := SelectPhantom(seed, both)
 	require.Nil(t, err)
 	require.Equal(t, "192.122.190.178", addr4.String())
 	require.Equal(t, "2001:48a8:687f:1:b292:3bab:bade:351f", addr6.String())
 
-	addr4, addr6, err = SelectPhantom(seed, v6)
+	addr4, addr6, _, err = SelectPhantom(seed, v6)
 	require.Nil(t, err)
 	require.Nil(t, addr4)
 	require.Equal(t, "2001:48a8:687f:1:b292:3bab:bade:351f", addr6.String())
 
-	addr4, addr6, err = SelectPhantom(seed, v4)
+	addr4, addr6, _, err = SelectPhantom(seed, v4)
 	require.Nil(t, err)
 	require.Equal(t, "192.122.190.178", addr4.String())
 	require.Nil(t, addr6)

@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -14,9 +13,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/golang/protobuf/proto"
 	toml "github.com/pelletier/go-toml"
 	pb "github.com/refraction-networking/conjure/proto"
+	"google.golang.org/protobuf/proto"
 )
 
 func printClientConf(clientConf *pb.ClientConf) {
@@ -52,7 +51,7 @@ func printClientConf(clientConf *pb.ClientConf) {
 		fmt.Printf("\nPhantom Subnets List:\n")
 		var index uint = 0
 		for _, block := range phantoms.GetWeightedSubnets() {
-			fmt.Printf("\nweight: %d, subnets:\n", block.GetWeight())
+			fmt.Printf("\nweight: %d, support random port: %v, subnets:\n", block.GetWeight(), block.GetRandomizeDstPort())
 			for _, subnet := range block.GetSubnets() {
 				fmt.Printf(" %d: %s\n", index, subnet)
 				index++
@@ -66,7 +65,7 @@ func printClientConf(clientConf *pb.ClientConf) {
 }
 
 // Single line, not nice for printing, but good for diffs
-func decoyToStr(decoy pb.TLSDecoySpec) string {
+func decoyToStr(decoy *pb.TLSDecoySpec) string {
 	ip := make(net.IP, 4)
 	binary.BigEndian.PutUint32(ip, decoy.GetIpv4Addr())
 	ip6 := net.IP(decoy.GetIpv6Addr())
@@ -172,15 +171,13 @@ func printDiff(old *pb.ClientConf, new_fn string) {
 	all_decoys := make(map[string]int) // List of all decoys (union of both)
 
 	for i := 0; i < n; i++ {
-		od := pb.TLSDecoySpec{} // Old Decoy
-		nd := pb.TLSDecoySpec{} // New Decoy
 		if i < len(odecoys) {
-			od = *odecoys[i]
+			od := odecoys[i] // Old Decoy
 			old_decoys[decoyToStr(od)] = i
 			all_decoys[decoyToStr(od)] = 1
 		}
 		if i < len(ndecoys) {
-			nd = *ndecoys[i]
+			nd := ndecoys[i] // New Decoy
 			new_decoys[decoyToStr(nd)] = i
 			all_decoys[decoyToStr(nd)] = 1
 		}
@@ -209,15 +206,12 @@ func printDiff(old *pb.ClientConf, new_fn string) {
 		_, add := added_idxs[i]
 
 		if del {
-			fmt.Printf("- %d:  %s\n", i, decoyToStr(*odecoys[i]))
+			fmt.Printf("- %d:  %s\n", i, decoyToStr(odecoys[i]))
 		}
 		if add {
-			fmt.Printf("+ %d:  %s\n", i, decoyToStr(*ndecoys[i]))
+			fmt.Printf("+ %d:  %s\n", i, decoyToStr(ndecoys[i]))
 		}
 
-		if !del && !add {
-			//fmt.Printf("%d\n  %s\n", i, decoyToStr(*odecoys[i]))
-		}
 	}
 
 	old_phantom_map, old_phantoms := phantomsToMap(old.GetPhantomSubnetsList())
@@ -241,7 +235,7 @@ func printDiff(old *pb.ClientConf, new_fn string) {
 func parseClientConf(fname string) *pb.ClientConf {
 
 	clientConf := &pb.ClientConf{}
-	buf, err := ioutil.ReadFile(fname)
+	buf, err := os.ReadFile(fname)
 	if err != nil {
 		log.Fatal("Error reading file:", err)
 	}
@@ -296,7 +290,7 @@ func updateDecoy(decoy *pb.TLSDecoySpec, host string, ip string, pubkey string, 
 	}
 }
 
-func addSubnets(subnets []string, weight *uint, clientConf *pb.ClientConf) {
+func addSubnets(subnets []string, weight *uint, randomizeDstPort *bool, clientConf *pb.ClientConf) {
 	if *weight == 0 {
 		log.Fatal("Error: -add-subnet requires the weight flag to be set to a non-zero 32-bit unsinged integer")
 	}
@@ -310,8 +304,9 @@ func addSubnets(subnets []string, weight *uint, clientConf *pb.ClientConf) {
 
 	// add new item to PhantomSubnetsList.WeightedSubnets
 	var newPhantomSubnet = pb.PhantomSubnets{
-		Weight:  &weight32,
-		Subnets: subnets,
+		Weight:           &weight32,
+		Subnets:          subnets,
+		RandomizeDstPort: randomizeDstPort,
 	}
 	clientConf.PhantomSubnetsList.WeightedSubnets = append(clientConf.PhantomSubnetsList.WeightedSubnets, &newPhantomSubnet)
 }
@@ -490,6 +485,7 @@ func main() {
 	var add_subnets = flag.String("add-subnets", "", "Add a subnet or list of space-separated subnets between double quotes (\"127.0.0.1/24 2001::/32\" etc.), requires additional weight flag")
 	var delete_subnet = flag.Int("delete-subnet", -1, "Specifies the index of a subnet to delete")
 	var weight = flag.Uint("weight", 0, "Subnet weight when add-subnets is used")
+	var randomizeDstPort = flag.Bool("randomize-dst-port", true, "Specifies if the subnet supports randomized port")
 	var subnet_file = flag.String("subnet-file", "", "Path to TOML file containing lists of subnets to use in config. TOML should be formatted like: \n"+
 		"[[WeightedSubnets]] \n\tWeight = 9 \n\tSubnets = [\"192.122.190.0/24\", \"2001:48a8:687f:1::/64\"] \n"+
 		"[[WeightedSubnets]] \n\tWeight = 1 \n\tSubnets = [\"141.219.0.0/16\", \"35.8.0.0/16\"]",
@@ -516,7 +512,7 @@ func main() {
 	// Use subnet-file
 	if *subnet_file != "" {
 
-		data, err := ioutil.ReadFile(*subnet_file)
+		data, err := os.ReadFile(*subnet_file)
 		if err != nil {
 			log.Fatalf("error opening configuration file: %v", err)
 		}
@@ -560,7 +556,7 @@ func main() {
 	// Add a subnet
 	if *add_subnets != "" {
 		subnets := strings.Split(*add_subnets, " ")
-		addSubnets(subnets, weight, clientConf)
+		addSubnets(subnets, weight, randomizeDstPort, clientConf)
 	}
 
 	// Update generation
@@ -683,7 +679,7 @@ func main() {
 		if err != nil {
 			log.Fatal("Error writing output:", err)
 		}
-		err = ioutil.WriteFile(*out_fname, buf[:], 0644)
+		err = os.WriteFile(*out_fname, buf[:], 0644)
 		if err != nil {
 			log.Fatal("Error writing output:", err)
 		}
