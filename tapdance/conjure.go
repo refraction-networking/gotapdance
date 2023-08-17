@@ -132,8 +132,8 @@ type ConjureSession struct {
 
 // MakeConjureSessionSilent creates a conjure session without logging anything
 func MakeConjureSessionSilent(covert string, transport Transport) *ConjureSession {
-
 	keys, err := generateSharedKeys(getStationKey())
+
 	if err != nil {
 		return nil
 	}
@@ -736,6 +736,7 @@ func generateSharedKeys(pubkey [32]byte) (*sharedKeys, error) {
 		ConjureSeed:    make([]byte, 16),
 		reader:         tdHkdf,
 	}
+
 	if _, err := tdHkdf.Read(keys.ConjureSeed); err != nil {
 		return keys, err
 	}
@@ -792,3 +793,50 @@ const (
 	// Unknown - Error occurred without obvious explanation
 	Unknown
 )
+
+// Below is for testing that SharedSecret and ConjureSeed match with old client version.
+type OldSharedKeys struct {
+	SharedSecret, Representative                               []byte
+	FspKey, FspIv, VspKey, VspIv, NewMasterSecret, ConjureSeed []byte
+	reader                                                     io.Reader
+}
+
+func GenerateSharedKeysOld(pubkey [32]byte) (*OldSharedKeys, error) {
+	sharedSecret, representative, err := generateEligatorTransformedKey(pubkey[:])
+	if err != nil {
+		return nil, err
+	}
+
+	tdHkdf := hkdf.New(sha256.New, sharedSecret, []byte("conjureconjureconjureconjure"), nil)
+	keys := &OldSharedKeys{
+		SharedSecret:    sharedSecret,
+		Representative:  representative,
+		FspKey:          make([]byte, 16),
+		FspIv:           make([]byte, 12),
+		VspKey:          make([]byte, 16),
+		VspIv:           make([]byte, 12),
+		NewMasterSecret: make([]byte, 48),
+		ConjureSeed:     make([]byte, 16),
+		reader:          tdHkdf,
+	}
+
+	if _, err := tdHkdf.Read(keys.FspKey); err != nil {
+		return keys, err
+	}
+	if _, err := tdHkdf.Read(keys.FspIv); err != nil {
+		return keys, err
+	}
+	if _, err := tdHkdf.Read(keys.VspKey); err != nil {
+		return keys, err
+	}
+	if _, err := tdHkdf.Read(keys.VspIv); err != nil {
+		return keys, err
+	}
+	if _, err := tdHkdf.Read(keys.NewMasterSecret); err != nil {
+		return keys, err
+	}
+	if _, err := tdHkdf.Read(keys.ConjureSeed); err != nil {
+		return keys, err
+	}
+	return keys, err
+}
