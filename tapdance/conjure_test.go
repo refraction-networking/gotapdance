@@ -1,7 +1,6 @@
 package tapdance
 
 import (
-	"bytes"
 	"crypto/hmac"
 	"encoding/hex"
 	"fmt"
@@ -11,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/refraction-networking/conjure/pkg/core"
-	"github.com/refraction-networking/conjure/pkg/station/lib"
 	pb "github.com/refraction-networking/conjure/proto"
 	tls "github.com/refraction-networking/utls"
 	"github.com/stretchr/testify/require"
@@ -91,7 +89,7 @@ func TestConjureHMAC(t *testing.T) {
 
 func TestGenerateKeys(t *testing.T) {
 	fakePubkey := [32]byte{0}
-	keys, err := generateSharedKeys(fakePubkey)
+	keys, err := core.GenerateClientSharedKeys(fakePubkey)
 	if err != nil {
 		t.Fatalf("Failed to generate Conjure Keys: %v", err)
 	}
@@ -248,21 +246,3 @@ func copyFile(fromFile string, toFile string) error {
 // 	require.NotNil(t, decoy)
 // 	assert.Equal(t, "tapdance1.freeaeskey.xyz", decoy[0].GetHostname())
 // }
-
-func TestNewGenKeys(t *testing.T) {
-	fakePubkey := [32]byte{0}
-
-	keys, _ := generateSharedKeys(fakePubkey)
-	oldKeys, _ := GenerateSharedKeysOld(fakePubkey)
-
-	stationKeys, _ := lib.GenSharedKeys(4, keys.SharedSecret, pb.TransportType_Null)
-	stationKeysOld, _ := lib.GenSharedKeys(3, oldKeys.SharedSecret, pb.TransportType_Null)
-
-	if !bytes.Equal(keys.ConjureSeed, stationKeys.ConjureSeed) {
-		t.Fatalf("Version 4 station ConjureSeed does not match client: \nStation: %v\nClient: %v", stationKeys.ConjureSeed, keys.ConjureSeed)
-	}
-
-	if !bytes.Equal(oldKeys.ConjureSeed, stationKeysOld.ConjureSeed) {
-		t.Fatalf("Version 3 station ConjureSeed does not match client: \nStation: %v\nClient: %v", stationKeysOld.ConjureSeed, oldKeys.ConjureSeed)
-	}
-}

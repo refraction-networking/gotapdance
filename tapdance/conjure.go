@@ -2,19 +2,17 @@ package tapdance
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"io"
 	"net"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/refraction-networking/conjure/pkg/core"
 	ps "github.com/refraction-networking/conjure/pkg/phantoms"
 	pb "github.com/refraction-networking/conjure/proto"
-	"golang.org/x/crypto/hkdf"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 )
@@ -30,6 +28,14 @@ const (
 	v6
 	both
 )
+
+// Include returns a private field of the V6 Support struct.
+func (v *V6) Include() uint {
+	if v == nil {
+		return 0
+	}
+	return v.include
+}
 
 // [TODO]{priority:winter-break} make this not constant
 const defaultRegWidth = 5
@@ -53,30 +59,6 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 
 	Logger().Debugf("%v Attempting to Connect using %s ...", cjSession.IDString(), registration.Transport.Name())
 	return registration.Connect(ctx)
-}
-
-// CurrentClientLibraryVersion returns the current client library version used
-// for feature compatibility support between client and server. Currently I
-// don't intend to connect this to the library tag version in any way.
-//
-// When adding new client versions comment out older versions and add new
-// version below with a description of the reason for the new version.
-func currentClientLibraryVersion() uint32 {
-	// Support for randomizing destination port for phantom connection
-	// https://github.com/refraction-networking/gotapdance/pull/108
-	return 3
-
-	// // Selection algorithm update - Oct 27, 2022 -- Phantom selection version rework again to use
-	// // hkdf for actual uniform distribution across phantom subnets.
-	// // https://github.com/refraction-networking/conjure/pull/145
-	// return 2
-
-	// // Initial inclusion of client version - added due to update in phantom
-	// // selection algorithm that is not backwards compatible to older clients.
-	// return 1
-
-	// // No client version indicates any client before this change.
-	// return 0
 }
 
 // // testV6 -- This is over simple and incomplete (currently unused)
@@ -108,7 +90,7 @@ func currentClientLibraryVersion() uint32 {
 
 // ConjureSession - Create a session with details for registration and connection
 type ConjureSession struct {
-	Keys           *sharedKeys
+	Keys           *core.SharedKeys
 	V6Support      *V6
 	UseProxyHeader bool
 	SessionID      uint64
@@ -132,7 +114,7 @@ type ConjureSession struct {
 
 // MakeConjureSessionSilent creates a conjure session without logging anything
 func MakeConjureSessionSilent(covert string, transport Transport) *ConjureSession {
-	keys, err := generateSharedKeys(getStationKey())
+	keys, err := core.GenerateClientSharedKeys(getStationKey())
 
 	if err != nil {
 		return nil
@@ -390,7 +372,7 @@ func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
 
 	// Prepare the transport by generating any necessary keys
 	pubKey := getStationKey()
-	reg.Transport.PrepareKeys(pubKey, reg.keys.SharedSecret, reg.keys.reader)
+	reg.Transport.PrepareKeys(pubKey, reg.keys.SharedSecret, reg.keys.Reader)
 
 	conn, err := reg.getFirstConnection(ctx, reg.Dialer, phantoms)
 	if err != nil {
@@ -427,7 +409,7 @@ type ConjureReg struct {
 	Dialer dialFunc
 
 	stats *pb.SessionStats
-	keys  *sharedKeys
+	keys  *core.SharedKeys
 	m     sync.Mutex
 }
 
@@ -548,7 +530,7 @@ func (reg *ConjureReg) generateClientToStation() (*pb.ClientToStation, error) {
 	//[reference] Generate ClientToStation protobuf
 	// transition := pb.C2S_Transition_C2S_SESSION_INIT
 	currentGen := Assets().GetGeneration()
-	currentLibVer := currentClientLibraryVersion()
+	currentLibVer := core.CurrentClientLibraryVersion()
 	transport := reg.getPbTransport()
 	transportParams, err := reg.getPbTransportParams()
 	if err != nil {
@@ -691,12 +673,6 @@ func getStationKey() [32]byte {
 	return *Assets().GetConjurePubkey()
 }
 
-type sharedKeys struct {
-	SharedSecret, Representative []byte
-	ConjureSeed                  []byte
-	reader                       io.Reader
-}
-
 // GetRandomDuration returns a random duration that
 func (reg *ConjureReg) GetRandomDuration(base, min, max int) time.Duration {
 	addon := getRandInt(min, max) / 1000 // why this min and max???
@@ -721,26 +697,6 @@ func rttInt(millis uint32) int {
 		return defaultValue
 	}
 	return int(millis)
-}
-
-func generateSharedKeys(pubkey [32]byte) (*sharedKeys, error) {
-	sharedSecret, representative, err := generateEligatorTransformedKey(pubkey[:])
-	if err != nil {
-		return nil, err
-	}
-
-	tdHkdf := hkdf.New(sha256.New, sharedSecret, []byte("conjureconjureconjureconjure"), nil)
-	keys := &sharedKeys{
-		SharedSecret:   sharedSecret,
-		Representative: representative,
-		ConjureSeed:    make([]byte, 16),
-		reader:         tdHkdf,
-	}
-
-	if _, err := tdHkdf.Read(keys.ConjureSeed); err != nil {
-		return keys, err
-	}
-	return keys, err
 }
 
 // RegError - Registration Error passed during registration to indicate failure mode
@@ -793,50 +749,3 @@ const (
 	// Unknown - Error occurred without obvious explanation
 	Unknown
 )
-
-// Below is for testing that SharedSecret and ConjureSeed match with old client version.
-type OldSharedKeys struct {
-	SharedSecret, Representative                               []byte
-	FspKey, FspIv, VspKey, VspIv, NewMasterSecret, ConjureSeed []byte
-	reader                                                     io.Reader
-}
-
-func GenerateSharedKeysOld(pubkey [32]byte) (*OldSharedKeys, error) {
-	sharedSecret, representative, err := generateEligatorTransformedKey(pubkey[:])
-	if err != nil {
-		return nil, err
-	}
-
-	tdHkdf := hkdf.New(sha256.New, sharedSecret, []byte("conjureconjureconjureconjure"), nil)
-	keys := &OldSharedKeys{
-		SharedSecret:    sharedSecret,
-		Representative:  representative,
-		FspKey:          make([]byte, 16),
-		FspIv:           make([]byte, 12),
-		VspKey:          make([]byte, 16),
-		VspIv:           make([]byte, 12),
-		NewMasterSecret: make([]byte, 48),
-		ConjureSeed:     make([]byte, 16),
-		reader:          tdHkdf,
-	}
-
-	if _, err := tdHkdf.Read(keys.FspKey); err != nil {
-		return keys, err
-	}
-	if _, err := tdHkdf.Read(keys.FspIv); err != nil {
-		return keys, err
-	}
-	if _, err := tdHkdf.Read(keys.VspKey); err != nil {
-		return keys, err
-	}
-	if _, err := tdHkdf.Read(keys.VspIv); err != nil {
-		return keys, err
-	}
-	if _, err := tdHkdf.Read(keys.NewMasterSecret); err != nil {
-		return keys, err
-	}
-	if _, err := tdHkdf.Read(keys.ConjureSeed); err != nil {
-		return keys, err
-	}
-	return keys, err
-}

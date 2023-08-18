@@ -5,16 +5,16 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
-	"io/ioutil"
 	"net"
 	"os"
 	"path"
 	"strings"
 	"sync"
 
-	"github.com/golang/protobuf/proto"
 	ps "github.com/refraction-networking/conjure/pkg/phantoms"
 	pb "github.com/refraction-networking/conjure/proto"
+
+	"google.golang.org/protobuf/proto"
 )
 
 type assets struct {
@@ -151,7 +151,7 @@ func (a *assets) GetDNSRegConf() *pb.DnsRegConf {
 
 func (a *assets) readConfigs() error {
 	readRoots := func(filename string) error {
-		rootCerts, err := ioutil.ReadFile(filename)
+		rootCerts, err := os.ReadFile(filename)
 		if err != nil {
 			return err
 		}
@@ -165,7 +165,7 @@ func (a *assets) readConfigs() error {
 	}
 
 	readClientConf := func(filename string) error {
-		buf, err := ioutil.ReadFile(filename)
+		buf, err := os.ReadFile(filename)
 		if err != nil {
 			return err
 		}
@@ -404,7 +404,7 @@ func (a *assets) saveClientConf() error {
 	}
 	filename := path.Join(a.path, a.filenameClientConf)
 	tmpFilename := path.Join(a.path, "."+a.filenameClientConf+"."+getRandString(5)+".tmp")
-	err = ioutil.WriteFile(tmpFilename, buf[:], 0644)
+	err = os.WriteFile(tmpFilename, buf[:], 0644)
 	if err != nil {
 		return err
 	}
