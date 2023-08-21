@@ -286,7 +286,7 @@ func (cjSession *ConjureSession) UnidirectionalRegData(regSource *pb.Registratio
 	}, nil
 }
 
-// new: created for the sake of removing ConjureReg
+// GetV6Support created for the sake of removing ConjureReg
 func (cjSession *ConjureSession) GetV6Support() *bool {
 	support := true
 	if cjSession.V6Support.include == v4 {
@@ -295,7 +295,7 @@ func (cjSession *ConjureSession) GetV6Support() *bool {
 	return &support
 }
 
-// new: created for the sake of removing ConjureReg
+// GetV4Support created for the sake of removing ConjureReg
 func (cjSession *ConjureSession) GetV4Support() *bool {
 	// for now return true and register both
 	support := true
@@ -305,6 +305,7 @@ func (cjSession *ConjureSession) GetV4Support() *bool {
 	return &support
 }
 
+// GetV6Include - returns the Include var of the clients V6 support
 func (cjSession *ConjureSession) GetV6Include() uint {
 	return cjSession.V6Support.include
 }
