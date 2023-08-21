@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/refraction-networking/conjure/pkg/core"
+	"github.com/refraction-networking/conjure/pkg/core/interfaces"
 	ps "github.com/refraction-networking/conjure/pkg/phantoms"
 	pb "github.com/refraction-networking/conjure/proto"
 	"google.golang.org/protobuf/proto"
@@ -57,8 +59,17 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 		return nil, err
 	}
 
+	tp, isconnecting := cjSession.Transport.(interfaces.ConnectingTransport)
+	if isconnecting {
+		if tp.DisableRegDelay() {
+			cjSession.RegDelay = 0
+		}
+	}
+
+	sleepWithContext(ctx, cjSession.RegDelay)
+
 	Logger().Debugf("%v Attempting to Connect using %s ...", cjSession.IDString(), registration.Transport.Name())
-	return registration.Connect(ctx)
+	return registration.Connect(ctx, cjSession.Dialer)
 }
 
 // // testV6 -- This is over simple and incomplete (currently unused)
@@ -107,6 +118,9 @@ type ConjureSession struct {
 	//		we use their dialer to prevent connection loopback into our own proxy
 	//		connection when tunneling the whole device.
 	Dialer dialFunc
+
+	// RegDelay is the delay duration to wait for registration ingest.
+	RegDelay time.Duration
 
 	// performance tracking
 	stats *pb.SessionStats
@@ -172,7 +186,7 @@ func FindConjureSessionInRange(covert string, transport Transport, phantomSubnet
 		count += 1
 
 		// Get the phantoms this seed would generate
-		phantom4, phantom6, err := SelectPhantom(cjSession.Keys.ConjureSeed, cjSession.V6Support.include)
+		phantom4, phantom6, _, err := SelectPhantom(cjSession.Keys.ConjureSeed, cjSession.V6Support.include)
 		if err != nil {
 			Logger().Warnf("%v failed to select Phantom: %v", cjSession.IDString(), err)
 		}
@@ -220,7 +234,7 @@ func (cjSession *ConjureSession) conjureReg() *ConjureReg {
 		v6Support:      cjSession.V6Support.include,
 		covertAddress:  cjSession.CovertAddress,
 		Transport:      cjSession.Transport,
-		Dialer:         cjSession.Dialer,
+		Dialer:         removeLaddr(cjSession.Dialer),
 		useProxyHeader: cjSession.UseProxyHeader,
 	}
 }
@@ -246,7 +260,7 @@ func (cjSession *ConjureSession) BidirectionalRegData(regSource *pb.Registration
 func (cjSession *ConjureSession) UnidirectionalRegData(regSource *pb.RegistrationSource) (*ConjureReg, *pb.C2SWrapper, error) {
 	reg := cjSession.conjureReg()
 
-	phantom4, phantom6, err := SelectPhantom(cjSession.Keys.ConjureSeed, cjSession.V6Support.include)
+	phantom4, phantom6, supportRandomPort, err := SelectPhantom(cjSession.Keys.ConjureSeed, cjSession.V6Support.include)
 	if err != nil {
 		Logger().Warnf("%v failed to select Phantom: %v", cjSession.IDString(), err)
 		return nil, nil, err
@@ -254,6 +268,7 @@ func (cjSession *ConjureSession) UnidirectionalRegData(regSource *pb.Registratio
 
 	reg.phantom4 = phantom4
 	reg.phantom6 = phantom6
+	cjSession.Transport.SetParams(&pb.GenericTransportParams{RandomizeDstPort: proto.Bool(supportRandomPort)}, true)
 	reg.phantomDstPort, err = cjSession.Transport.GetDstPort(reg.keys.ConjureSeed)
 	if err != nil {
 		return nil, nil, err
@@ -300,7 +315,7 @@ type resultTuple struct {
 }
 
 // Simple type alias for brevity
-type dialFunc = func(ctx context.Context, network, addr string) (net.Conn, error)
+type dialFunc = func(ctx context.Context, network, laddr, raddr string) (net.Conn, error)
 
 func (reg *ConjureReg) connect(ctx context.Context, addr string, dialer dialFunc) (net.Conn, error) {
 	//[reference] Create Context with deadline
@@ -316,13 +331,17 @@ func (reg *ConjureReg) connect(ctx context.Context, addr string, dialer dialFunc
 	phantomAddr := net.JoinHostPort(addr, strconv.Itoa(int(reg.phantomDstPort)))
 
 	// conn, err := reg.Dialer(childCtx, "tcp", phantomAddr)
-	return dialer(childCtx, "tcp", phantomAddr)
+	return dialer(childCtx, "tcp", "", phantomAddr)
 }
+
+// ErrNoOpenConns indicates that the client Failed to establish a connection with any phantom addr
+var ErrNoOpenConns = errors.New("no open connections")
 
 func (reg *ConjureReg) getFirstConnection(ctx context.Context, dialer dialFunc, phantoms []*net.IP) (net.Conn, error) {
 	connChannel := make(chan resultTuple, len(phantoms))
 	for _, p := range phantoms {
 		if p == nil {
+			connChannel <- resultTuple{nil, fmt.Errorf("nil addr")}
 			continue
 		}
 		go func(phantom *net.IP) {
@@ -361,31 +380,49 @@ func (reg *ConjureReg) getFirstConnection(ctx context.Context, dialer dialFunc, 
 		return rt.conn, nil
 	}
 
-	return nil, fmt.Errorf("no open connections")
+	return nil, ErrNoOpenConns
 }
 
 // Connect - Use a registration (result of calling Register) to connect to a phantom
 // Note: This is hacky but should work for v4, v6, or both as any nil phantom addr will
 // return a dial error and be ignored.
-func (reg *ConjureReg) Connect(ctx context.Context) (net.Conn, error) {
+func (reg *ConjureReg) Connect(ctx context.Context, dialer dialFunc) (net.Conn, error) {
 	phantoms := []*net.IP{reg.phantom4, reg.phantom6}
 
 	// Prepare the transport by generating any necessary keys
 	pubKey := getStationKey()
 	reg.Transport.PrepareKeys(pubKey, reg.keys.SharedSecret, reg.keys.Reader)
 
-	conn, err := reg.getFirstConnection(ctx, reg.Dialer, phantoms)
-	if err != nil {
-		Logger().Infof("%v failed to form phantom connection: %v", reg.sessionIDStr, err)
-		return nil, err
+	switch transport := reg.Transport.(type) {
+	case interfaces.WrappingTransport:
+		conn, err := reg.getFirstConnection(ctx, dialer, phantoms)
+		if err != nil {
+			Logger().Infof("%v failed to form phantom connection: %v", reg.sessionIDStr, err)
+			return nil, err
+		}
+
+		conn, err = transport.WrapConn(conn)
+		if err != nil {
+			Logger().Infof("WrapConn failed")
+			return nil, err
+		}
+
+		return conn, nil
+	case interfaces.ConnectingTransport:
+		transportDialer, err := transport.WrapDial(dialer)
+		if err != nil {
+			return nil, fmt.Errorf("error wrapping transport dialer: %v", err)
+		}
+
+		conn, err := reg.getFirstConnection(ctx, transportDialer, phantoms)
+		if err != nil {
+			return nil, fmt.Errorf("failed to dialing connecting transport: %v", err)
+		}
+
+		return conn, nil
 	}
 
-	conn, err = reg.Transport.WrapConn(conn)
-	if err != nil {
-		Logger().Infof("WrapConn failed")
-		return nil, err
-	}
-	return conn, nil
+	return nil, fmt.Errorf("transport does not implement any transport interface")
 }
 
 // ConjureReg - Registration structure created for each individual registration within a session.
@@ -406,7 +443,7 @@ type ConjureReg struct {
 	// THIS IS REQUIRED TO INTERFACE WITH PSIPHON ANDROID
 	//		we use their dialer to prevent connection loopback into our own proxy
 	//		connection when tunneling the whole device.
-	Dialer dialFunc
+	Dialer func(context.Context, string, string) (net.Conn, error)
 
 	stats *pb.SessionStats
 	keys  *core.SharedKeys
@@ -532,6 +569,12 @@ func (reg *ConjureReg) generateClientToStation() (*pb.ClientToStation, error) {
 	currentGen := Assets().GetGeneration()
 	currentLibVer := core.CurrentClientLibraryVersion()
 	transport := reg.getPbTransport()
+
+	err := reg.Transport.Prepare(reg.ConjureSession.Dialer)
+	if err != nil {
+		return nil, fmt.Errorf("error preparing transport: %v", err)
+	}
+
 	transportParams, err := reg.getPbTransportParams()
 	if err != nil {
 		Logger().Debugf("%s failed to marshal transport parameters ", reg.sessionIDStr)
@@ -639,33 +682,33 @@ func sleepWithContext(ctx context.Context, duration time.Duration) {
 // }
 
 // SelectPhantom - select one phantom IP address based on shared secret
-func SelectPhantom(seed []byte, support uint) (*net.IP, *net.IP, error) {
+func SelectPhantom(seed []byte, support uint) (*net.IP, *net.IP, bool, error) {
 	phantomSubnets := Assets().GetPhantomSubnets()
 	switch support {
 	case v4:
 		phantomIPv4, err := ps.SelectPhantom(seed, phantomSubnets, ps.V4Only, true)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, false, err
 		}
-		return phantomIPv4, nil, nil
+		return phantomIPv4.IP(), nil, phantomIPv4.SupportRandomPort(), nil
 	case v6:
 		phantomIPv6, err := ps.SelectPhantom(seed, phantomSubnets, ps.V6Only, true)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, false, err
 		}
-		return nil, phantomIPv6, nil
+		return nil, phantomIPv6.IP(), phantomIPv6.SupportRandomPort(), nil
 	case both:
 		phantomIPv4, err := ps.SelectPhantom(seed, phantomSubnets, ps.V4Only, true)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, false, err
 		}
 		phantomIPv6, err := ps.SelectPhantom(seed, phantomSubnets, ps.V6Only, true)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, false, err
 		}
-		return phantomIPv4, phantomIPv6, nil
+		return phantomIPv4.IP(), phantomIPv6.IP(), phantomIPv4.SupportRandomPort() && phantomIPv6.SupportRandomPort(), nil
 	default:
-		return nil, nil, fmt.Errorf("unknown v4/v6 support")
+		return nil, nil, false, fmt.Errorf("unknown v4/v6 support")
 	}
 }
 
@@ -730,6 +773,13 @@ func (err RegError) CodeStr() string {
 		return "TLS_ERROR"
 	default:
 		return "UNKNOWN"
+	}
+}
+
+// removeLaddr removes the laddr field in dialer
+func removeLaddr(dialer func(ctx context.Context, network, laddr, raddr string) (net.Conn, error)) func(ctx context.Context, network, raddr string) (net.Conn, error) {
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		return dialer(ctx, network, "", addr)
 	}
 }
 

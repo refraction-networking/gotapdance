@@ -179,6 +179,8 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget 
 		DarkDecoyRegistrar: decoyreg.NewDecoyRegistrar(),
 		UseProxyHeader:     proxyHeader,
 		V6Support:          v6Support,
+		Width:              width,
+		RegDelay:           defaultConnectionDelay,
 		// Transport:          getTransportFromName(transport), // Still works for backwards compatibility
 		TransportConfig:           t,
 		PhantomNet:                phantomNet,
@@ -195,7 +197,6 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget 
 		tdDialer.DarkDecoyRegistrar, err = registration.NewAPIRegistrar(&registration.Config{
 			Target:             apiEndpoint,
 			Bidirectional:      false,
-			Delay:              defaultConnectionDelay,
 			MaxRetries:         3,
 			SecondaryRegistrar: decoyreg.NewDecoyRegistrar(),
 		})
@@ -209,7 +210,6 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget 
 		tdDialer.DarkDecoyRegistrar, err = registration.NewAPIRegistrar(&registration.Config{
 			Target:             apiEndpoint,
 			Bidirectional:      true,
-			Delay:              defaultConnectionDelay,
 			MaxRetries:         3,
 			SecondaryRegistrar: decoyreg.NewDecoyRegistrar(),
 		})
@@ -218,13 +218,13 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget 
 		}
 	case "dns":
 		dnsConf := tapdance.Assets().GetDNSRegConf()
-		tdDialer.DarkDecoyRegistrar, err = newDNSRegistrarFromConf(dnsConf, false, defaultConnectionDelay, 3, tapdance.Assets().GetConjurePubkey()[:])
+		tdDialer.DarkDecoyRegistrar, err = newDNSRegistrarFromConf(dnsConf, false, 3, tapdance.Assets().GetConjurePubkey()[:])
 		if err != nil {
 			return fmt.Errorf("error creating DNS registrar: %w", err)
 		}
 	case "bddns":
 		dnsConf := tapdance.Assets().GetDNSRegConf()
-		tdDialer.DarkDecoyRegistrar, err = newDNSRegistrarFromConf(dnsConf, true, defaultConnectionDelay, 3, tapdance.Assets().GetConjurePubkey()[:])
+		tdDialer.DarkDecoyRegistrar, err = newDNSRegistrarFromConf(dnsConf, true, 3, tapdance.Assets().GetConjurePubkey()[:])
 		if err != nil {
 			return fmt.Errorf("error creating DNS registrar: %w", err)
 		}
@@ -303,7 +303,7 @@ func setSingleDecoyHost(decoy string) error {
 }
 
 // NewDNSRegistrarFromConf creates a DNSRegistrar from DnsRegConf protobuf. Uses the pubkey in conf as default. If it is not supplied (nil), uses fallbackKey instead.
-func newDNSRegistrarFromConf(conf *pb.DnsRegConf, bidirectional bool, delay time.Duration, maxTries int, fallbackKey []byte) (*registration.DNSRegistrar, error) {
+func newDNSRegistrarFromConf(conf *pb.DnsRegConf, bidirectional bool, maxTries int, fallbackKey []byte) (*registration.DNSRegistrar, error) {
 	pubkey := conf.Pubkey
 	if pubkey == nil {
 		pubkey = fallbackKey
@@ -328,7 +328,6 @@ func newDNSRegistrarFromConf(conf *pb.DnsRegConf, bidirectional bool, delay time
 		UTLSDistribution:   *conf.UtlsDistribution,
 		MaxRetries:         maxTries,
 		Bidirectional:      bidirectional,
-		Delay:              delay,
 		STUNAddr:           *conf.StunServer,
 	})
 }
