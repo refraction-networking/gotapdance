@@ -56,6 +56,12 @@ type Dialer struct {
 	UseProxyHeader bool
 	V6Support      bool
 
+	// Width indicates the number of independent decoy registrations to send in parallel as success
+	// rates for individual decoy registrations are relatively low. (Default 5)
+	//
+	// Deprecated: Use the Width parameter in the Decoy Registrar.
+	Width int
+
 	// Subnet that we want to limit to (or empty if they're all fine)
 	PhantomNet string
 }

@@ -298,4 +298,3 @@ func testGetFirstConn(t *testing.T, addrList []*net.IP, dialErr error, retErr er
 		require.NotNil(t, c, i)
 	}
 }
->>>>>>> master

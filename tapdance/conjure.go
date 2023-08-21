@@ -51,7 +51,7 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 
 	//cjSession.setV6Support(both)	 // We don't want to override this here; defaults set in MakeConjureSession
 	// Prepare registrar specific keys
-	registrationMethod.PrepareKeys(getStationKey())
+	registrationMethod.PrepareRegKeys(getStationKey())
 	// Choose Phantom Address in Register depending on v6 support.
 	registration, err := registrationMethod.Register(cjSession, ctx)
 	if err != nil {
