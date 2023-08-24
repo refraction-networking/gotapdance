@@ -962,13 +962,13 @@ func SelectPhantom(seed []byte, support uint) (*net.IP, *net.IP, bool, error) {
 		if err != nil {
 			return nil, nil, false, err
 		}
-		return phantomIPv4.IP(), nil, phantomIPv4.SupportRandomPort(), nil
+		return phantomIPv4.IP, nil, phantomIPv4.SupportRandomPort(), nil
 	case v6:
 		phantomIPv6, err := ps.SelectPhantom(seed, phantomSubnets, ps.V6Only, true)
 		if err != nil {
 			return nil, nil, false, err
 		}
-		return nil, phantomIPv6.IP(), phantomIPv6.SupportRandomPort(), nil
+		return nil, phantomIPv6.IP, phantomIPv6.SupportRandomPort(), nil
 	case both:
 		phantomIPv4, err := ps.SelectPhantom(seed, phantomSubnets, ps.V4Only, true)
 		if err != nil {
@@ -978,7 +978,7 @@ func SelectPhantom(seed []byte, support uint) (*net.IP, *net.IP, bool, error) {
 		if err != nil {
 			return nil, nil, false, err
 		}
-		return phantomIPv4.IP(), phantomIPv6.IP(), phantomIPv4.SupportRandomPort() && phantomIPv6.SupportRandomPort(), nil
+		return phantomIPv4.IP, phantomIPv6.IP, phantomIPv4.SupportRandomPort() && phantomIPv6.SupportRandomPort(), nil
 	default:
 		return nil, nil, false, fmt.Errorf("unknown v4/v6 support")
 	}
