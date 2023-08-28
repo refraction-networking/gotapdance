@@ -9,10 +9,10 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/refraction-networking/conjure/pkg/phantoms"
 	pb "github.com/refraction-networking/conjure/proto"
 	"golang.org/x/crypto/hkdf"
+	"google.golang.org/protobuf/proto"
 )
 
 func main() {

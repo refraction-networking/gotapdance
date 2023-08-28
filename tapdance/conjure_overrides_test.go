@@ -28,7 +28,6 @@ func TestConjureTransportOverride(t *testing.T) {
 	tp := &pb.PrefixTransportParams{
 		PrefixId:         &id,
 		Prefix:           []byte("aaaa"),
-		FlushAfterPrefix: &truePtr,
 		RandomizeDstPort: &truePtr,
 	}
 	apb, _ := anypb.New(tp)

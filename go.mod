@@ -11,7 +11,7 @@ require (
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.7.0
-	github.com/refraction-networking/conjure v0.6.6
+	github.com/refraction-networking/conjure v0.6.7
 	github.com/refraction-networking/ed25519 v0.1.2
 	github.com/refraction-networking/utls v1.3.3
 	github.com/sergeyfrolov/bsbuffer v0.0.0-20180903213811-94e85abb8507
@@ -29,7 +29,6 @@ require (
 	github.com/felixge/fgprof v0.9.3 // indirect
 	github.com/flynn/noise v1.0.0 // indirect
 	github.com/gaukas/godicttls v0.0.3 // indirect
-	github.com/google/gopacket v1.1.19 // indirect
 	github.com/google/pprof v0.0.0-20211214055906-6f57359322fd // indirect
 	github.com/keltia/proxy v0.9.3 // indirect
 	github.com/klauspost/compress v1.16.6 // indirect
