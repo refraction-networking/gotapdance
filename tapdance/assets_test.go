@@ -10,8 +10,8 @@ import (
 	"path"
 	"testing"
 
-	"github.com/golang/protobuf/proto"
 	pb "github.com/refraction-networking/conjure/proto"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestAssets_Decoys(t *testing.T) {

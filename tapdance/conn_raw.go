@@ -16,9 +16,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/protobuf/proto"
 	pb "github.com/refraction-networking/conjure/proto"
 	tls "github.com/refraction-networking/utls"
+	"google.golang.org/protobuf/proto"
 )
 
 // Simply establishes TLS and TapDance connection.

@@ -16,10 +16,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/protobuf/proto"
 	pb "github.com/refraction-networking/conjure/proto"
 	utls "github.com/refraction-networking/utls"
 	"golang.org/x/net/http2"
+	"google.golang.org/protobuf/proto"
 )
 
 var (

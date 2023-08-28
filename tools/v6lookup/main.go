@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/jinzhu/copier"
 	pb "github.com/refraction-networking/conjure/proto"
+	"google.golang.org/protobuf/proto"
 )
 
 func main() {
