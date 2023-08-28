@@ -77,4 +77,4 @@ func main() {
 
  Original 2014 paper: ["TapDance: End-to-Middle Anticensorship without Flow Blocking"](https://ericw.us/trow/tapdance-sec14.pdf)
 
- Newer(2017) paper that shows TapDance working at high-scale: ["An ISP-Scale Deployment of TapDance"](https://sfrolov.io/papers/foci17-paper-frolov_0.pdf)
+ Newer(2017) paper that shows TapDance working at high-scale: ["An ISP-Scale Deployment of TapDance"](https://www.usenix.org/system/files/conference/foci17/foci17-paper-frolov_0.pdf)
