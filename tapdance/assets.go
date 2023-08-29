@@ -351,15 +351,17 @@ func (a *assets) SetPubkey(pubkey *pb.PubKey) (err error) {
 
 // Set ClientConf and store config to disk - if an error occurs (parse error or
 // write to file error) the error will be logged and the update will be aborted.
-func (a *assets) SetClientConf(conf *pb.ClientConf) (err error) {
+func (a *assets) SetClientConf(conf *pb.ClientConf, shouldWrite ...bool) (err error) {
 	a.Lock()
 	defer a.Unlock()
 
 	origConf := a.config
 	a.config = conf
-	err = a.saveClientConf()
-	if err != nil {
-		a.config = origConf
+	if len(shouldWrite) == 0 || (len(shouldWrite) > 0 && shouldWrite[0]) {
+		err = a.saveClientConf()
+		if err != nil {
+			a.config = origConf
+		}
 	}
 	return
 }
