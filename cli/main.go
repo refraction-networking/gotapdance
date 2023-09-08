@@ -14,7 +14,7 @@ import (
 
 	"github.com/pkg/profile"
 	"github.com/refraction-networking/conjure/pkg/phantoms"
-	decoyreg "github.com/refraction-networking/conjure/pkg/registrars/decoy"
+	decoyreg "github.com/refraction-networking/conjure/pkg/registrars/decoy-registrar"
 	"github.com/refraction-networking/conjure/pkg/registrars/registration"
 	transports "github.com/refraction-networking/conjure/pkg/transports/client"
 	pb "github.com/refraction-networking/conjure/proto"

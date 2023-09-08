@@ -53,16 +53,16 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 	// Prepare registrar specific keys
 	registrationMethod.PrepareRegKeys(getStationKey())
 	// Choose Phantom Address in Register depending on v6 support.
-	reg, err := registrationMethod.Register(ctx, cjSession)
+	registration, err := registrationMethod.Register(cjSession, ctx)
 	if err != nil {
 		Logger().Debugf("%v Failed to register: %v", cjSession.IDString(), err)
 		return nil, err
 	}
 
-	registration, ok := reg.(*ConjureReg)
-	if !ok {
-		return nil, fmt.Errorf("Unknown registration Returned")
-	}
+	// registration, ok := reg.(*ConjureReg)
+	// if !ok {
+	// 	return nil, fmt.Errorf("Unknown registration Returned")
+	// }
 
 	tp, isconnecting := cjSession.Transport.(interfaces.ConnectingTransport)
 	if isconnecting {
