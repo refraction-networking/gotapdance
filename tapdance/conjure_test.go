@@ -87,7 +87,9 @@ func TestConjureHMAC(t *testing.T) {
 }
 
 func TestGenerateKeys(t *testing.T) {
-	fakePubkey := [32]byte{0}
+	var fakePubkey [32]byte
+	k, _ := hex.DecodeString("00112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF")
+	copy(fakePubkey[:], k)
 	keys, err := core.GenerateClientSharedKeys(fakePubkey)
 	if err != nil {
 		t.Fatalf("Failed to generate Conjure Keys: %v", err)
