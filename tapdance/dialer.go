@@ -9,7 +9,10 @@ import (
 	"sync"
 	"time"
 
-	transports "github.com/refraction-networking/conjure/pkg/transports/client"
+	"github.com/refraction-networking/conjure"
+	"github.com/refraction-networking/conjure/pkg/core/interfaces"
+	"github.com/refraction-networking/conjure/pkg/transports/wrapping/min"
+	"github.com/refraction-networking/conjure/pkg/transports/wrapping/obfs4"
 	pb "github.com/refraction-networking/conjure/proto"
 )
 
@@ -33,7 +36,7 @@ type Dialer struct {
 	// THIS IS REQUIRED TO INTERFACE WITH PSIPHON ANDROID
 	//		we use their dialer to prevent connection loopback into our own proxy
 	//		connection when tunneling the whole device.
-	DialerWithLaddr dialFunc
+	DialerWithLaddr interfaces.DialFunc
 
 	DarkDecoy bool
 
@@ -47,8 +50,8 @@ type Dialer struct {
 	DisableRegistrarOverrides bool
 
 	// The type of transport to use for Conjure connections.
-	Transport       pb.TransportType
-	TransportConfig Transport
+	Transport       *pb.TransportType
+	TransportConfig interfaces.Transport
 
 	// RegDelay is the delay duration to wait for registration ingest.
 	RegDelay time.Duration
@@ -148,46 +151,35 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 			flow.tdRaw.useProxyHeader = d.UseProxyHeader
 			return flow, flow.DialContext(ctx)
 		}
-		// Conjure
-		var cjSession *ConjureSession
+
+		var ipv conjure.IPSupport
+		if d.V6Support {
+			ipv = conjure.V6 | conjure.V4
+		} else {
+			ipv = conjure.V4
+		}
 
 		transport := d.TransportConfig
 		var err error
 		if d.TransportConfig == nil {
-			transport, err = transports.ConfigFromTransportType(d.Transport, randomizePortDefault)
+			transport, err = configFromTransportType(*d.Transport, randomizePortDefault)
 		}
 		if err != nil {
 			return nil, err
 		}
 
-		// If specified, only select a phantom from a given range
-		if d.PhantomNet != "" {
-			_, phantomRange, err := net.ParseCIDR(d.PhantomNet)
-			if err != nil {
-				return nil, errors.New("Invalid Phantom network goal")
-			}
-			cjSession = FindConjureSessionInRange(address, d.TransportConfig, phantomRange)
-			if cjSession == nil {
-				return nil, errors.New("Failed to find Phantom in target subnet")
-			}
-		} else {
-			cjSession = MakeConjureSession(address, transport)
+		cjDialer := conjure.Dialer{
+			Transport:                 transport,
+			Registrar:                 d.DarkDecoyRegistrar,
+			DisableRegistrarOverrides: d.DisableRegistrarOverrides,
+			UseProxyHeader:            d.UseProxyHeader,
+			IPv:                       ipv,
+			Dialer:                    d.Dialer,
+			DialWithLaddr:             d.DialerWithLaddr,
+			PhantomNet:                d.PhantomNet,
 		}
 
-		cjSession.Dialer = d.DialerWithLaddr
-		cjSession.UseProxyHeader = d.UseProxyHeader
-		cjSession.DisableRegistrarOverrides = d.DisableRegistrarOverrides
-		cjSession.RegDelay = d.RegDelay
-
-		if d.V6Support {
-			cjSession.V6Support = &V6{include: both, support: true}
-		} else {
-			cjSession.V6Support = &V6{include: v4, support: false}
-		}
-		if len(address) == 0 {
-			return nil, errors.New("Dark Decoys require target address to be set")
-		}
-		return DialConjure(ctx, cjSession, d.DarkDecoyRegistrar)
+		return cjDialer.DialContext(ctx, network, address)
 	}
 
 	return nil, errors.New("SplitFlows are not supported")
@@ -218,3 +210,14 @@ func resolveAddr(network, addrStr string) (net.Addr, error) {
 }
 
 var errUnsupportedLaddr = fmt.Errorf("dialer does not support laddr")
+
+func configFromTransportType(transportType pb.TransportType, randomizeDst bool) (interfaces.Transport, error) {
+	switch transportType {
+	case pb.TransportType_Min:
+		return &min.ClientTransport{Parameters: &pb.GenericTransportParams{RandomizeDstPort: &randomizePortDefault}}, nil
+	case pb.TransportType_Obfs4:
+		return &obfs4.ClientTransport{Parameters: &pb.GenericTransportParams{RandomizeDstPort: &randomizePortDefault}}, nil
+	default:
+		return nil, errors.New("unknown transport by TransportType try using TransportConfig")
+	}
+}

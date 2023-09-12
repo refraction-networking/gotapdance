@@ -125,14 +125,16 @@ var (
 
 var default_flags = tdFlagUseTIL
 
-// Global EnableProxyProtocol() is deprecated,
-// use tapdance.Dialer with UseProxyHeader flag instead
+// EnableProxyProtocol is deprecated, use tapdance.Dialer with UseProxyHeader
+// flag instead
 //
-// Requests station to send client's IP to covert in following form:
-// PROXY TCP4 x.x.x.x 127.0.0.1 1111 1234\r\n
+// Requests station to send client's IP to covert in following form: PROXY TCP4
+// x.x.x.x 127.0.0.1 1111 1234\r\n
 //
 //	 ^__^ ^_____^ ^_________________^
 //	proto clientIP      garbage
+//
+// Deprecated: Use tapdance.Dialer with UseProxyHeader flag instead.
 func EnableProxyProtocol() {
 	Logger().Println("tapdance.EnableProxyProtocol() is deprecated, " +
 		"use tapdance.Dialer with UseProxyHeader flag instead.")

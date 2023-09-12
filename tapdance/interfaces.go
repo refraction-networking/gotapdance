@@ -1,8 +1,6 @@
 package tapdance
 
 import (
-	"context"
-
 	"github.com/refraction-networking/conjure/pkg/core/interfaces"
 )
 
@@ -13,9 +11,4 @@ type Transport interfaces.Transport
 // Registrar defines the interface for a module completing the initial portion of the conjure
 // protocol which registers the clients intent to connect, along with the specifics of the session
 // they wish to establish.
-type Registrar interface {
-	Register(*ConjureSession, context.Context) (*ConjureReg, error)
-
-	// PrepareRegKeys prepares key materials specific to the registrar
-	PrepareRegKeys(pubkey [32]byte) error
-}
+type Registrar interfaces.Registrar
