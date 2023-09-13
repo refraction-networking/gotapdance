@@ -55,7 +55,12 @@ type Dialer struct {
 
 	UseProxyHeader bool
 	V6Support      bool
-	Width          int
+
+	// Width indicates the number of independent decoy registrations to send in parallel as success
+	// rates for individual decoy registrations are relatively low. (Default 5)
+	//
+	// Deprecated: Use the Width parameter in the Decoy Registrar.
+	Width int
 
 	// Subnet that we want to limit to (or empty if they're all fine)
 	PhantomNet string
@@ -171,7 +176,6 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 
 		cjSession.Dialer = d.DialerWithLaddr
 		cjSession.UseProxyHeader = d.UseProxyHeader
-		cjSession.Width = uint(d.Width)
 		cjSession.DisableRegistrarOverrides = d.DisableRegistrarOverrides
 		cjSession.RegDelay = d.RegDelay
 

@@ -14,6 +14,7 @@ import (
 
 	"github.com/pkg/profile"
 	"github.com/refraction-networking/conjure/pkg/phantoms"
+	decoyreg "github.com/refraction-networking/conjure/pkg/registrars/decoy-registrar"
 	"github.com/refraction-networking/conjure/pkg/registrars/registration"
 	transports "github.com/refraction-networking/conjure/pkg/transports/client"
 	pb "github.com/refraction-networking/conjure/proto"
@@ -175,7 +176,7 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget 
 
 	tdDialer := tapdance.Dialer{
 		DarkDecoy:          !td,
-		DarkDecoyRegistrar: registration.NewDecoyRegistrar(),
+		DarkDecoyRegistrar: decoyreg.NewDecoyRegistrar(),
 		UseProxyHeader:     proxyHeader,
 		V6Support:          v6Support,
 		Width:              width,
@@ -188,7 +189,7 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget 
 
 	switch registrar {
 	case "decoy":
-		tdDialer.DarkDecoyRegistrar = registration.NewDecoyRegistrar()
+		tdDialer.DarkDecoyRegistrar = decoyreg.NewDecoyRegistrar()
 	case "api":
 		if apiEndpoint == "" {
 			apiEndpoint = defaultAPIEndpoint
@@ -197,7 +198,7 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget 
 			Target:             apiEndpoint,
 			Bidirectional:      false,
 			MaxRetries:         3,
-			SecondaryRegistrar: registration.NewDecoyRegistrar(),
+			SecondaryRegistrar: decoyreg.NewDecoyRegistrar(),
 		})
 		if err != nil {
 			return fmt.Errorf("error creating API registrar: %w", err)
@@ -210,7 +211,7 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget 
 			Target:             apiEndpoint,
 			Bidirectional:      true,
 			MaxRetries:         3,
-			SecondaryRegistrar: registration.NewDecoyRegistrar(),
+			SecondaryRegistrar: decoyreg.NewDecoyRegistrar(),
 		})
 		if err != nil {
 			return fmt.Errorf("error creating API registrar: %w", err)
