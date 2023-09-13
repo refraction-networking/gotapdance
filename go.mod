@@ -1,6 +1,6 @@
 module github.com/refraction-networking/gotapdance
 
-go 1.20
+go 1.18
 
 require (
 	github.com/jinzhu/copier v0.3.5
@@ -8,9 +8,9 @@ require (
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.7.0
-	github.com/refraction-networking/conjure v0.7.0-beta.1
+	github.com/refraction-networking/conjure v0.7.0-beta.2
 	github.com/refraction-networking/ed25519 v0.1.2
-	github.com/refraction-networking/utls v1.5.3
+	github.com/refraction-networking/utls v1.4.3
 	github.com/sergeyfrolov/bsbuffer v0.0.0-20180903213811-94e85abb8507
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.8.4
@@ -21,7 +21,6 @@ require (
 
 require (
 	github.com/andybalholm/brotli v1.0.5 // indirect
-	github.com/cloudflare/circl v1.3.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dchest/siphash v1.2.3 // indirect
 	github.com/felixge/fgprof v0.9.3 // indirect
