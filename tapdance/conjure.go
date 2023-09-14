@@ -245,10 +245,10 @@ func (cjSession *ConjureSession) conjureReg() *ConjureReg {
 }
 
 // BidirectionalRegData returns a C2SWrapper for bidirectional registration
-func (cjSession *ConjureSession) BidirectionalRegData(regSource *pb.RegistrationSource) (*ConjureReg, *pb.C2SWrapper, error) {
+func (cjSession *ConjureSession) BidirectionalRegData(ctx context.Context, regSource *pb.RegistrationSource) (*ConjureReg, *pb.C2SWrapper, error) {
 	reg := cjSession.conjureReg()
 
-	c2s, err := reg.generateClientToStation()
+	c2s, err := reg.generateClientToStation(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -262,7 +262,7 @@ func (cjSession *ConjureSession) BidirectionalRegData(regSource *pb.Registration
 }
 
 // UnidirectionalRegData returns a C2SWrapper for unidirectional registration
-func (cjSession *ConjureSession) UnidirectionalRegData(regSource *pb.RegistrationSource) (*ConjureReg, *pb.C2SWrapper, error) {
+func (cjSession *ConjureSession) UnidirectionalRegData(ctx context.Context, regSource *pb.RegistrationSource) (*ConjureReg, *pb.C2SWrapper, error) {
 	reg := cjSession.conjureReg()
 
 	phantom4, phantom6, supportRandomPort, err := SelectPhantom(cjSession.Keys.ConjureSeed, cjSession.V6Support.include)
@@ -279,7 +279,7 @@ func (cjSession *ConjureSession) UnidirectionalRegData(regSource *pb.Registratio
 		return nil, nil, err
 	}
 
-	c2s, err := reg.generateClientToStation()
+	c2s, err := reg.generateClientToStation(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -562,7 +562,7 @@ func (reg *ConjureReg) generateFlags() *pb.RegistrationFlags {
 	return flags
 }
 
-func (reg *ConjureReg) generateClientToStation() (*pb.ClientToStation, error) {
+func (reg *ConjureReg) generateClientToStation(ctx context.Context) (*pb.ClientToStation, error) {
 	var covert *string
 	if len(reg.covertAddress) > 0 {
 		//[TODO]{priority:medium} this isn't the correct place to deal with signaling to the station
@@ -576,7 +576,7 @@ func (reg *ConjureReg) generateClientToStation() (*pb.ClientToStation, error) {
 	currentLibVer := core.CurrentClientLibraryVersion()
 	transport := reg.getPbTransport()
 
-	err := reg.Transport.Prepare(reg.ConjureSession.Dialer)
+	err := reg.Transport.Prepare(ctx, reg.ConjureSession.Dialer)
 	if err != nil {
 		return nil, fmt.Errorf("error preparing transport: %v", err)
 	}
