@@ -26,6 +26,7 @@ require (
 	github.com/felixge/fgprof v0.9.3 // indirect
 	github.com/flynn/noise v1.0.0 // indirect
 	github.com/gaukas/godicttls v0.0.4 // indirect
+	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/google/pprof v0.0.0-20211214055906-6f57359322fd // indirect
 	github.com/keltia/proxy v0.9.3 // indirect
@@ -49,4 +50,4 @@ replace github.com/pion/dtls/v2 => github.com/mingyech/dtls/v2 v2.0.0
 
 replace github.com/pion/transport/v2 => github.com/mingyech/transport/v2 v2.0.0
 
-replace github.com/refraction-networking/conjure => github.com/refraction-networking/conjure v0.7.1-0.20230914195129-88b95c37d838
+replace github.com/refraction-networking/conjure => github.com/refraction-networking/conjure v0.7.1-0.20230915030908-6dc60cd4a7b9
