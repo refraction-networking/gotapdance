@@ -49,4 +49,4 @@ replace github.com/pion/dtls/v2 => github.com/mingyech/dtls/v2 v2.0.0
 
 replace github.com/pion/transport/v2 => github.com/mingyech/transport/v2 v2.0.0
 
-replace github.com/refraction-networking/conjure => github.com/refraction-networking/conjure v0.7.1-0.20230918095619-2b39f4314c83
+replace github.com/refraction-networking/conjure => github.com/refraction-networking/conjure 3e579092cff92e0ccea91fe11ff724fec73746c0
