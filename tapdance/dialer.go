@@ -180,7 +180,7 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 		cjSession.RegDelay = d.RegDelay
 
 		if d.V6Support {
-			cjSession.V6Support = &V6{include: v6, support: true}
+			cjSession.V6Support = &V6{include: both, support: true}
 		} else {
 			cjSession.V6Support = &V6{include: v4, support: false}
 		}
