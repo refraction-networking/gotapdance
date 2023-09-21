@@ -8,7 +8,7 @@ require (
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.7.0
-	github.com/refraction-networking/conjure v0.7.0
+	github.com/refraction-networking/conjure v0.7.2
 	github.com/refraction-networking/ed25519 v0.1.2
 	github.com/refraction-networking/utls v1.3.3
 	github.com/sergeyfrolov/bsbuffer v0.0.0-20180903213811-94e85abb8507
@@ -48,5 +48,3 @@ require (
 replace github.com/pion/dtls/v2 => github.com/mingyech/dtls/v2 v2.0.0
 
 replace github.com/pion/transport/v2 => github.com/mingyech/transport/v2 v2.0.0
-
-replace github.com/refraction-networking/conjure => github.com/refraction-networking/conjure v0.7.1-0.20230920013818-86e956c30aeb
