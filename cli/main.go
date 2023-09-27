@@ -266,7 +266,7 @@ func manageConn(tdDialer tapdance.Dialer, connectTarget string, clientConn *net.
 		clientConn.CloseWrite()
 	}()
 	wg.Wait()
-	tapdance.Logger().Debug("copy loop ended - liber:")
+	tapdance.Logger().Debug("copy loop ended")
 }
 
 func setSingleDecoyHost(decoy string) error {
