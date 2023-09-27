@@ -243,6 +243,8 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget 
 }
 
 func manageConn(tdDialer tapdance.Dialer, connectTarget string, clientConn *net.TCPConn) {
+	defer clientConn.Close()
+
 	tdConn, err := tdDialer.Dial("tcp", connectTarget)
 	if err != nil || tdConn == nil {
 		fmt.Printf("failed to dial %s: %v\n", connectTarget, err)
