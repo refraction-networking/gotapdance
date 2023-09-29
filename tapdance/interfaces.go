@@ -17,5 +17,5 @@ type Registrar interface {
 	Register(*ConjureSession, context.Context) (*ConjureReg, error)
 
 	// PrepareRegKeys prepares key materials specific to the registrar
-	PrepareRegKeys(stationPubkey [32]byte, sessionSecret []byte) error
+	PrepareRegKeys(stationPubkey [32]byte) error
 }
