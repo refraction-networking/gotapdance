@@ -54,6 +54,7 @@ func main() {
 	var prefixID = flag.Int("prefix-id", -1, "ID of the prefix to send, used with the `transport=\"prefix\"` option. Default is Random. See prefix transport for options")
 	var disableOverrides = flag.Bool("disable-overrides", false, "Informs the registrar that chosen parameters will be used, only applicable to bidirectional reg methods")
 	var phantomNet = flag.String("phantom", "", "Target phantom subnet. Must overlap with ClientConf, and will be achieved by brute force of seeds until satisfied")
+	var dtlsUnordered = flag.Bool("unordered-dtls", false, "Set DTLS reliability to unordered. Only works with DTLS transport.")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Dark Decoy CLI\n$./cli -connect-addr=<decoy_address> [OPTIONS] \n\nOptions:\n")
@@ -144,6 +145,8 @@ func main() {
 	case "prefix":
 		pID := int32(*prefixID)
 		params = &pb.PrefixTransportParams{RandomizeDstPort: randomizeDstPort, PrefixId: &pID}
+	case "dtls":
+		params = &pb.DTLSTransportParams{RandomizeDstPort: randomizeDstPort, Unordered: dtlsUnordered}
 	default:
 		params = &pb.GenericTransportParams{RandomizeDstPort: randomizeDstPort}
 	}
