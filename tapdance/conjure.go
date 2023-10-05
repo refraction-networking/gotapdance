@@ -273,8 +273,8 @@ func (cjSession *ConjureSession) UnidirectionalRegData(ctx context.Context, regS
 
 	reg.phantom4 = phantom4
 	reg.phantom6 = phantom6
-	cjSession.Transport.SetParams(&pb.GenericTransportParams{RandomizeDstPort: proto.Bool(supportRandomPort)}, true)
-	reg.phantomDstPort, err = cjSession.Transport.GetDstPort(reg.keys.ConjureSeed)
+
+	reg.phantomDstPort, err = cjSession.Transport.GetDstPort(reg.keys.ConjureSeed, supportRandomPort)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -500,11 +500,7 @@ func (reg *ConjureReg) UnpackRegResp(regResp *pb.RegistrationResponse) error {
 	if maybeTP != nil && !reg.DisableRegistrarOverrides {
 		// If an error occurs while setting transport parameters give up as continuing would likely
 		// lead to incongruence between the client and station and an unserviceable connection.
-		params, err := reg.Transport.ParseParams(maybeTP)
-		if err != nil {
-			return fmt.Errorf("Param Parse error: %w", err)
-		}
-		err = reg.Transport.SetParams(params, true)
+		err := reg.Transport.SetSessionParams(maybeTP, true)
 		if err != nil {
 			return fmt.Errorf("Param Parse error: %w", err)
 		}
