@@ -60,7 +60,13 @@ func printClientConf(clientConf *pb.ClientConf) {
 	}
 
 	if clientConf.DnsRegConf != nil {
-		fmt.Printf("DNS registrar: %+v\n", clientConf.DnsRegConf)
+		fmt.Printf("DNS registrar:\n")
+		fmt.Printf("  method: %+v\n", clientConf.DnsRegConf.GetDnsRegMethod());
+		fmt.Printf("  target: %+v\n", clientConf.DnsRegConf.GetTarget());
+		fmt.Printf("  domain: %+v\n", clientConf.DnsRegConf.GetDomain());
+		fmt.Printf("  pubkey: %+v\n", hex.EncodeToString(clientConf.DnsRegConf.GetPubkey()));
+		fmt.Printf("  utls:   %+v\n", clientConf.DnsRegConf.GetUtlsDistribution());
+		fmt.Printf("  stun:   %+v\n", clientConf.DnsRegConf.GetStunServer());
 	}
 }
 
