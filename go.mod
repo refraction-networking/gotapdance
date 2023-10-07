@@ -8,7 +8,7 @@ require (
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.7.0
-	github.com/refraction-networking/conjure v0.7.4
+	github.com/refraction-networking/conjure v0.7.5-0.20231007182235-4694f6c7a009
 	github.com/refraction-networking/ed25519 v0.1.2
 	github.com/refraction-networking/utls v1.3.3
 	github.com/sergeyfrolov/bsbuffer v0.0.0-20180903213811-94e85abb8507
@@ -31,6 +31,7 @@ require (
 	github.com/keltia/proxy v0.9.3 // indirect
 	github.com/klauspost/compress v1.16.7 // indirect
 	github.com/libp2p/go-reuseport v0.4.0 // indirect
+	github.com/mroth/weightedrand v1.0.0 // indirect
 	github.com/pion/dtls/v2 v2.2.7 // indirect
 	github.com/pion/logging v0.2.2 // indirect
 	github.com/pion/randutil v0.1.0 // indirect
