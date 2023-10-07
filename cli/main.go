@@ -192,7 +192,9 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget 
 
 	switch registrar {
 	case "decoy":
-		tdDialer.DarkDecoyRegistrar = decoyreg.NewDecoyRegistrar()
+		dr := decoyreg.NewDecoyRegistrar()
+		dr.Width = uint(width)
+		tdDialer.DarkDecoyRegistrar = dr
 	case "api":
 		if apiEndpoint == "" {
 			apiEndpoint = defaultAPIEndpoint
