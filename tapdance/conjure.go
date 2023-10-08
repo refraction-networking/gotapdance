@@ -274,9 +274,13 @@ func (cjSession *ConjureSession) UnidirectionalRegData(ctx context.Context, regS
 	reg.phantom4 = phantom4
 	reg.phantom6 = phantom6
 
-	reg.phantomDstPort, err = cjSession.Transport.GetDstPort(reg.keys.ConjureSeed, supportRandomPort)
-	if err != nil {
-		return nil, nil, err
+	if supportRandomPort {
+		reg.phantomDstPort, err = cjSession.Transport.GetDstPort(reg.keys.ConjureSeed)
+		if err != nil {
+			return nil, nil, err
+		}
+	} else {
+		reg.phantomDstPort = 443
 	}
 
 	c2s, err := reg.generateClientToStation(ctx)
