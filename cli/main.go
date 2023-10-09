@@ -250,6 +250,13 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget 
 func manageConn(tdDialer tapdance.Dialer, connectTarget string, clientConn *net.TCPConn) {
 	defer clientConn.Close()
 
+	p, err := tdDialer.TransportConfig.GetParams()
+	if err != nil {
+		fmt.Printf("failed to get transport params: %v\n", err)
+		return
+	}
+	fmt.Printf("transport: %s - %s - gen-%d\n", tdDialer.TransportConfig.String(), p, tapdance.Assets().GetGeneration())
+
 	tdConn, err := tdDialer.Dial("tcp", connectTarget)
 	if err != nil || tdConn == nil {
 		fmt.Printf("failed to dial %s: %v\n", connectTarget, err)

@@ -49,6 +49,11 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 		return nil, fmt.Errorf("No Session Provided")
 	}
 
+	err := cjSession.Transport.Prepare(ctx, cjSession.Dialer)
+	if err != nil {
+		return nil, err
+	}
+
 	//cjSession.setV6Support(both)	 // We don't want to override this here; defaults set in MakeConjureSession
 	// Prepare registrar specific keys
 	registrationMethod.PrepareRegKeys(getStationKey(), cjSession.Keys.SharedSecret)
@@ -273,10 +278,14 @@ func (cjSession *ConjureSession) UnidirectionalRegData(ctx context.Context, regS
 
 	reg.phantom4 = phantom4
 	reg.phantom6 = phantom6
-	cjSession.Transport.SetParams(&pb.GenericTransportParams{RandomizeDstPort: proto.Bool(supportRandomPort)}, true)
-	reg.phantomDstPort, err = cjSession.Transport.GetDstPort(reg.keys.ConjureSeed)
-	if err != nil {
-		return nil, nil, err
+
+	if supportRandomPort {
+		reg.phantomDstPort, err = cjSession.Transport.GetDstPort(reg.keys.ConjureSeed)
+		if err != nil {
+			return nil, nil, err
+		}
+	} else {
+		reg.phantomDstPort = 443
 	}
 
 	c2s, err := reg.generateClientToStation(ctx)
@@ -500,11 +509,7 @@ func (reg *ConjureReg) UnpackRegResp(regResp *pb.RegistrationResponse) error {
 	if maybeTP != nil && !reg.DisableRegistrarOverrides {
 		// If an error occurs while setting transport parameters give up as continuing would likely
 		// lead to incongruence between the client and station and an unserviceable connection.
-		params, err := reg.Transport.ParseParams(maybeTP)
-		if err != nil {
-			return fmt.Errorf("Param Parse error: %w", err)
-		}
-		err = reg.Transport.SetParams(params, true)
+		err := reg.Transport.SetSessionParams(maybeTP, true)
 		if err != nil {
 			return fmt.Errorf("Param Parse error: %w", err)
 		}
@@ -575,11 +580,6 @@ func (reg *ConjureReg) generateClientToStation(ctx context.Context) (*pb.ClientT
 	currentGen := Assets().GetGeneration()
 	currentLibVer := core.CurrentClientLibraryVersion()
 	transport := reg.getPbTransport()
-
-	err := reg.Transport.Prepare(ctx, reg.ConjureSession.Dialer)
-	if err != nil {
-		return nil, fmt.Errorf("error preparing transport: %v", err)
-	}
 
 	transportParams, err := reg.getPbTransportParams()
 	if err != nil {
