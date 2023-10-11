@@ -18,6 +18,7 @@ import (
 	"github.com/refraction-networking/conjure/pkg/registrars/registration"
 	transports "github.com/refraction-networking/conjure/pkg/transports/client"
 	pb "github.com/refraction-networking/conjure/proto"
+	ca "github.com/refraction-networking/conjure/pkg/client/assets"
 	"github.com/refraction-networking/gotapdance/tapdance"
 	"github.com/refraction-networking/gotapdance/tdproxy"
 	"github.com/sirupsen/logrus"
@@ -71,7 +72,7 @@ func main() {
 
 	v6Support := !*excludeV6
 
-	_, err := tapdance.AssetsSetDir(*assetsLocation)
+	_, err := ca.AssetsSetDir(*assetsLocation)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to parse assets: %s", err)
 		os.Exit(1)
@@ -134,9 +135,9 @@ func main() {
 	}
 
 	if *td {
-		fmt.Printf("Using Station Pubkey: %s\n", hex.EncodeToString(tapdance.Assets().GetPubkey()[:]))
+		fmt.Printf("Using Station Pubkey: %s\n", hex.EncodeToString(ca.Assets().GetPubkey()[:]))
 	} else {
-		fmt.Printf("Using Station Pubkey: %s\n", hex.EncodeToString(tapdance.Assets().GetConjurePubkey()[:]))
+		fmt.Printf("Using Station Pubkey: %s\n", hex.EncodeToString(ca.Assets().GetConjurePubkey()[:]))
 	}
 
 	var params any
@@ -222,14 +223,14 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget 
 			return fmt.Errorf("error creating API registrar: %w", err)
 		}
 	case "dns":
-		dnsConf := tapdance.Assets().GetDNSRegConf()
-		tdDialer.DarkDecoyRegistrar, err = newDNSRegistrarFromConf(dnsConf, false, 3, tapdance.Assets().GetConjurePubkey()[:])
+		dnsConf := ca.Assets().GetDNSRegConf()
+		tdDialer.DarkDecoyRegistrar, err = newDNSRegistrarFromConf(dnsConf, false, 3, ca.Assets().GetConjurePubkey()[:])
 		if err != nil {
 			return fmt.Errorf("error creating DNS registrar: %w", err)
 		}
 	case "bddns":
-		dnsConf := tapdance.Assets().GetDNSRegConf()
-		tdDialer.DarkDecoyRegistrar, err = newDNSRegistrarFromConf(dnsConf, true, 3, tapdance.Assets().GetConjurePubkey()[:])
+		dnsConf := ca.Assets().GetDNSRegConf()
+		tdDialer.DarkDecoyRegistrar, err = newDNSRegistrarFromConf(dnsConf, true, 3, ca.Assets().GetConjurePubkey()[:])
 		if err != nil {
 			return fmt.Errorf("error creating DNS registrar: %w", err)
 		}
@@ -304,14 +305,12 @@ func setSingleDecoyHost(decoy string) error {
 	sni := splitDecoy[0]
 
 	decoySpec := pb.InitTLSDecoySpec(ip, sni)
-	tapdance.Assets().GetClientConfPtr().DecoyList =
+	ca.Assets().GetClientConfPtr().DecoyList =
 		&pb.DecoyList{
 			TlsDecoys: []*pb.TLSDecoySpec{
 				decoySpec,
 			},
 		}
-	maxUint32 := ^uint32(0) // max generation: station won't send ClientConf
-	tapdance.Assets().GetClientConfPtr().Generation = &maxUint32
 	tapdance.Logger().Infof("Single decoy parsed. SNI: %s, IP: %s", sni, ip)
 	return nil
 }
