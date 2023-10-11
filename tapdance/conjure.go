@@ -15,6 +15,7 @@ import (
 	"github.com/refraction-networking/conjure/pkg/core/interfaces"
 	ps "github.com/refraction-networking/conjure/pkg/phantoms"
 	pb "github.com/refraction-networking/conjure/proto"
+	ca "github.com/refraction-networking/conjure/pkg/client/assets"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 )
@@ -53,6 +54,7 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 	// Prepare registrar specific keys
 	registrationMethod.PrepareRegKeys(getStationKey(), cjSession.Keys.SharedSecret)
 	// Choose Phantom Address in Register depending on v6 support.
+
 	registration, err := registrationMethod.Register(cjSession, ctx)
 	if err != nil {
 		Logger().Debugf("%v Failed to register: %v", cjSession.IDString(), err)
@@ -514,12 +516,12 @@ func (reg *ConjureReg) UnpackRegResp(regResp *pb.RegistrationResponse) error {
 
 	// Client config -- check if not nil in the registration response
 	if regResp.GetClientConf() != nil {
-		currGen := Assets().GetGeneration()
+		currGen := ca.Assets().GetGeneration()
 		incomingGen := regResp.GetClientConf().GetGeneration()
 		Logger().Debugf("received clientconf in regResponse w/ gen %d", incomingGen)
 		if currGen < incomingGen {
 			Logger().Debugf("Updating clientconf %d -> %d", currGen, incomingGen)
-			_err := Assets().SetClientConf(regResp.GetClientConf())
+			_err := ca.Assets().SetClientConf(regResp.GetClientConf())
 			if _err != nil {
 				Logger().Warnf("could not set ClientConf in bidirectional API: %v", _err.Error())
 			}
@@ -572,7 +574,7 @@ func (reg *ConjureReg) generateClientToStation(ctx context.Context) (*pb.ClientT
 
 	//[reference] Generate ClientToStation protobuf
 	// transition := pb.C2S_Transition_C2S_SESSION_INIT
-	currentGen := Assets().GetGeneration()
+	currentGen := ca.Assets().GetGeneration()
 	currentLibVer := core.CurrentClientLibraryVersion()
 	transport := reg.getPbTransport()
 
@@ -689,7 +691,7 @@ func sleepWithContext(ctx context.Context, duration time.Duration) {
 
 // SelectPhantom - select one phantom IP address based on shared secret
 func SelectPhantom(seed []byte, support uint) (*net.IP, *net.IP, bool, error) {
-	phantomSubnets := Assets().GetPhantomSubnets()
+	phantomSubnets := ca.Assets().GetPhantomSubnets()
 	switch support {
 	case v4:
 		phantomIPv4, err := ps.SelectPhantom(seed, phantomSubnets, ps.V4Only, true)
@@ -719,7 +721,7 @@ func SelectPhantom(seed []byte, support uint) (*net.IP, *net.IP, bool, error) {
 }
 
 func getStationKey() [32]byte {
-	return *Assets().GetConjurePubkey()
+	return *ca.Assets().GetConjurePubkey()
 }
 
 // GetRandomDuration returns a random duration that
