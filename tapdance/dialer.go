@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"strings"
-	"sync"
 	"time"
 
 	transports "github.com/refraction-networking/conjure/pkg/transports/client"
@@ -107,7 +106,7 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 	}
 
 	if d.DialerWithLaddr != nil && d.Dialer != nil {
-		return nil, fmt.Errorf("both DialerWithLaddr and Dialer are defined, only define DialerWithLaddr")
+		return nil, fmt.Errorf("both DialerWithLaddr and Dialer are defined, only one dialer can be used")
 	}
 
 	if d.Dialer != nil {
@@ -117,23 +116,16 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 			}
 			return d.Dialer(ctx, network, raddr)
 		}
-	}
-
-	if d.DialerWithLaddr == nil {
+	} else if d.DialerWithLaddr == nil {
 		// custom dialer is not set, use default
-		defaultDialer := net.Dialer{}
-		dialMutex := sync.Mutex{}
 		d.DialerWithLaddr = func(ctx context.Context, network, laddr, raddr string) (net.Conn, error) {
+			defaultDialer := net.Dialer{}
 			localAddr, err := resolveAddr(network, laddr)
 			if err != nil {
 				return nil, fmt.Errorf("error resolving laddr: %v", err)
 			}
 
-			dialMutex.Lock()
-			defer dialMutex.Unlock()
-
 			defaultDialer.LocalAddr = localAddr
-
 			return defaultDialer.DialContext(ctx, network, raddr)
 		}
 	}

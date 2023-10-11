@@ -680,13 +680,6 @@ func sleepWithContext(ctx context.Context, duration time.Duration) {
 	}
 }
 
-// var phantomSubnets = []conjurePhantomSubnet{
-// 	{subnet: "192.122.190.0/24", weight: 90.0},
-// 	{subnet: "2001:48a8:687f:1::/64", weight: 90.0},
-// 	{subnet: "141.219.0.0/16", weight: 10.0},
-// 	{subnet: "35.8.0.0/16", weight: 10.0},
-// }
-
 // SelectPhantom - select one phantom IP address based on shared secret
 func SelectPhantom(seed []byte, support uint) (*net.IP, *net.IP, bool, error) {
 	phantomSubnets := Assets().GetPhantomSubnets()
