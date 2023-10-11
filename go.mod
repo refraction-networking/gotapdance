@@ -26,6 +26,7 @@ require (
 	github.com/felixge/fgprof v0.9.3 // indirect
 	github.com/flynn/noise v1.0.0 // indirect
 	github.com/gaukas/godicttls v0.0.4 // indirect
+	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/google/pprof v0.0.0-20211214055906-6f57359322fd // indirect
 	github.com/keltia/proxy v0.9.3 // indirect
