@@ -39,6 +39,11 @@ var assetsOnce sync.Once
 // First access to singleton sets path. Assets(), if called
 // before SetAssetsDir() sets path to "./assets/"
 func Assets() *assets {
+	// We leave this warning here, because only Tapdance should
+	// use this instance. Conjure uses assets provided by
+	// github.com/refraction-networking/conjure/pkg/client/assets
+	// and this Assets (and Tapdance as a whole) is deprecated
+	Logger().Warnf("Loading TapDance Assets...")
 	var err error
 	_initAssets := func() { err = initAssets("./assets/") }
 	assetsOnce.Do(_initAssets)
