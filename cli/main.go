@@ -90,7 +90,7 @@ func main() {
 	// Check that the provided phantom net overlaps with at least one of our phatom options
 	if *phantomNet != "" {
 		// Load phantoms
-		subnets, err := phantoms.GetUnweightedSubnetList(tapdance.Assets().GetPhantomSubnets())
+		subnets, err := phantoms.GetUnweightedSubnetList(ca.Assets().GetPhantomSubnets())
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to get Phantom subnets: %v\n", err)
 			os.Exit(255)
@@ -253,14 +253,14 @@ func manageConn(tdDialer tapdance.Dialer, connectTarget string, clientConn *net.
 
 	p, err := tdDialer.TransportConfig.GetParams()
 	if err != nil {
-		fmt.Printf("failed to get transport params: %v\n", err)
+		tapdance.Logger().Errorf("failed to get transport params: %v\n", err)
 		return
 	}
-	fmt.Printf("transport: %s - %s - gen-%d\n", tdDialer.TransportConfig.String(), p, tapdance.Assets().GetGeneration())
+	tapdance.Logger().Debugf("transport: %s - %s - gen-%d\n", tdDialer.TransportConfig.String(), p, ca.Assets().GetGeneration())
 
 	tdConn, err := tdDialer.Dial("tcp", connectTarget)
 	if err != nil || tdConn == nil {
-		fmt.Printf("failed to dial %s: %v\n", connectTarget, err)
+		tapdance.Logger().Errorf("failed to dial %s: %v\n", connectTarget, err)
 		return
 	}
 
