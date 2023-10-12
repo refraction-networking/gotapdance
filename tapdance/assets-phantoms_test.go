@@ -13,7 +13,7 @@ import (
 )
 
 func TestAssetsPhantomsBasics(t *testing.T) {
-	phantomSet := Assets().GetPhantomSubnets()
+	phantomSet := ca.Assets().GetPhantomSubnets()
 	assert.NotNil(t, phantomSet)
 }
 
@@ -29,13 +29,13 @@ func TestAssetsPhantoms(t *testing.T) {
 			// fmt.Printf("TapDance log was:\n%s\n", b.String())
 		}
 	}()
-	oldpath := Assets().path
+	oldpath := ca.Assets().GetAssetsDir()
 
 	dir1 := t.TempDir()
 
 	var testPhantoms = ps.GetDefaultPhantomSubnets()
 
-	AssetsSetDir(dir1)
+	ca.AssetsSetDir(dir1)
 	err := ca.Assets().SetPhantomSubnets(testPhantoms)
 	if err != nil {
 		t.Fatal(err)

@@ -11,6 +11,8 @@ import (
 	"github.com/refraction-networking/conjure/pkg/core"
 	pb "github.com/refraction-networking/conjure/proto"
 	tls "github.com/refraction-networking/utls"
+	ps "github.com/refraction-networking/conjure/pkg/phantoms"
+	ca "github.com/refraction-networking/conjure/pkg/client/assets"
 	"github.com/stretchr/testify/require"
 )
 
@@ -54,6 +56,20 @@ func TestSelectBoth(t *testing.T) {
 	seed := []byte{
 		0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7,
 		0x8, 0x9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF,
+	}
+
+	// Set up temp directory for stub ClientConf (so we don't overwrite our current one)
+	oldpath := ca.Assets().GetAssetsDir()
+	ca.AssetsSetDir(t.TempDir())
+	defer ca.AssetsSetDir(oldpath)
+
+	// Default Phantoms (can't assume ClientConf is particular dev version)
+	var testPhantoms = ps.GetDefaultPhantomSubnets()
+
+	// Set phantoms
+	err := ca.Assets().SetPhantomSubnets(testPhantoms)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	phantomIPAddr4, phantomIPAddr6, _, err := SelectPhantom(seed, both)
@@ -126,8 +142,8 @@ func TestRegDigest(t *testing.T) {
 }
 
 func TestCheckV6Decoys(t *testing.T) {
-	AssetsSetDir("./assets")
-	decoysV6 := Assets().GetV6Decoys()
+	ca.AssetsSetDir("./assets")
+	decoysV6 := ca.Assets().GetV6Decoys()
 	numDecoys := len(decoysV6)
 
 	for _, decoy := range decoysV6 {
