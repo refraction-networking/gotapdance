@@ -7,12 +7,13 @@ import (
 	"testing"
 
 	ps "github.com/refraction-networking/conjure/pkg/phantoms"
+	ca "github.com/refraction-networking/conjure/pkg/client/assets"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestAssetsPhantomsBasics(t *testing.T) {
-	phantomSet := Assets().GetPhantomSubnets()
+	phantomSet := ca.Assets().GetPhantomSubnets()
 	assert.NotNil(t, phantomSet)
 }
 
@@ -28,14 +29,14 @@ func TestAssetsPhantoms(t *testing.T) {
 			// fmt.Printf("TapDance log was:\n%s\n", b.String())
 		}
 	}()
-	oldpath := Assets().path
+	oldpath := ca.Assets().GetAssetsDir()
 
 	dir1 := t.TempDir()
 
 	var testPhantoms = ps.GetDefaultPhantomSubnets()
 
-	AssetsSetDir(dir1)
-	err := Assets().SetPhantomSubnets(testPhantoms)
+	ca.AssetsSetDir(dir1)
+	err := ca.Assets().SetPhantomSubnets(testPhantoms)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,5 +59,5 @@ func TestAssetsPhantoms(t *testing.T) {
 	require.Equal(t, "192.122.190.178", addr4.String())
 	require.Nil(t, addr6)
 
-	AssetsSetDir(oldpath)
+	ca.AssetsSetDir(oldpath)
 }
