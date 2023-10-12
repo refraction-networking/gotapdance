@@ -43,7 +43,7 @@ func Assets() *assets {
 	// use this instance. Conjure uses assets provided by
 	// github.com/refraction-networking/conjure/pkg/client/assets
 	// and this Assets (and Tapdance as a whole) is deprecated
-	Logger().Warnf("Loading TapDance Assets...")
+	Logger().Warnf("Loading TapDance Assets...(deprecated; use conjure assets)")
 	var err error
 	_initAssets := func() { err = initAssets("./assets/") }
 	assetsOnce.Do(_initAssets)
