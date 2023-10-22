@@ -67,7 +67,7 @@ func DialConjure(ctx context.Context, cjSession *ConjureSession, registrationMet
 	}
 
 	if registerOnly {
-		Logger().Printf("%v Successfully registered to use IPv4 phantom: %s:%d or IPv6 phantom: %s:%d", cjSession.IDString(), registration.phantom4.String(), registration.phantomDstPort, registration.phantom6.String(), registration.phantomDstPort)
+		fmt.Printf("%v Successfully registered to use IPv4 phantom: %s:%d or IPv6 phantom: %s:%d", cjSession.IDString(), registration.phantom4.String(), registration.phantomDstPort, registration.phantom6.String(), registration.phantomDstPort)
 		return nil, err
 	}
 
