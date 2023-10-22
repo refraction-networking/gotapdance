@@ -51,7 +51,7 @@ func main() {
 	var APIRegistration = flag.String("api-endpoint", "", "If set, API endpoint to use when performing API registration. Defaults to https://registration.refraction.network/api/register (or register-bidirectional for bdapi)")
 	var registrar = flag.String("registrar", "decoy", "One of decoy, api, bdapi, dns, bddns.")
 	var transport = flag.String("transport", "min", `The transport to use for Conjure connections. Current values include "prefix", "min" and "obfs4".`)
-	var randomizeDstPort = flag.Bool("rand-dst-port", true, `enable destination port randomization for the transport connection`)
+	var randomizeDstPort = flag.Bool("rand-dst-port", false, `enable destination port randomization for the transport connection`)
 	var prefixID = flag.Int("prefix-id", -1, "ID of the prefix to send, used with the `transport=\"prefix\"` option. Default is Random. See prefix transport for options")
 	var disableOverrides = flag.Bool("disable-overrides", false, "Informs the registrar that chosen parameters will be used, only applicable to bidirectional reg methods")
 	var phantomNet = flag.String("phantom", "", "Target phantom subnet. Must overlap with ClientConf, and will be achieved by brute force of seeds until satisfied")
@@ -73,14 +73,11 @@ func main() {
 		}
 	} else {
 		// since this is a registration-only run, use a dummy target that we will never connect to
-		// *connect_target = "185.199.109.153:443" // refraction.network
-		if *registrar != "bdapi" {
-			tdproxy.Logger.Errorf("register-only option requires bidirectional registration \n")
-			flag.Usage()
+		*connectTarget = "refraction.network:443"
 
-			os.Exit(1)
+		// always disable station overrides when register-only option is set
+		*disableOverrides = true
 
-		}
 		if *phantomNet == "" {
 			tdproxy.Logger.Errorf("register-only option requires -phantom to be set \n")
 			flag.Usage()
@@ -88,10 +85,6 @@ func main() {
 			os.Exit(1)
 
 		}
-		// *connect_target = "185.199.109.153:443" // refraction.network
-		tdproxy.Logger.Println("Disabling registrar overrides")
-		*disableOverrides = true
-		*connectTarget = ""
 	}
 
 	v6Support := !*excludeV6
@@ -184,7 +177,7 @@ func main() {
 	}
 
 	if *registerOnly {
-		err = register(*td, *APIRegistration, *registrar, *proxyHeader, v6Support, *width, t, *disableOverrides, *phantomNet, *registerOnly)
+		err = register(*td, *APIRegistration, *registrar, *connectTarget, *proxyHeader, v6Support, *width, t, *disableOverrides, *phantomNet, *registerOnly)
 		if err != nil {
 			tapdance.Logger().Println(err)
 			os.Exit(1)
@@ -198,12 +191,11 @@ func main() {
 	}
 }
 
-func register(td bool, apiEndpoint string, registrar string, proxyHeader bool, v6Support bool, width int, t tapdance.Transport, disableOverrides bool, phantomNet string, registerOnly bool) error {
+func register(td bool, apiEndpoint string, registrar string, dummyConnectTarget string, proxyHeader bool, v6Support bool, width int, t tapdance.Transport, disableOverrides bool, phantomNet string, registerOnly bool) error {
 	tdDialer, err := prepareDialer(td, apiEndpoint, registrar, proxyHeader, v6Support, width, t, disableOverrides, phantomNet, registerOnly)
 	if err != nil {
 		return fmt.Errorf("error preparing tapdance Dialer: %w", err)
 	}
-	dummyConnectTarget := "refraction.network:443"
 	_, err = tdDialer.Dial("tcp", dummyConnectTarget)
 	if err != nil {
 		tapdance.Logger().Errorf("failed to register %s: %v\n", dummyConnectTarget, err)
