@@ -75,7 +75,7 @@ func main() {
 		// since this is a registration-only run, use a dummy target that we will never connect to
 		*connectTarget = "refraction.network:443"
 
-		// always disable station overrides when register-only option is set
+		// always disable registrar overrides when register-only option is set. Only applicable to bidirectional registration
 		*disableOverrides = true
 
 		if *phantomNet == "" {
