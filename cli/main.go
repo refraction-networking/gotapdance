@@ -13,12 +13,12 @@ import (
 	"time"
 
 	"github.com/pkg/profile"
+	ca "github.com/refraction-networking/conjure/pkg/client/assets"
 	"github.com/refraction-networking/conjure/pkg/phantoms"
 	decoyreg "github.com/refraction-networking/conjure/pkg/registrars/decoy-registrar"
 	"github.com/refraction-networking/conjure/pkg/registrars/registration"
 	transports "github.com/refraction-networking/conjure/pkg/transports/client"
 	pb "github.com/refraction-networking/conjure/proto"
-	ca "github.com/refraction-networking/conjure/pkg/client/assets"
 	"github.com/refraction-networking/gotapdance/tapdance"
 	"github.com/refraction-networking/gotapdance/tdproxy"
 	"github.com/sirupsen/logrus"
@@ -51,10 +51,11 @@ func main() {
 	var APIRegistration = flag.String("api-endpoint", "", "If set, API endpoint to use when performing API registration. Defaults to https://registration.refraction.network/api/register (or register-bidirectional for bdapi)")
 	var registrar = flag.String("registrar", "decoy", "One of decoy, api, bdapi, dns, bddns.")
 	var transport = flag.String("transport", "min", `The transport to use for Conjure connections. Current values include "prefix", "min" and "obfs4".`)
-	var randomizeDstPort = flag.Bool("rand-dst-port", true, `enable destination port randomization for the transport connection`)
+	var randomizeDstPort = flag.Bool("rand-dst-port", false, `enable destination port randomization for the transport connection`)
 	var prefixID = flag.Int("prefix-id", -1, "ID of the prefix to send, used with the `transport=\"prefix\"` option. Default is Random. See prefix transport for options")
 	var disableOverrides = flag.Bool("disable-overrides", false, "Informs the registrar that chosen parameters will be used, only applicable to bidirectional reg methods")
 	var phantomNet = flag.String("phantom", "", "Target phantom subnet. Must overlap with ClientConf, and will be achieved by brute force of seeds until satisfied")
+	var registerOnly = flag.Bool("register-only", false, "register to use a phantom, but do not connect to a covert. Only works with \"bdapi\" registrar")
 	var dtlsUnordered = flag.Bool("unordered-dtls", false, "Set DTLS reliability to unordered. Only works with DTLS transport.")
 
 	flag.Usage = func() {
@@ -63,11 +64,27 @@ func main() {
 	}
 	flag.Parse()
 
-	if *connectTarget == "" {
-		tdproxy.Logger.Errorf("dark decoys require -connect-addr to be set\n")
-		flag.Usage()
+	if !*registerOnly {
+		if *connectTarget == "" {
+			tdproxy.Logger.Errorf("dark decoys require -connect-addr to be set\n")
+			flag.Usage()
 
-		os.Exit(1)
+			os.Exit(1)
+		}
+	} else {
+		// since this is a registration-only run, use a dummy target that we will never connect to
+		*connectTarget = "refraction.network:443"
+
+		// always disable registrar overrides when register-only option is set. Only applicable to bidirectional registration
+		*disableOverrides = true
+
+		if *phantomNet == "" {
+			tdproxy.Logger.Errorf("register-only option requires -phantom to be set \n")
+			flag.Usage()
+
+			os.Exit(1)
+
+		}
 	}
 
 	v6Support := !*excludeV6
@@ -159,14 +176,34 @@ func main() {
 		os.Exit(1)
 	}
 
-	err = connectDirect(*td, *APIRegistration, *registrar, *connectTarget, *port, *proxyHeader, v6Support, *width, t, *disableOverrides, *phantomNet)
-	if err != nil {
-		tapdance.Logger().Println(err)
-		os.Exit(1)
+	if *registerOnly {
+		err = register(*td, *APIRegistration, *registrar, *connectTarget, *proxyHeader, v6Support, *width, t, *disableOverrides, *phantomNet, *registerOnly)
+		if err != nil {
+			tapdance.Logger().Println(err)
+			os.Exit(1)
+		}
+	} else {
+		err = connectDirect(*td, *APIRegistration, *registrar, *connectTarget, *port, *proxyHeader, v6Support, *width, t, *disableOverrides, *phantomNet, *registerOnly)
+		if err != nil {
+			tapdance.Logger().Println(err)
+			os.Exit(1)
+		}
 	}
 }
 
-func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget string, localPort int, proxyHeader bool, v6Support bool, width int, t tapdance.Transport, disableOverrides bool, phantomNet string) error {
+func register(td bool, apiEndpoint string, registrar string, dummyConnectTarget string, proxyHeader bool, v6Support bool, width int, t tapdance.Transport, disableOverrides bool, phantomNet string, registerOnly bool) error {
+	tdDialer, err := prepareDialer(td, apiEndpoint, registrar, proxyHeader, v6Support, width, t, disableOverrides, phantomNet, registerOnly)
+	if err != nil {
+		return fmt.Errorf("error preparing tapdance Dialer: %w", err)
+	}
+	_, err = tdDialer.Dial("tcp", dummyConnectTarget)
+	if err != nil {
+		tapdance.Logger().Errorf("failed to register %s: %v\n", dummyConnectTarget, err)
+	}
+	return nil
+}
+
+func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget string, localPort int, proxyHeader bool, v6Support bool, width int, t tapdance.Transport, disableOverrides bool, phantomNet string, registerOnly bool) error {
 	if _, _, err := net.SplitHostPort(connectTarget); err != nil {
 		return fmt.Errorf("failed to parse host and port from connectTarget %s: %v",
 			connectTarget, err)
@@ -178,64 +215,9 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget 
 		return fmt.Errorf("error listening on port %v: %v", localPort, err)
 	}
 
-	tdDialer := tapdance.Dialer{
-		DarkDecoy:          !td,
-		DarkDecoyRegistrar: decoyreg.NewDecoyRegistrar(),
-		UseProxyHeader:     proxyHeader,
-		V6Support:          v6Support,
-		Width:              width,
-		RegDelay:           defaultConnectionDelay,
-		// Transport:          getTransportFromName(transport), // Still works for backwards compatibility
-		TransportConfig:           t,
-		PhantomNet:                phantomNet,
-		DisableRegistrarOverrides: disableOverrides,
-	}
-
-	switch registrar {
-	case "decoy":
-		dr := decoyreg.NewDecoyRegistrar()
-		dr.Width = uint(width)
-		tdDialer.DarkDecoyRegistrar = dr
-	case "api":
-		if apiEndpoint == "" {
-			apiEndpoint = defaultAPIEndpoint
-		}
-		tdDialer.DarkDecoyRegistrar, err = registration.NewAPIRegistrar(&registration.Config{
-			Target:             apiEndpoint,
-			Bidirectional:      false,
-			MaxRetries:         3,
-			SecondaryRegistrar: decoyreg.NewDecoyRegistrar(),
-		})
-		if err != nil {
-			return fmt.Errorf("error creating API registrar: %w", err)
-		}
-	case "bdapi":
-		if apiEndpoint == "" {
-			apiEndpoint = defaultBDAPIEndpoint
-		}
-		tdDialer.DarkDecoyRegistrar, err = registration.NewAPIRegistrar(&registration.Config{
-			Target:             apiEndpoint,
-			Bidirectional:      true,
-			MaxRetries:         3,
-			SecondaryRegistrar: decoyreg.NewDecoyRegistrar(),
-		})
-		if err != nil {
-			return fmt.Errorf("error creating API registrar: %w", err)
-		}
-	case "dns":
-		dnsConf := ca.Assets().GetDNSRegConf()
-		tdDialer.DarkDecoyRegistrar, err = newDNSRegistrarFromConf(dnsConf, false, 3, ca.Assets().GetConjurePubkey()[:])
-		if err != nil {
-			return fmt.Errorf("error creating DNS registrar: %w", err)
-		}
-	case "bddns":
-		dnsConf := ca.Assets().GetDNSRegConf()
-		tdDialer.DarkDecoyRegistrar, err = newDNSRegistrarFromConf(dnsConf, true, 3, ca.Assets().GetConjurePubkey()[:])
-		if err != nil {
-			return fmt.Errorf("error creating DNS registrar: %w", err)
-		}
-	default:
-		return fmt.Errorf("unknown registrar %v", registrar)
+	tdDialer, err := prepareDialer(td, apiEndpoint, registrar, proxyHeader, v6Support, width, t, disableOverrides, phantomNet, registerOnly)
+	if err != nil {
+		return fmt.Errorf("error preparing tapdance Dialer: %w", err)
 	}
 
 	for {
@@ -313,6 +295,73 @@ func setSingleDecoyHost(decoy string) error {
 		}
 	tapdance.Logger().Infof("Single decoy parsed. SNI: %s, IP: %s", sni, ip)
 	return nil
+}
+
+func prepareDialer(td bool, apiEndpoint string, registrar string, proxyHeader bool, v6Support bool, width int, t tapdance.Transport, disableOverrides bool, phantomNet string, registerOnly bool) (tapdance.Dialer, error) {
+
+	tdDialer := tapdance.Dialer{
+		DarkDecoy:          !td,
+		DarkDecoyRegistrar: decoyreg.NewDecoyRegistrar(),
+		UseProxyHeader:     proxyHeader,
+		V6Support:          v6Support,
+		Width:              width,
+		RegDelay:           defaultConnectionDelay,
+		// Transport:          			getTransportFromName(transport), // Still works for backwards compatibility
+		TransportConfig:           t,
+		PhantomNet:                phantomNet,
+		DisableRegistrarOverrides: disableOverrides,
+		RegisterOnly:              registerOnly,
+	}
+
+	var err error
+
+	switch registrar {
+	case "decoy":
+		dr := decoyreg.NewDecoyRegistrar()
+		dr.Width = uint(width)
+		tdDialer.DarkDecoyRegistrar = dr
+	case "api":
+		if apiEndpoint == "" {
+			apiEndpoint = defaultAPIEndpoint
+		}
+		tdDialer.DarkDecoyRegistrar, err = registration.NewAPIRegistrar(&registration.Config{
+			Target:             apiEndpoint,
+			Bidirectional:      false,
+			MaxRetries:         3,
+			SecondaryRegistrar: decoyreg.NewDecoyRegistrar(),
+		})
+		if err != nil {
+			return tdDialer, fmt.Errorf("error creating API registrar: %w", err)
+		}
+	case "bdapi":
+		if apiEndpoint == "" {
+			apiEndpoint = defaultBDAPIEndpoint
+		}
+		tdDialer.DarkDecoyRegistrar, err = registration.NewAPIRegistrar(&registration.Config{
+			Target:             apiEndpoint,
+			Bidirectional:      true,
+			MaxRetries:         3,
+			SecondaryRegistrar: decoyreg.NewDecoyRegistrar(),
+		})
+		if err != nil {
+			return tdDialer, fmt.Errorf("error creating API registrar: %w", err)
+		}
+	case "dns":
+		dnsConf := ca.Assets().GetDNSRegConf()
+		tdDialer.DarkDecoyRegistrar, err = newDNSRegistrarFromConf(dnsConf, false, 3, ca.Assets().GetConjurePubkey()[:])
+		if err != nil {
+			return tdDialer, fmt.Errorf("error creating DNS registrar: %w", err)
+		}
+	case "bddns":
+		dnsConf := ca.Assets().GetDNSRegConf()
+		tdDialer.DarkDecoyRegistrar, err = newDNSRegistrarFromConf(dnsConf, true, 3, ca.Assets().GetConjurePubkey()[:])
+		if err != nil {
+			return tdDialer, fmt.Errorf("error creating DNS registrar: %w", err)
+		}
+	default:
+		return tdDialer, fmt.Errorf("unknown registrar %v", registrar)
+	}
+	return tdDialer, nil
 }
 
 // NewDNSRegistrarFromConf creates a DNSRegistrar from DnsRegConf protobuf. Uses the pubkey in conf as default. If it is not supplied (nil), uses fallbackKey instead.
