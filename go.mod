@@ -8,7 +8,7 @@ require (
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.7.0
-	github.com/refraction-networking/conjure v0.7.8
+	github.com/refraction-networking/conjure v0.7.9
 	github.com/refraction-networking/ed25519 v0.1.2
 	github.com/refraction-networking/utls v1.3.3
 	github.com/sergeyfrolov/bsbuffer v0.0.0-20180903213811-94e85abb8507
@@ -20,6 +20,8 @@ require (
 )
 
 require (
+	filippo.io/bigmod v0.0.1 // indirect
+	filippo.io/keygen v0.0.0-20230306160926-5201437acf8e // indirect
 	github.com/andybalholm/brotli v1.0.5 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dchest/siphash v1.2.3 // indirect
