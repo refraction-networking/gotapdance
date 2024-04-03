@@ -23,6 +23,7 @@ func main() {
 
 	var seedStr, saltStr, inFile, outFile string
 	var v6, both bool
+	var cliVersion uint
 
 	flag.StringVar(&seedStr, "seed", defaultSeed, "Overrides the default seed for phantom selection")
 	flag.StringVar(&saltStr, "salt", defaultSalt, "Overrides the default salt for phantom selection")
@@ -30,6 +31,7 @@ func main() {
 	flag.StringVar(&outFile, "o", defaultOutFile, "Filepath to write output bias into")
 	flag.BoolVar(&v6, "v6", false, "Generate bias output for IPv6 subnets only")
 	flag.BoolVar(&both, "both", false, "Generate bias output for BOTH IPv4 and IPv6 subnets")
+	flag.UintVar(&cliVersion, "version", 1, "Client library version to generate bias for")
 
 	flag.Parse()
 
@@ -48,28 +50,25 @@ func main() {
 	ps := clientConf.GetPhantomSubnetsList()
 	ipCount := map[string]int{}
 
-	transform := phantoms.V4Only
-	if v6 {
-		transform = phantoms.V6Only
-	} else if both {
-		transform = nil
+	os.Setenv("PHANTOM_SUBNET_LOCATION", "/dev/null")
+	phantomSelector, err := phantoms.NewPhantomIPSelector()
+	if err != nil {
+		panic(err)
 	}
 
-	//snets, err := parseSubnets(getSubnets(ps, nil, true))
-	//require.Nil(t, err)
-	//for snet := range snets {
-	//}
+	subnetConfig := phantoms.SubnetConfig{WeightedSubnets: ps.WeightedSubnets}
+	newGen := phantomSelector.AddGeneration(-1, &subnetConfig)
+
 	totTrials := 1_000_000
 	for i := 0; i < totTrials; i++ {
 		curSeed := expandSeed(seed, salt, i)
-		addr, err := phantoms.SelectPhantom(curSeed, ps, transform, true)
-		//addr, err := SelectPhantom(curSeed, ps, nil, true)
+		addr, err := phantomSelector.Select(curSeed, newGen, cliVersion, v6)
 		if err != nil {
 			continue
 		}
-		//require.Nil(t, err)
 		ipCount[addr.String()]++
 	}
+
 	// Write file
 	f, err := os.Create(outFile)
 	if err != nil {
