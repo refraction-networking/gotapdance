@@ -14,14 +14,12 @@ require (
 	github.com/sergeyfrolov/bsbuffer v0.0.0-20180903213811-94e85abb8507
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.8.4
-	golang.org/x/crypto v0.15.0
-	golang.org/x/net v0.18.0
+	golang.org/x/crypto v0.16.0
+	golang.org/x/net v0.19.0
 	google.golang.org/protobuf v1.31.0
 )
 
 require (
-	filippo.io/bigmod v0.0.1 // indirect
-	filippo.io/keygen v0.0.0-20230306160926-5201437acf8e // indirect
 	github.com/andybalholm/brotli v1.0.5 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dchest/siphash v1.2.3 // indirect
@@ -36,14 +34,12 @@ require (
 	github.com/mroth/weightedrand v1.0.0 // indirect
 	github.com/pion/dtls/v2 v2.2.7 // indirect
 	github.com/pion/logging v0.2.2 // indirect
-	github.com/pion/randutil v0.1.0 // indirect
-	github.com/pion/sctp v1.8.8 // indirect
 	github.com/pion/stun v0.6.1 // indirect
 	github.com/pion/transport/v2 v2.2.3 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/refraction-networking/obfs4 v0.1.2 // indirect
 	gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/goptlib v1.5.0 // indirect
-	golang.org/x/sys v0.14.0 // indirect
+	golang.org/x/sys v0.15.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
@@ -51,3 +47,5 @@ require (
 replace github.com/pion/dtls/v2 => github.com/mingyech/dtls/v2 v2.0.0
 
 replace github.com/pion/transport/v2 => github.com/mingyech/transport/v2 v2.0.0
+
+replace github.com/refraction-networking/conjure => github.com/nvswa/conjure v0.0.0-20240508191950-f1f3a29d1898
