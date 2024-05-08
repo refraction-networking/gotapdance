@@ -1,6 +1,6 @@
 module github.com/refraction-networking/gotapdance
 
-go 1.18
+go 1.20
 
 require (
 	github.com/jinzhu/copier v0.3.5
@@ -20,32 +20,46 @@ require (
 )
 
 require (
+	github.com/BurntSushi/toml v1.3.2 // indirect
 	github.com/andybalholm/brotli v1.0.5 // indirect
+	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dchest/siphash v1.2.3 // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/felixge/fgprof v0.9.3 // indirect
 	github.com/flynn/noise v1.0.0 // indirect
 	github.com/gaukas/godicttls v0.0.4 // indirect
-	github.com/google/go-cmp v0.5.9 // indirect
+	github.com/go-redis/redis/v8 v8.11.5 // indirect
 	github.com/google/pprof v0.0.0-20211214055906-6f57359322fd // indirect
+	github.com/hashicorp/golang-lru v1.0.2 // indirect
 	github.com/keltia/proxy v0.9.3 // indirect
 	github.com/klauspost/compress v1.16.7 // indirect
-	github.com/libp2p/go-reuseport v0.4.0 // indirect
+	github.com/klauspost/cpuid/v2 v2.1.1 // indirect
+	github.com/klauspost/reedsolomon v1.11.8 // indirect
 	github.com/mroth/weightedrand v1.0.0 // indirect
+	github.com/oschwald/geoip2-golang v1.9.0 // indirect
+	github.com/oschwald/maxminddb-golang v1.12.0 // indirect
+	github.com/pebbe/zmq4 v1.2.10 // indirect
 	github.com/pion/dtls/v2 v2.2.7 // indirect
 	github.com/pion/logging v0.2.2 // indirect
-	github.com/pion/stun v0.6.1 // indirect
-	github.com/pion/transport/v2 v2.2.3 // indirect
+	github.com/pion/transport/v3 v3.0.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/refraction-networking/obfs4 v0.1.2 // indirect
+	github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161 // indirect
+	github.com/templexxx/xor v0.0.0-20191217153810-f85b25db303b // indirect
+	github.com/tjfoc/gmsm v1.4.1 // indirect
+	github.com/xtaci/kcp-go v5.4.20+incompatible // indirect
 	gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/goptlib v1.5.0 // indirect
 	golang.org/x/sys v0.15.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/pion/dtls/v2 => github.com/mingyech/dtls/v2 v2.0.0
+// replace github.com/pion/dtls/v2 => github.com/mingyech/dtls/v2 v2.0.0
+
+// replace github.com/pion/transport/v2 => github.com/mingyech/transport/v2 v2.0.0
+replace github.com/pion/dtls/v2 => github.com/mingyech/dtls/v2 v2.0.0-20231127190216-63a98eeae997
 
 replace github.com/pion/transport/v2 => github.com/mingyech/transport/v2 v2.0.0
 
-replace github.com/refraction-networking/conjure => github.com/nvswa/conjure v0.0.0-20240508191950-f1f3a29d1898
+replace github.com/refraction-networking/conjure => github.com/nvswa/conjure v0.0.0-20240508201951-314093ccdcab
