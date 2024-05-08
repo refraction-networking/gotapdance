@@ -246,6 +246,10 @@ func manageConn(tdDialer tapdance.Dialer, connectTarget string, clientConn *net.
 		return
 	}
 
+	proxy(tdConn, clientConn)
+}
+
+func proxy(tdConn net.Conn, clientConn *net.TCPConn) {
 	// Copy data from the client application into the DarkDecoy connection.
 	// 		TODO: proper connection management with idle timeout
 	var wg sync.WaitGroup
