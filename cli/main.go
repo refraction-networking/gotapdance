@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
 	"flag"
@@ -14,15 +15,19 @@ import (
 
 	"github.com/pkg/profile"
 	ca "github.com/refraction-networking/conjure/pkg/client/assets"
+	"github.com/refraction-networking/conjure/pkg/core"
 	"github.com/refraction-networking/conjure/pkg/phantoms"
 	decoyreg "github.com/refraction-networking/conjure/pkg/registrars/decoy-registrar"
 	"github.com/refraction-networking/conjure/pkg/registrars/registration"
+	"github.com/refraction-networking/conjure/pkg/station/oscur0"
 	transports "github.com/refraction-networking/conjure/pkg/transports/client"
 	pb "github.com/refraction-networking/conjure/proto"
 	"github.com/refraction-networking/gotapdance/tapdance"
 	"github.com/refraction-networking/gotapdance/tdproxy"
 	"github.com/sirupsen/logrus"
 )
+
+const oscur0_test_pubkey = "8c34e2362f33707ff4b001f31302b1968fe8d67fb8843ee11c60df61b9e17609"
 
 const (
 	defaultAPIEndpoint     = "https://registration.refraction.network/api/register"
@@ -57,12 +62,21 @@ func main() {
 	var phantomNet = flag.String("phantom", "", "Target phantom subnet. Must overlap with ClientConf, and will be achieved by brute force of seeds until satisfied")
 	var registerOnly = flag.Bool("register-only", false, "register to use a phantom, but do not connect to a covert. Only works with \"bdapi\" registrar")
 	var dtlsUnordered = flag.Bool("unordered-dtls", false, "Set DTLS reliability to unordered. Only works with DTLS transport.")
+	var oscur0 = flag.Bool("oscur0", false, "Use oscur0.")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Dark Decoy CLI\n$./cli -connect-addr=<decoy_address> [OPTIONS] \n\nOptions:\n")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+
+	if *oscur0 {
+		err := connectOscur0(*connectTarget, *port, *phantomNet)
+		if err != nil {
+			tapdance.Logger().Println(err)
+			os.Exit(1)
+		}
+	}
 
 	if !*registerOnly {
 		if *connectTarget == "" {
@@ -228,6 +242,46 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget 
 
 		go manageConn(tdDialer, connectTarget, clientConn)
 	}
+}
+
+func connectOscur0(connectTarget string, localPort int, phantomNet string) error {
+	if _, _, err := net.SplitHostPort(connectTarget); err != nil {
+		return fmt.Errorf("failed to parse host and port from connectTarget %s: %v",
+			connectTarget, err)
+
+	}
+
+	l, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: localPort})
+	if err != nil {
+		return fmt.Errorf("error listening on port %v: %v", localPort, err)
+	}
+
+	pubKey, err := hex.DecodeString(oscur0_test_pubkey)
+	if err != nil {
+		return err
+	}
+
+	keys, err := core.GenerateClientSharedKeys([32]byte(pubKey))
+	if err != nil {
+		return fmt.Errorf("error generating client keys: %v", err)
+	}
+
+	addr4, _, _, err := tapdance.SelectPhantom(keys.ConjureSeed, 0)
+	if err != nil {
+		return fmt.Errorf("error generating phantom address: %v", err)
+	}
+
+	testAddr := &net.UDPAddr{Port: 37421, IP: *addr4}
+
+	pconn, err := net.ListenUDP("udp", nil)
+
+	tdConn, err := oscur0.ClientWithContext(context.Background(), pconn, testAddr, oscur0.Config{Phantom: connectTarget, Keys: keys})
+
+	clientConn, err := l.AcceptTCP()
+
+	proxy(tdConn, clientConn)
+
+	return nil
 }
 
 func manageConn(tdDialer tapdance.Dialer, connectTarget string, clientConn *net.TCPConn) {
