@@ -476,7 +476,7 @@ func appendToml(clientConf *pb.ClientConf, tomlPath string) {
 	phantoms := clientConf.GetPhantomSubnetsList()
 	if phantoms != nil {
 		for _, block := range phantoms.GetWeightedSubnets() {
-			fmt.Fprintf(file, "\t\t[[Networks.%d.WeightedSubnets]]\n", clientConf.GetGeneration())
+			fmt.Fprintf(file, "\t[[Networks.%d.WeightedSubnets]]\n", clientConf.GetGeneration())
 			fmt.Fprintf(file, "\t\t\tWeight = %d\n", block.GetWeight())
 			fmt.Fprintf(file, "\t\t\tRandomizeDstPort = %t\n", block.GetRandomizeDstPort())
 			fmt.Fprintf(file, "\t\t\tSubnets = [")
