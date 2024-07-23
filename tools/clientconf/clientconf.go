@@ -471,15 +471,15 @@ func appendToml(clientConf *pb.ClientConf, tomlPath string) {
 	}
 	defer file.Close()
 
-	fmt.Fprintf(file, "\n\t[Networks.%d]\n", clientConf.GetGeneration())
+	fmt.Fprintf(file, "\n    [Networks.%d]\n", clientConf.GetGeneration())
 	fmt.Fprintf(file, "\tGeneration = %d\n", clientConf.GetGeneration())
 	phantoms := clientConf.GetPhantomSubnetsList()
 	if phantoms != nil {
 		for _, block := range phantoms.GetWeightedSubnets() {
 			fmt.Fprintf(file, "\t[[Networks.%d.WeightedSubnets]]\n", clientConf.GetGeneration())
-			fmt.Fprintf(file, "\t\t\tWeight = %d\n", block.GetWeight())
-			fmt.Fprintf(file, "\t\t\tRandomizeDstPort = %t\n", block.GetRandomizeDstPort())
-			fmt.Fprintf(file, "\t\t\tSubnets = [")
+			fmt.Fprintf(file, "            Weight = %d\n", block.GetWeight())
+			fmt.Fprintf(file, "            RandomizeDstPort = %t\n", block.GetRandomizeDstPort())
+			fmt.Fprintf(file, "            Subnets = [")
 			index := 0
 			for _, subnet := range block.GetSubnets() {
 				fmt.Fprintf(file, "\"%s\"", subnet)
