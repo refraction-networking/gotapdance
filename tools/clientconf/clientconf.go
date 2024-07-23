@@ -460,23 +460,26 @@ func updateDNSReg(cc *pb.ClientConf, new *pb.DnsRegConf) {
 		oldVal.Field(i).Set(newVal.Field(i))
 	}
 }
-func appendToml(fname *string, clientConf *pb.ClientConf) {
-	fileName := "phantom_subnets.toml"
-	file, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+
+func appendToml(clientConf *pb.ClientConf, tomlPath string) {
+
+	// fileName := "phantom_subnets.toml"
+	// fileName = subnet_file
+	file, err := os.OpenFile(tomlPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Fatalf("Failed to open file: %s", err)
 	}
 	defer file.Close()
 
-	fmt.Fprintf(file, "\n\t[Networks.%s]\n", *fname)
-	fmt.Fprintf(file, "\tGeneration = %s\n", *fname)
+	fmt.Fprintf(file, "\n\t[Networks.%d]\n", clientConf.GetGeneration())
+	fmt.Fprintf(file, "\tGeneration = %d\n", clientConf.GetGeneration())
 	phantoms := clientConf.GetPhantomSubnetsList()
 	if phantoms != nil {
 		for _, block := range phantoms.GetWeightedSubnets() {
-			fmt.Fprintf(file, "\t[[Networks.%s.WeightedSubnets]]\n", *fname)
-			fmt.Fprintf(file, "\t\tWeight = %d\n", block.GetWeight())
-			fmt.Fprintf(file, "\t\tRandomizeDstPort = %t\n", block.GetRandomizeDstPort())
-			fmt.Fprintf(file, "\t\tSubnets = [")
+			fmt.Fprintf(file, "\t\t[[Networks.%d.WeightedSubnets]]\n", clientConf.GetGeneration())
+			fmt.Fprintf(file, "\t\t\tWeight = %d\n", block.GetWeight())
+			fmt.Fprintf(file, "\t\t\tRandomizeDstPort = %t\n", block.GetRandomizeDstPort())
+			fmt.Fprintf(file, "\t\t\tSubnets = [")
 			index := 0
 			for _, subnet := range block.GetSubnets() {
 				fmt.Fprintf(file, "\"%s\"", subnet)
@@ -540,7 +543,7 @@ func main() {
 	)
 	var print_pairs = flag.Bool("print-pairs", false, "Print pairs of decoys ip,sni")
 
-	var appendTomlFile = flag.Bool("append-toml", false, "append clientconf to phantom_subnets.toml")
+	var appendTomlFile = flag.String("append-toml-path", "", "append clientconf to some file path")
 	flag.Parse()
 
 	clientConf := &pb.ClientConf{}
@@ -727,9 +730,9 @@ func main() {
 	}
 
 	//append to toml file
-	if *appendTomlFile {
+	if *appendTomlFile != "" {
 		clientConf = parseClientConf(*fname)
-		appendToml(fname, clientConf)
+		appendToml(clientConf, *appendTomlFile)
 	}
 
 }
