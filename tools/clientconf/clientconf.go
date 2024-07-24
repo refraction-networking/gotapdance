@@ -543,7 +543,7 @@ func main() {
 	)
 	var print_pairs = flag.Bool("print-pairs", false, "Print pairs of decoys ip,sni")
 
-	var appendTomlFile = flag.String("append-toml-path", "", "append clientconf to some file path")
+	var appendTomlFile = flag.String("append-toml-path", "", "Path of phantom_subnets.toml file to append the parsed (via -f) ClientConf subnets to. If path doesn't exist, a new file pointed to by the path will be created")
 	flag.Parse()
 
 	clientConf := &pb.ClientConf{}
