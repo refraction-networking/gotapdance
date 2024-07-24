@@ -463,8 +463,6 @@ func updateDNSReg(cc *pb.ClientConf, new *pb.DnsRegConf) {
 
 func appendToml(clientConf *pb.ClientConf, tomlPath string) {
 
-	// fileName := "phantom_subnets.toml"
-	// fileName = subnet_file
 	file, err := os.OpenFile(tomlPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Fatalf("Failed to open file: %s", err)
