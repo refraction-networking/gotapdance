@@ -66,6 +66,9 @@ type Dialer struct {
 
 	// Whether we want to register and connect to a phantom, or register only
 	RegisterOnly bool
+
+	//register for a client, value being their original IP
+	RegisterFor string
 }
 
 // Dial connects to the address on the named network.
@@ -173,6 +176,16 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 		cjSession.UseProxyHeader = d.UseProxyHeader
 		cjSession.DisableRegistrarOverrides = d.DisableRegistrarOverrides
 		cjSession.RegDelay = d.RegDelay
+
+		if d.RegisterFor != "" {
+			cjSession.RegisterOnBehalfOf = true
+			parsedIP := net.ParseIP(d.RegisterFor)
+			if parsedIP == nil {
+				fmt.Println("Invalid IP address")
+				return nil, errors.New("Invalid IP address to register on behalf of")
+			}
+			cjSession.RegisterFor = &parsedIP
+		}
 
 		if d.V6Support {
 			cjSession.V6Support = &V6{include: both, support: true}
