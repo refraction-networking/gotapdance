@@ -61,12 +61,12 @@ func printClientConf(clientConf *pb.ClientConf) {
 
 	if clientConf.DnsRegConf != nil {
 		fmt.Printf("DNS registrar:\n")
-		fmt.Printf("  method: %+v\n", clientConf.DnsRegConf.GetDnsRegMethod());
-		fmt.Printf("  target: %+v\n", clientConf.DnsRegConf.GetTarget());
-		fmt.Printf("  domain: %+v\n", clientConf.DnsRegConf.GetDomain());
-		fmt.Printf("  pubkey: %+v\n", hex.EncodeToString(clientConf.DnsRegConf.GetPubkey()));
-		fmt.Printf("  utls:   %+v\n", clientConf.DnsRegConf.GetUtlsDistribution());
-		fmt.Printf("  stun:   %+v\n", clientConf.DnsRegConf.GetStunServer());
+		fmt.Printf("  method: %+v\n", clientConf.DnsRegConf.GetDnsRegMethod())
+		fmt.Printf("  target: %+v\n", clientConf.DnsRegConf.GetTarget())
+		fmt.Printf("  domain: %+v\n", clientConf.DnsRegConf.GetDomain())
+		fmt.Printf("  pubkey: %+v\n", hex.EncodeToString(clientConf.DnsRegConf.GetPubkey()))
+		fmt.Printf("  utls:   %+v\n", clientConf.DnsRegConf.GetUtlsDistribution())
+		fmt.Printf("  stun:   %+v\n", clientConf.DnsRegConf.GetStunServer())
 	}
 }
 
@@ -461,6 +461,41 @@ func updateDNSReg(cc *pb.ClientConf, new *pb.DnsRegConf) {
 	}
 }
 
+func appendToml(clientConf *pb.ClientConf, tomlPath string) {
+
+	file, err := os.OpenFile(tomlPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatalf("Failed to open file: %s", err)
+	}
+	defer file.Close()
+
+	fmt.Fprintf(file, "\n    [Networks.%d]\n", clientConf.GetGeneration())
+	fmt.Fprintf(file, "\tGeneration = %d\n", clientConf.GetGeneration())
+	phantoms := clientConf.GetPhantomSubnetsList()
+	if phantoms != nil {
+		for _, block := range phantoms.GetWeightedSubnets() {
+			fmt.Fprintf(file, "\t[[Networks.%d.WeightedSubnets]]\n", clientConf.GetGeneration())
+			fmt.Fprintf(file, "            Weight = %d\n", block.GetWeight())
+			fmt.Fprintf(file, "            RandomizeDstPort = %t\n", block.GetRandomizeDstPort())
+			fmt.Fprintf(file, "            Subnets = [")
+			index := 0
+			for _, subnet := range block.GetSubnets() {
+				fmt.Fprintf(file, "\"%s\"", subnet)
+				index++
+				if index != len(block.GetSubnets()) {
+					fmt.Fprintf(file, ", ")
+				} else {
+					fmt.Fprintf(file, "]\n")
+				}
+			}
+		}
+	}
+	// Ensure all writes are completed before closing the file
+	if err := file.Sync(); err != nil {
+		log.Fatalf("Failed to sync file: %s", err)
+	}
+}
+
 func main() {
 	var fname = flag.String("f", "", "`ClientConf` file to parse")
 	var out_fname = flag.String("o", "", "`output` file name to write new/modified config")
@@ -506,6 +541,7 @@ func main() {
 	)
 	var print_pairs = flag.Bool("print-pairs", false, "Print pairs of decoys ip,sni")
 
+	var appendTomlFile = flag.String("append-toml-path", "", "Path of phantom_subnets.toml file to append the parsed (via -f) ClientConf subnets to. If path doesn't exist, a new file pointed to by the path will be created")
 	flag.Parse()
 
 	clientConf := &pb.ClientConf{}
@@ -690,4 +726,11 @@ func main() {
 			log.Fatal("Error writing output:", err)
 		}
 	}
+
+	//append to toml file
+	if *appendTomlFile != "" {
+		clientConf = parseClientConf(*fname)
+		appendToml(clientConf, *appendTomlFile)
+	}
+
 }
