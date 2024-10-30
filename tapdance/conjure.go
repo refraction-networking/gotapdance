@@ -141,6 +141,12 @@ type ConjureSession struct {
 
 	// performance tracking
 	stats *pb.SessionStats
+
+	//registerFor flag
+	RegisterOnBehalfOf bool
+
+	// registerFor value
+	RegisterFor *net.IP
 }
 
 // MakeConjureSessionSilent creates a conjure session without logging anything
