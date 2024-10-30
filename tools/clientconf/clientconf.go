@@ -398,29 +398,34 @@ func decoysToDeleteFromFile(filename string, clientConf *pb.ClientConf) error {
 		lines = append(lines, scanner.Text())
 	}
 
-	remainingDecoys := clientConf.DecoyList.TlsDecoys
+	var remainingDecoys []*pb.TLSDecoySpec
 
-	for idx, decoy := range clientConf.DecoyList.TlsDecoys {
+	outerLoop:
+	for _, decoy := range clientConf.DecoyList.TlsDecoys {
 		decoy_ip4 := make(net.IP, 4)
 		binary.BigEndian.PutUint32(decoy_ip4, decoy.GetIpv4Addr())
 		decoy_ip6 := net.IP(decoy.GetIpv6Addr())
 
-		for _, line := range lines {
+		for idx, line := range lines {
 			pair := strings.Split(line, ",")
-			ip := pair[0]
-			sni := pair[1]
+			if len(pair) != 2 {
+				return fmt.Errorf("unknown line format (line: %d). Expecting \"ip,sni\"", idx + 1)
+			}
+			ip, sni := pair[0], pair[1]
 			if strings.Contains(ip, ":") {
 				if ip == decoy_ip6.To16().String() && sni == decoy.GetHostname() {
-					remainingDecoys = append(remainingDecoys[:idx], remainingDecoys[idx+1:]...)
+					continue outerLoop
 				}
 			} else {
 				if ip == decoy_ip4.To16().String() && sni == decoy.GetHostname() {
-					remainingDecoys = append(remainingDecoys[:idx], remainingDecoys[idx+1:]...)
+					continue outerLoop
 				}
 			}
 		}
-		clientConf.DecoyList.TlsDecoys = remainingDecoys
+		remainingDecoys = append(remainingDecoys, decoy)
 	}
+	clientConf.DecoyList.TlsDecoys = remainingDecoys
+
 	return nil
 }
 
@@ -591,7 +596,7 @@ func main() {
 	if *rm_decoys != "" {
 		err := decoysToDeleteFromFile(*rm_decoys, clientConf)
 		if err != nil {
-			log.Fatalf("failed file based decoy delete %v", err)
+			log.Fatalf("failed to delete decoys from file %v", err)
 		}
 	}
 
