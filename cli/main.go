@@ -58,6 +58,7 @@ func main() {
 	var registerOnly = flag.Bool("register-only", false, "register to use a phantom, but do not connect to a covert. Only works with \"bdapi\" registrar")
 	var dtlsUnordered = flag.Bool("unordered-dtls", false, "Set DTLS reliability to unordered. Only works with DTLS transport.")
 
+	var registerFor = flag.String("register-for", "", "Register for a client, adding IP address we would like to register for to the X-Forwarded-For header.  Only works with \"bdapi\" registrar")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Dark Decoy CLI\n$./cli -connect-addr=<decoy_address> [OPTIONS] \n\nOptions:\n")
 		flag.PrintDefaults()
@@ -176,14 +177,26 @@ func main() {
 		os.Exit(1)
 	}
 
+	if *registerFor != "" {
+		if net.ParseIP(*registerFor) == nil {
+			fmt.Fprintf(os.Stderr, "Provided client IP address \"%s\" is invalid\n", *registerFor)
+			os.Exit(1)
+		}
+	}
 	if *registerOnly {
-		err = register(*td, *APIRegistration, *registrar, *connectTarget, *proxyHeader, v6Support, *width, t, *disableOverrides, *phantomNet, *registerOnly)
+		if *registerFor != "" && *registrar != "bdapi" {
+			//setting registrar to bdapi if register-for flag is set.
+			fmt.Printf("Registering for a client: overwrite registrar to bdapi registrar\n")
+			*registrar = "bdapi"
+		}
+		err = register(*td, *APIRegistration, *registrar, *connectTarget, *proxyHeader, v6Support, *width, t, *disableOverrides, *phantomNet, *registerOnly, *registerFor)
 		if err != nil {
 			tapdance.Logger().Println(err)
 			os.Exit(1)
 		}
 	} else {
-		err = connectDirect(*td, *APIRegistration, *registrar, *connectTarget, *port, *proxyHeader, v6Support, *width, t, *disableOverrides, *phantomNet, *registerOnly)
+		*registerFor = "" //set registerFor to empty ip just in case.
+		err = connectDirect(*td, *APIRegistration, *registrar, *connectTarget, *port, *proxyHeader, v6Support, *width, t, *disableOverrides, *phantomNet, *registerOnly, *registerFor)
 		if err != nil {
 			tapdance.Logger().Println(err)
 			os.Exit(1)
@@ -191,8 +204,8 @@ func main() {
 	}
 }
 
-func register(td bool, apiEndpoint string, registrar string, dummyConnectTarget string, proxyHeader bool, v6Support bool, width int, t tapdance.Transport, disableOverrides bool, phantomNet string, registerOnly bool) error {
-	tdDialer, err := prepareDialer(td, apiEndpoint, registrar, proxyHeader, v6Support, width, t, disableOverrides, phantomNet, registerOnly)
+func register(td bool, apiEndpoint string, registrar string, dummyConnectTarget string, proxyHeader bool, v6Support bool, width int, t tapdance.Transport, disableOverrides bool, phantomNet string, registerOnly bool, registerFor string) error {
+	tdDialer, err := prepareDialer(td, apiEndpoint, registrar, proxyHeader, v6Support, width, t, disableOverrides, phantomNet, registerOnly, registerFor)
 	if err != nil {
 		return fmt.Errorf("error preparing tapdance Dialer: %w", err)
 	}
@@ -203,7 +216,7 @@ func register(td bool, apiEndpoint string, registrar string, dummyConnectTarget 
 	return nil
 }
 
-func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget string, localPort int, proxyHeader bool, v6Support bool, width int, t tapdance.Transport, disableOverrides bool, phantomNet string, registerOnly bool) error {
+func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget string, localPort int, proxyHeader bool, v6Support bool, width int, t tapdance.Transport, disableOverrides bool, phantomNet string, registerOnly bool, registerFor string) error {
 	if _, _, err := net.SplitHostPort(connectTarget); err != nil {
 		return fmt.Errorf("failed to parse host and port from connectTarget %s: %v",
 			connectTarget, err)
@@ -215,7 +228,7 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget 
 		return fmt.Errorf("error listening on port %v: %v", localPort, err)
 	}
 
-	tdDialer, err := prepareDialer(td, apiEndpoint, registrar, proxyHeader, v6Support, width, t, disableOverrides, phantomNet, registerOnly)
+	tdDialer, err := prepareDialer(td, apiEndpoint, registrar, proxyHeader, v6Support, width, t, disableOverrides, phantomNet, registerOnly, registerFor)
 	if err != nil {
 		return fmt.Errorf("error preparing tapdance Dialer: %w", err)
 	}
@@ -297,7 +310,7 @@ func setSingleDecoyHost(decoy string) error {
 	return nil
 }
 
-func prepareDialer(td bool, apiEndpoint string, registrar string, proxyHeader bool, v6Support bool, width int, t tapdance.Transport, disableOverrides bool, phantomNet string, registerOnly bool) (tapdance.Dialer, error) {
+func prepareDialer(td bool, apiEndpoint string, registrar string, proxyHeader bool, v6Support bool, width int, t tapdance.Transport, disableOverrides bool, phantomNet string, registerOnly bool, registerFor string) (tapdance.Dialer, error) {
 
 	tdDialer := tapdance.Dialer{
 		DarkDecoy:          !td,
@@ -311,6 +324,7 @@ func prepareDialer(td bool, apiEndpoint string, registrar string, proxyHeader bo
 		PhantomNet:                phantomNet,
 		DisableRegistrarOverrides: disableOverrides,
 		RegisterOnly:              registerOnly,
+		RegisterFor:               registerFor,
 	}
 
 	var err error
