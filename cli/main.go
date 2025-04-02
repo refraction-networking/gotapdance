@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -22,6 +23,7 @@ import (
 	"github.com/refraction-networking/gotapdance/tapdance"
 	"github.com/refraction-networking/gotapdance/tdproxy"
 	"github.com/sirupsen/logrus"
+	pt "gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/conjure/client/conjure"
 )
 
 const (
@@ -49,7 +51,9 @@ func main() {
 
 	var td = flag.Bool("td", false, "Enable tapdance cli mode for compatibility")
 	var APIRegistration = flag.String("api-endpoint", "", "If set, API endpoint to use when performing API registration. Defaults to https://registration.refraction.network/api/register (or register-bidirectional for bdapi)")
-	var registrar = flag.String("registrar", "decoy", "One of decoy, api, bdapi, dns, bddns.")
+	var ampCacheURL = flag.String("ampCacheUrl", "", "Use AMP cache registration method")
+	var front = flag.String("front", "", "Front domain to put in TLS SNI")
+	var registrar = flag.String("registrar", "decoy", "One of decoy, api, bdapi, dns, bddns, amp.")
 	var transport = flag.String("transport", "min", `The transport to use for Conjure connections. Current values include "prefix", "min" and "obfs4".`)
 	var randomizeDstPort = flag.Bool("rand-dst-port", false, `enable destination port randomization for the transport connection`)
 	var prefixID = flag.Int("prefix-id", -1, "ID of the prefix to send, used with the `transport=\"prefix\"` option. Default is Random. See prefix transport for options")
@@ -177,7 +181,7 @@ func main() {
 	}
 
 	if *registerOnly {
-		err = register(*td, *APIRegistration, *registrar, *connectTarget, *proxyHeader, v6Support, *width, t, *disableOverrides, *phantomNet, *registerOnly)
+		err = register(*td, *APIRegistration, *registrar, *connectTarget, *proxyHeader, v6Support, *width, t, *disableOverrides, *phantomNet, *registerOnly, *ampCacheURL, *front)
 		if err != nil {
 			tapdance.Logger().Println(err)
 			os.Exit(1)
@@ -191,8 +195,8 @@ func main() {
 	}
 }
 
-func register(td bool, apiEndpoint string, registrar string, dummyConnectTarget string, proxyHeader bool, v6Support bool, width int, t tapdance.Transport, disableOverrides bool, phantomNet string, registerOnly bool) error {
-	tdDialer, err := prepareDialer(td, apiEndpoint, registrar, proxyHeader, v6Support, width, t, disableOverrides, phantomNet, registerOnly)
+func register(td bool, apiEndpoint string, registrar string, dummyConnectTarget string, proxyHeader bool, v6Support bool, width int, t tapdance.Transport, disableOverrides bool, phantomNet string, registerOnly bool, ampCacheURL string, front string) error {
+	tdDialer, err := prepareDialer(td, apiEndpoint, registrar, proxyHeader, v6Support, width, t, disableOverrides, phantomNet, registerOnly, ampCacheURL, front)
 	if err != nil {
 		return fmt.Errorf("error preparing tapdance Dialer: %w", err)
 	}
@@ -215,7 +219,7 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget 
 		return fmt.Errorf("error listening on port %v: %v", localPort, err)
 	}
 
-	tdDialer, err := prepareDialer(td, apiEndpoint, registrar, proxyHeader, v6Support, width, t, disableOverrides, phantomNet, registerOnly)
+	tdDialer, err := prepareDialer(td, apiEndpoint, registrar, proxyHeader, v6Support, width, t, disableOverrides, phantomNet, registerOnly, "", "")
 	if err != nil {
 		return fmt.Errorf("error preparing tapdance Dialer: %w", err)
 	}
@@ -297,7 +301,7 @@ func setSingleDecoyHost(decoy string) error {
 	return nil
 }
 
-func prepareDialer(td bool, apiEndpoint string, registrar string, proxyHeader bool, v6Support bool, width int, t tapdance.Transport, disableOverrides bool, phantomNet string, registerOnly bool) (tapdance.Dialer, error) {
+func prepareDialer(td bool, apiEndpoint string, registrar string, proxyHeader bool, v6Support bool, width int, t tapdance.Transport, disableOverrides bool, phantomNet string, registerOnly bool, ampCacheURL string, front string) (tapdance.Dialer, error) {
 
 	tdDialer := tapdance.Dialer{
 		DarkDecoy:          !td,
@@ -357,6 +361,34 @@ func prepareDialer(td bool, apiEndpoint string, registrar string, proxyHeader bo
 		tdDialer.DarkDecoyRegistrar, err = newDNSRegistrarFromConf(dnsConf, true, 3, ca.Assets().GetConjurePubkey()[:])
 		if err != nil {
 			return tdDialer, fmt.Errorf("error creating DNS registrar: %w", err)
+		}
+	case "amp":
+		transport := &http.Transport{}
+		transport.Proxy = nil
+		transport.ResponseHeaderTimeout = 15 * time.Second
+		client := &http.Client{
+			Transport: &pt.Rendezvous{
+				RegisterURL:   apiEndpoint,
+				Fronts:        []string{front},
+				Transport:     transport,
+				UTLSRemoveSNI: false,
+			},
+		}
+
+		dnsConf := ca.Assets().GetDNSRegConf()
+		regConfig := &registration.Config{
+			Target:        apiEndpoint + "/amp/register-bidirectional",
+			AMPCacheURL:   ampCacheURL,
+			STUNAddr:      *dnsConf.StunServer,
+			Delay:         time.Second,
+			MaxRetries:    0,
+			Bidirectional: true,
+			HTTPClient:    client,
+		}
+
+		tdDialer.DarkDecoyRegistrar, err = registration.NewAMPCacheRegistrar(regConfig)
+		if err != nil {
+			return tdDialer, fmt.Errorf("error creating AMP Cache registrar: %w", err)
 		}
 	default:
 		return tdDialer, fmt.Errorf("unknown registrar %v", registrar)
