@@ -23,7 +23,7 @@ require (
 
 require (
 	filippo.io/bigmod v0.0.3 // indirect
-	filippo.io/keygen v0.0.0-20230306160926-5201437acf8e // indirect
+	filippo.io/keygen v0.0.0-20240718133620-7f162efbbd87 // indirect
 	github.com/andybalholm/brotli v1.1.0 // indirect
 	github.com/cloudflare/circl v1.3.9 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
