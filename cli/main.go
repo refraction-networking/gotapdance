@@ -187,7 +187,7 @@ func main() {
 			os.Exit(1)
 		}
 	} else {
-		err = connectDirect(*td, *APIRegistration, *registrar, *connectTarget, *port, *proxyHeader, v6Support, *width, t, *disableOverrides, *phantomNet, *registerOnly)
+		err = connectDirect(*td, *APIRegistration, *registrar, *connectTarget, *port, *proxyHeader, v6Support, *width, t, *disableOverrides, *phantomNet, *registerOnly, *ampCacheURL, *front)
 		if err != nil {
 			tapdance.Logger().Println(err)
 			os.Exit(1)
@@ -207,7 +207,7 @@ func register(td bool, apiEndpoint string, registrar string, dummyConnectTarget 
 	return nil
 }
 
-func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget string, localPort int, proxyHeader bool, v6Support bool, width int, t tapdance.Transport, disableOverrides bool, phantomNet string, registerOnly bool) error {
+func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget string, localPort int, proxyHeader bool, v6Support bool, width int, t tapdance.Transport, disableOverrides bool, phantomNet string, registerOnly bool, ampCacheURL string, front string) error {
 	if _, _, err := net.SplitHostPort(connectTarget); err != nil {
 		return fmt.Errorf("failed to parse host and port from connectTarget %s: %v",
 			connectTarget, err)
@@ -219,7 +219,7 @@ func connectDirect(td bool, apiEndpoint string, registrar string, connectTarget 
 		return fmt.Errorf("error listening on port %v: %v", localPort, err)
 	}
 
-	tdDialer, err := prepareDialer(td, apiEndpoint, registrar, proxyHeader, v6Support, width, t, disableOverrides, phantomNet, registerOnly, "", "")
+	tdDialer, err := prepareDialer(td, apiEndpoint, registrar, proxyHeader, v6Support, width, t, disableOverrides, phantomNet, registerOnly, ampCacheURL, front)
 	if err != nil {
 		return fmt.Errorf("error preparing tapdance Dialer: %w", err)
 	}
