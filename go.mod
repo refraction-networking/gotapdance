@@ -16,7 +16,7 @@ require (
 	github.com/sergeyfrolov/bsbuffer v0.0.0-20180903213811-94e85abb8507
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.10.0
-	gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/conjure v0.0.0-20250401212049-c593391b702a
+	gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/conjure v0.0.0-20250528190020-77bf2fef6e15
 	golang.org/x/crypto v0.33.0
 	golang.org/x/net v0.35.0
 	google.golang.org/protobuf v1.36.5
@@ -57,5 +57,3 @@ require (
 replace github.com/pion/dtls/v2 => github.com/mingyech/dtls/v2 v2.0.0
 
 replace github.com/pion/transport/v2 => github.com/mingyech/transport/v2 v2.0.0
-
-replace gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/conjure => gitlab.torproject.org/onyinyang/conjure v0.0.0-20250403173837-5b5bb3154613

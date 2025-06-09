@@ -143,6 +143,8 @@ github.com/xyproto/randomstring v1.0.5/go.mod h1:rgmS5DeNXLivK7YprL0pY+lTuhNQW3i
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
 gitlab.torproject.org/onyinyang/conjure v0.0.0-20250403173837-5b5bb3154613 h1:6+hjg5Ox1dFOCnMyP6LghyREWbX2MkRhzqTMvbfhMLk=
 gitlab.torproject.org/onyinyang/conjure v0.0.0-20250403173837-5b5bb3154613/go.mod h1:Ws2BKodaK7iy1D8xTSZ8bs8NKWfWa6JVOMUPpSqnMDc=
+gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/conjure v0.0.0-20250528190020-77bf2fef6e15 h1:LwDZaEctZW+A+OTZtUHcMCtiahQAjuhaczAjWwGAi+Q=
+gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/conjure v0.0.0-20250528190020-77bf2fef6e15/go.mod h1:tX3h9wSxsOUqKBP5abHT5tOA+r5dsK2gwishYASRvl8=
 gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/goptlib v1.6.0 h1:KD9m+mRBwtEdqe94Sv72uiedMWeRdIr4sXbrRyzRiIo=
 gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/goptlib v1.6.0/go.mod h1:70bhd4JKW/+1HLfm+TMrgHJsUHG4coelMWwiVEJ2gAg=
 gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/ptutil v0.0.0-20250130151315-efaf4e0ec0d3 h1:pwWCiqrB6b3SynILsv3M+76utmcgMiTZ2aqfccjWmxo=
