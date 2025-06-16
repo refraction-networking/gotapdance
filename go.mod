@@ -10,7 +10,7 @@ require (
 	github.com/pelletier/go-toml v1.9.5
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.7.0
-	github.com/refraction-networking/conjure v0.7.12-0.20250520170513-22f6cf9e6e66
+	github.com/refraction-networking/conjure v0.8.0
 	github.com/refraction-networking/ed25519 v0.1.2
 	github.com/refraction-networking/utls v1.6.7
 	github.com/sergeyfrolov/bsbuffer v0.0.0-20180903213811-94e85abb8507
