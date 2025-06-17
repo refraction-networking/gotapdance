@@ -414,6 +414,10 @@ func newDNSRegistrarFromConf(conf *pb.DnsRegConf, bidirectional bool, maxTries i
 		return nil, errors.New("unknown reg method in conf")
 	}
 
+	mtu := uint(0)
+	if conf.Mtu != nil {
+		mtu = uint(*conf.Mtu)
+	}
 	return registration.NewDNSRegistrar(&registration.Config{
 		DNSTransportMethod: method,
 		Target:             *conf.Target,
@@ -423,7 +427,7 @@ func newDNSRegistrarFromConf(conf *pb.DnsRegConf, bidirectional bool, maxTries i
 		MaxRetries:         maxTries,
 		Bidirectional:      bidirectional,
 		STUNAddr:           *conf.StunServer,
-		DNSRegistrarMTU:    uint(*conf.Mtu),
+		DNSRegistrarMTU:    mtu,
 	})
 }
 
