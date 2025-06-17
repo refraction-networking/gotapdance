@@ -423,6 +423,7 @@ func newDNSRegistrarFromConf(conf *pb.DnsRegConf, bidirectional bool, maxTries i
 		MaxRetries:         maxTries,
 		Bidirectional:      bidirectional,
 		STUNAddr:           *conf.StunServer,
+		DNSRegistrarMTU:    uint(*conf.Mtu),
 	})
 }
 
