@@ -67,6 +67,7 @@ func printClientConf(clientConf *pb.ClientConf) {
 		fmt.Printf("  pubkey: %+v\n", hex.EncodeToString(clientConf.DnsRegConf.GetPubkey()))
 		fmt.Printf("  utls:   %+v\n", clientConf.DnsRegConf.GetUtlsDistribution())
 		fmt.Printf("  stun:   %+v\n", clientConf.DnsRegConf.GetStunServer())
+		fmt.Printf("  mtu:    %+v\n", clientConf.DnsRegConf.GetMtu())
 	}
 }
 
@@ -400,7 +401,7 @@ func decoysToDeleteFromFile(filename string, clientConf *pb.ClientConf) error {
 
 	var remainingDecoys []*pb.TLSDecoySpec
 
-	outerLoop:
+outerLoop:
 	for _, decoy := range clientConf.DecoyList.TlsDecoys {
 		decoy_ip4 := make(net.IP, 4)
 		binary.BigEndian.PutUint32(decoy_ip4, decoy.GetIpv4Addr())
@@ -409,7 +410,7 @@ func decoysToDeleteFromFile(filename string, clientConf *pb.ClientConf) error {
 		for idx, line := range lines {
 			pair := strings.Split(line, ",")
 			if len(pair) != 2 {
-				return fmt.Errorf("unknown line format (line: %d). Expecting \"ip,sni\"", idx + 1)
+				return fmt.Errorf("unknown line format (line: %d). Expecting \"ip,sni\"", idx+1)
 			}
 			ip, sni := pair[0], pair[1]
 			if strings.Contains(ip, ":") {
@@ -527,6 +528,7 @@ func main() {
 	var dnsPubkeyStr = flag.String("dns-pubkey", "", "Pubkey of target DNS registrar")
 	var dnsUTLS = flag.String("dns-utls", "", "UTLS distribution to be used in DoT and DoH connections in the DNS registrar")
 	var dnsStunServer = flag.String("dns-stun", "", "STUN server to be used in the DNS registrar")
+	var dnsMTU = flag.Uint("dns-mtu", 0, "MTU to be used in the DNS registrar")
 
 	var add_subnets = flag.String("add-subnets", "", "Add a subnet or list of space-separated subnets between double quotes (\"127.0.0.1/24 2001::/32\" etc.), requires additional weight flag")
 	var delete_subnet = flag.Int("delete-subnet", -1, "Specifies the index of a subnet to delete")
@@ -706,6 +708,7 @@ func main() {
 		Pubkey:           dnsPubkey,
 		UtlsDistribution: dnsUTLS,
 		StunServer:       dnsStunServer,
+		Mtu:              proto.Uint32(uint32(*dnsMTU)),
 	})
 
 	if !*noout {
